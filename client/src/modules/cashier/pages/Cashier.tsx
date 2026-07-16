@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus, Minus, LogOut, Clock, User, DollarSign, Percent, Receipt, X } from "lucide-react";
+import { Trash2, Plus, Minus, LogOut, Clock, User, DollarSign, Receipt, X, ChevronDown, ChevronUp } from "lucide-react";
+import { useAuth } from "@/shared/contexts/AuthContext";
 
 interface CartItem {
   id: number;
@@ -12,7 +13,15 @@ interface CartItem {
   subtotal: number;
 }
 
+interface CustomerInfo {
+  name: string;
+  address: string;
+  tin: string;
+  businessStyle: string;
+}
+
 export default function Cashier() {
+  const { logout, user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([
     { id: 1, name: "Hammer - 16oz", quantity: 2, unitPrice: 15.99, subtotal: 31.98 },
     { id: 2, name: "Nails - 2 inch", quantity: 3, unitPrice: 0.35, subtotal: 1.05 },
@@ -21,6 +30,13 @@ export default function Cashier() {
 
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState<"fixed" | "percent">("fixed");
+  const [soldToExpanded, setSoldToExpanded] = useState(false);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
+    name: "",
+    address: "",
+    tin: "",
+    businessStyle: "",
+  });
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
   const discountAmount = discountType === "percent" ? (subtotal * discount) / 100 : discount;
@@ -73,11 +89,11 @@ export default function Cashier() {
             </div>
             <div className="flex items-center gap-2 text-gray-600">
               <User className="h-4 w-4" />
-              <span>Cashier: John Doe</span>
+              <span>Cashier: {user?.full_name ?? "—"}</span>
             </div>
           </div>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={logout}>
           <LogOut className="h-4 w-4" />
           Logout
         </Button>
@@ -185,6 +201,93 @@ export default function Cashier() {
           <Card className="p-6">
             <h2 className="text-lg font-display font-bold text-gray-900 mb-6">Order Summary</h2>
             <div className="space-y-4">
+
+              {/* Sold To */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setSoldToExpanded(!soldToExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700">Sold To</span>
+                    {customerInfo.name && (
+                      <span className="text-sm text-blue-600 font-medium truncate max-w-[120px]">
+                        — {customerInfo.name}
+                      </span>
+                    )}
+                    {!customerInfo.name && (
+                      <span className="text-xs text-gray-400 italic">Walk-in Customer</span>
+                    )}
+                  </div>
+                  {soldToExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </button>
+
+                {soldToExpanded && (
+                  <div className="px-4 py-4 space-y-3 border-t border-gray-200 bg-white">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Customer Name
+                      </label>
+                      <Input
+                        value={customerInfo.name}
+                        onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                        placeholder="Full name or company name"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Address
+                      </label>
+                      <Input
+                        value={customerInfo.address}
+                        onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
+                        placeholder="Street, City, Province"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          TIN
+                        </label>
+                        <Input
+                          value={customerInfo.tin}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, tin: e.target.value })}
+                          placeholder="000-000-000-000"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Business Style
+                        </label>
+                        <Input
+                          value={customerInfo.businessStyle}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, businessStyle: e.target.value })}
+                          placeholder="e.g. Trading"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+                    {(customerInfo.name || customerInfo.tin) && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" })}
+                        className="text-xs text-red-500 hover:text-red-600 font-medium"
+                      >
+                        Clear customer info
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               {/* Subtotal */}
               <div className="flex items-center justify-between pb-3 border-b border-gray-200">
                 <span className="text-gray-700">Subtotal</span>

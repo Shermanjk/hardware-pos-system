@@ -1,34 +1,56 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, ShieldCheck, Boxes } from "lucide-react";
-import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
-
-type Role = "admin" | "inventory_clerk";
+import { Eye, EyeOff, AlertCircle, X } from "lucide-react";
+import { useAuth } from "@/shared/contexts/AuthContext";
+import axios from "axios";
 
 export default function Login() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [, setLocation] = useLocation();
-  const [rememberMe, setRememberMe] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<Role>("admin");
-  const { login: clerkLogin } = useClerkAuth();
+  const { login } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe,   setRememberMe]   = useState(false);
+  const [username,     setUsername]     = useState("");
+  const [password,     setPassword]     = useState("");
+  const [isLoading,    setIsLoading]    = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [fieldErrors,  setFieldErrors]  = useState<{ username?: string; password?: string }>({});
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedRole === "inventory_clerk") {
-      clerkLogin("clerk01");
-      setLocation("/clerk/dashboard");
-    } else {
-      setLocation("/");
+    setError(null);
+    setFieldErrors({});
+
+    const errors: { username?: string; password?: string } = {};
+    if (!username.trim()) errors.username = "Username is required";
+    if (!password)        errors.password = "Password is required";
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Role is determined server-side from the database — no client selection needed
+      await login(username.trim(), password, rememberMe);
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const message =
+          err.response?.data?.message ?? "An unexpected error occurred. Please try again.";
+        setError(message);
+      } else {
+        setError("Unable to connect to the server. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-white flex">
-      {/* Left Side - Illustration */}
+      {/* Left — illustration */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-50 to-blue-100 items-center justify-center p-12">
         <img
           src="/manus-storage/hardware_store_login_illustration_c297adc7.png"
@@ -37,10 +59,11 @@ export default function Login() {
         />
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right — form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
         <Card className="w-full max-w-md p-8 shadow-lg">
-          {/* Logo & Header */}
+
+          {/* Logo */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-lg">
@@ -48,115 +71,128 @@ export default function Login() {
               </div>
               <h1 className="text-2xl font-display font-bold text-gray-900">Isra Hardware POS</h1>
             </div>
-            <p className="text-gray-600 text-sm">Point of Sale & Inventory Management System</p>
+            <p className="text-gray-600 text-sm">Point of Sale &amp; Inventory Management System</p>
             <p className="text-gray-500 text-xs mt-2">Version 1.0.0</p>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Role Selector */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Login As</label>
-              <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleLogin} className="space-y-5" noValidate>
+
+            {/* Error banner */}
+            {error && (
+              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700 flex-1">{error}</p>
                 <button
                   type="button"
-                  onClick={() => setSelectedRole("admin")}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg border-2 transition-all text-sm font-medium ${
-                    selectedRole === "admin"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
-                  }`}
+                  onClick={() => setError(null)}
+                  className="text-red-400 hover:text-red-600"
                 >
-                  <ShieldCheck className="h-4 w-4" />
-                  Administrator
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRole("inventory_clerk")}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg border-2 transition-all text-sm font-medium ${
-                    selectedRole === "inventory_clerk"
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <Boxes className="h-4 w-4" />
-                  Inventory Clerk
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            </div>
+            )}
 
             {/* Username */}
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Username</label>
+              <label
+                htmlFor="username"
+                className="block text-sm font-semibold text-gray-900 mb-2"
+              >
+                Username
+              </label>
               <Input
+                id="username"
                 type="text"
                 placeholder="Enter your username"
-                className="h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (fieldErrors.username)
+                    setFieldErrors((p) => ({ ...p, username: undefined }));
+                }}
+                className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 ${
+                  fieldErrors.username ? "border-red-400 focus:border-red-400" : ""
+                }`}
+                autoComplete="username"
+                disabled={isLoading}
               />
+              {fieldErrors.username && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>
+              )}
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Password</label>
+              <label
+                htmlFor="password"
+                className="block text-sm font-semibold text-gray-900 mb-2"
+              >
+                Password
+              </label>
               <div className="relative">
                 <Input
+                  id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
-                  className="h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 pr-10"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password)
+                      setFieldErrors((p) => ({ ...p, password: undefined }));
+                  }}
+                  className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 pr-10 ${
+                    fieldErrors.password ? "border-red-400 focus:border-red-400" : ""
+                  }`}
+                  autoComplete="current-password"
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  tabIndex={-1}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {showPassword
+                    ? <EyeOff className="h-5 w-5" />
+                    : <Eye    className="h-5 w-5" />}
                 </button>
               </div>
+              {fieldErrors.password && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+              )}
             </div>
 
-            {/* Remember Me */}
+            {/* Remember me */}
             <div className="flex items-center gap-2">
               <Checkbox
                 id="remember"
                 checked={rememberMe}
                 onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                disabled={isLoading}
               />
               <label htmlFor="remember" className="text-sm text-gray-700 cursor-pointer">
-                Remember me
+                Remember me{" "}
+                <span className="text-gray-400">(stay logged in for 30 days)</span>
               </label>
             </div>
 
-            {/* Login Button */}
+            {/* Submit */}
             <Button
               type="submit"
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200"
+              disabled={isLoading}
+              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 disabled:opacity-60"
             >
-              {selectedRole === "inventory_clerk" ? "Login as Inventory Clerk" : "Sign In"}
+              {isLoading && (
+                <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />
+              )}
+              {isLoading ? "Signing in…" : "Sign In"}
             </Button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-            <div className="space-y-1">
-              <p className="text-xs text-blue-800 font-medium">Administrator</p>
-              <p className="text-xs text-blue-700">Username: <span className="font-mono">admin</span> · Password: <span className="font-mono">demo123</span></p>
-            </div>
-            <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
-              <p className="text-xs text-blue-800 font-medium">Inventory Clerk</p>
-              <p className="text-xs text-blue-700">Username: <span className="font-mono">clerk01</span> · Password: <span className="font-mono">demo123</span></p>
-            </div>
-          </div>
-
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-            <p className="text-xs text-gray-500">
-              © 2024 Isra Hardware. All rights reserved.
-            </p>
+            <p className="text-xs text-gray-500">© 2024 Isra Hardware. All rights reserved.</p>
             <p className="text-xs text-gray-500 mt-1">
               System Version 1.0.0 | Enterprise Edition
             </p>

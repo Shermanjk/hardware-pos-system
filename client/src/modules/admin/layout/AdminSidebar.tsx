@@ -18,6 +18,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/shared/contexts/AuthContext";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ const menuItems = [
 
 export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const [location] = useLocation();
+  const { logout } = useAuth();
 
   return (
     <>
@@ -103,9 +105,11 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
         <div className="p-4 border-t border-gray-200">
           <Button
             variant="outline"
-            className={`w-full justify-start gap-3 ${!isOpen && "p-0 h-10 w-10"}`}
+            onClick={logout}
+            className={`w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 ${!isOpen && "p-0 h-10 w-10 justify-center"}`}
+            title={!isOpen ? "Logout" : undefined}
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5 flex-shrink-0" />
             {isOpen && <span className="text-sm">Logout</span>}
           </Button>
         </div>

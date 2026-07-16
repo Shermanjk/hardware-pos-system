@@ -15,7 +15,7 @@ const mockNotifications = [
 ];
 
 export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
-  const { clerkUser } = useClerkAuth();
+  const { user: clerkUser } = useClerkAuth();
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -126,12 +126,14 @@ export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
         <div className="flex items-center gap-3 pl-5 border-l border-gray-200">
           <div className="hidden sm:flex flex-col items-end">
             <span className="text-sm font-semibold text-gray-900">
-              {clerkUser?.name ?? "Inventory Clerk"}
+              {clerkUser?.full_name ?? "Inventory Clerk"}
             </span>
             <span className="text-xs text-blue-600 font-medium">Inventory Clerk</span>
           </div>
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm select-none">
-            {clerkUser?.avatar ?? "IC"}
+            {clerkUser?.full_name
+              ? clerkUser.full_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+              : "IC"}
           </div>
         </div>
       </div>

@@ -31,12 +31,11 @@ const mainMenu = [
 ];
 
 export default function ClerkSidebar({ isOpen, onToggle }: ClerkSidebarProps) {
-  const [location, navigate] = useLocation();
+  const [location] = useLocation();
   const { logout } = useClerkAuth();
 
   const handleLogout = () => {
-    logout();
-    navigate("/login");
+    logout(); // AuthContext.logout() already redirects to /login
   };
 
   return (

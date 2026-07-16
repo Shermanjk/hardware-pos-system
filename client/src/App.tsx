@@ -1,11 +1,13 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import DashboardLayout from "./modules/admin/layout/AdminLayout";
+import AdminLayout from "./modules/admin/layout/AdminLayout";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./shared/components/ErrorBoundary";
 import { ThemeProvider } from "./shared/contexts/ThemeContext";
-import { ClerkAuthProvider } from "./shared/contexts/ClerkAuthContext";
+import { AuthProvider } from "./shared/contexts/AuthContext";
+import ProtectedRoute from "./shared/components/ProtectedRoute";
+import PasswordChangeGuard from "./shared/components/PasswordChangeGuard";
 
 // Admin pages
 import Dashboard from "./modules/admin/pages/Dashboard";
@@ -21,6 +23,7 @@ import Reports from "./modules/admin/pages/Reports";
 import Users from "./modules/admin/pages/Users";
 import Settings from "./modules/admin/pages/Settings";
 import Login from "./pages/Login";
+import ChangePassword from "./pages/ChangePassword";
 import Cashier from "./modules/cashier/pages/Cashier";
 
 // Clerk module
@@ -40,14 +43,14 @@ function ClerkRouter() {
   return (
     <ClerkLayout>
       <Switch>
-        <Route path="/clerk/dashboard"        component={ClerkDashboard}      />
-        <Route path="/clerk/inventory"        component={ClerkInventory}      />
-        <Route path="/clerk/stock-in"         component={ClerkStockIn}        />
-        <Route path="/clerk/stock-adjustment" component={ClerkStockAdjustment}/>
-        <Route path="/clerk/stock-count"      component={ClerkStockCount}     />
-        <Route path="/clerk/barcode-printing" component={ClerkBarcodePrinting}/>
-        <Route path="/clerk/low-stock"        component={ClerkLowStock}       />
-        <Route path="/clerk/profile"          component={ClerkProfile}        />
+        <Route path="/clerk/dashboard"        component={ClerkDashboard}       />
+        <Route path="/clerk/inventory"        component={ClerkInventory}       />
+        <Route path="/clerk/stock-in"         component={ClerkStockIn}         />
+        <Route path="/clerk/stock-adjustment" component={ClerkStockAdjustment} />
+        <Route path="/clerk/stock-count"      component={ClerkStockCount}      />
+        <Route path="/clerk/barcode-printing" component={ClerkBarcodePrinting} />
+        <Route path="/clerk/low-stock"        component={ClerkLowStock}        />
+        <Route path="/clerk/profile"          component={ClerkProfile}         />
         <Route component={NotFound} />
       </Switch>
     </ClerkLayout>
@@ -56,9 +59,9 @@ function ClerkRouter() {
 
 // ─── Admin router ─────────────────────────────────────────────────────────────
 
-function DashboardRouter() {
+function AdminRouter() {
   return (
-    <DashboardLayout>
+    <AdminLayout>
       <Switch>
         <Route path="/"                component={Dashboard}      />
         <Route path="/products"        component={Products}       />
@@ -75,7 +78,7 @@ function DashboardRouter() {
         <Route path="/404"             component={NotFound}       />
         <Route component={NotFound} />
       </Switch>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }
 
@@ -84,10 +87,38 @@ function DashboardRouter() {
 function Router() {
   return (
     <Switch>
-      <Route path="/login"      component={Login}         />
-      <Route path="/cashier"    component={Cashier}       />
-      <Route path="/clerk/:rest*" component={ClerkRouter} />
-      <Route component={DashboardRouter} />
+      {/* Public route */}
+      <Route path="/login" component={Login} />
+
+      {/* Mandatory password-change — accessible with the restricted JWT */}
+      <Route path="/change-password" component={ChangePassword} />
+
+      {/* Cashier terminal — Cashier role only */}
+      <Route path="/cashier">
+        <ProtectedRoute allowedRoles={["Cashier"]}>
+          <PasswordChangeGuard>
+            <Cashier />
+          </PasswordChangeGuard>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Inventory Clerk module */}
+      <Route path="/clerk/:rest*">
+        <ProtectedRoute allowedRoles={["Inventory Clerk"]}>
+          <PasswordChangeGuard>
+            <ClerkRouter />
+          </PasswordChangeGuard>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Admin module — catches everything else */}
+      <Route>
+        <ProtectedRoute allowedRoles={["Admin"]}>
+          <PasswordChangeGuard>
+            <AdminRouter />
+          </PasswordChangeGuard>
+        </ProtectedRoute>
+      </Route>
     </Switch>
   );
 }
@@ -98,12 +129,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <ClerkAuthProvider>
+        <AuthProvider>
           <TooltipProvider>
             <Toaster />
             <Router />
           </TooltipProvider>
-        </ClerkAuthProvider>
+        </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
