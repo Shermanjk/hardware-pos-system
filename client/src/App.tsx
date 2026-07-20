@@ -15,8 +15,7 @@ import Products from "./modules/admin/pages/Products";
 import Categories from "./modules/admin/pages/Categories";
 import Inventory from "./modules/admin/pages/Inventory";
 import Suppliers from "./modules/admin/pages/Suppliers";
-import PurchaseOrders from "./modules/admin/pages/PurchaseOrders";
-import StockIn from "./modules/admin/pages/StockIn";
+import ReorderAlerts from "./modules/admin/pages/ReorderAlerts";
 import Sales from "./modules/admin/pages/Sales";
 import Returns from "./modules/admin/pages/Returns";
 import Reports from "./modules/admin/pages/Reports";
@@ -35,7 +34,6 @@ import ClerkStockAdjustment from "./modules/clerk/pages/ClerkStockAdjustment";
 import ClerkStockCount from "./modules/clerk/pages/ClerkStockCount";
 import ClerkBarcodePrinting from "./modules/clerk/pages/ClerkBarcodePrinting";
 import ClerkLowStock from "./modules/clerk/pages/ClerkLowStock";
-import ClerkProfile from "./modules/clerk/pages/ClerkProfile";
 
 // ─── Clerk router ─────────────────────────────────────────────────────────────
 
@@ -50,7 +48,6 @@ function ClerkRouter() {
         <Route path="/clerk/stock-count"      component={ClerkStockCount}      />
         <Route path="/clerk/barcode-printing" component={ClerkBarcodePrinting} />
         <Route path="/clerk/low-stock"        component={ClerkLowStock}        />
-        <Route path="/clerk/profile"          component={ClerkProfile}         />
         <Route component={NotFound} />
       </Switch>
     </ClerkLayout>
@@ -68,8 +65,7 @@ function AdminRouter() {
         <Route path="/categories"      component={Categories}     />
         <Route path="/inventory"       component={Inventory}      />
         <Route path="/suppliers"       component={Suppliers}      />
-        <Route path="/purchase-orders" component={PurchaseOrders} />
-        <Route path="/stock-in"        component={StockIn}        />
+        <Route path="/reorder-alerts"  component={ReorderAlerts}  />
         <Route path="/sales"           component={Sales}          />
         <Route path="/returns"         component={Returns}        />
         <Route path="/reports"         component={Reports}        />

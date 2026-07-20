@@ -8,17 +8,11 @@ interface ClerkLayoutProps {
   children: React.ReactNode;
 }
 
-/**
- * ProtectedClerkRoute — redirects to /login if the clerk is not authenticated.
- * Uses an effect-free redirect (replaces location synchronously during render)
- * so there is no flash of protected content.
- */
 function ProtectedClerkRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useClerkAuth();
   const [, navigate] = useLocation();
 
   if (!isAuthenticated) {
-    // Schedule the redirect for after the current render
     Promise.resolve().then(() => navigate("/login"));
     return null;
   }
@@ -31,7 +25,7 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
 
   return (
     <ProtectedClerkRoute>
-      <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <div className="flex h-screen bg-slate-100 overflow-hidden">
         <ClerkSidebar
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => !v)}

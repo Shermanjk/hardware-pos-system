@@ -1,216 +1,356 @@
-import { Card } from "@/components/ui/card";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, AlertCircle, Package, Truck, DollarSign, ShoppingCart } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from "recharts";
+import {
+  TrendingUp, AlertCircle, Package, Truck,
+  DollarSign, ShoppingCart, RefreshCw, RotateCcw,
+  AlertTriangle, TrendingDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import axios from "axios";
+import { loadToken } from "@/shared/utils/auth";
 
-// Mock data
-const kpiData = [
-  { icon: DollarSign, label: "Today's Sales", value: "₱2,450.50", change: "+12.5%", positive: true },
-  { icon: TrendingUp, label: "Monthly Revenue", value: "₱45,320.00", change: "+8.2%", positive: true },
-  { icon: Package, label: "Total Products", value: "1,234", change: "+45", positive: true },
-  { icon: AlertCircle, label: "Low Stock Items", value: "23", change: "+5", positive: false },
-  { icon: Truck, label: "Total Suppliers", value: "42", change: "0", positive: true },
-  { icon: ShoppingCart, label: "Pending Orders", value: "12", change: "-3", positive: true },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const salesChartData = [
-  { date: "Mon", sales: 4000, revenue: 2400 },
-  { date: "Tue", sales: 3000, revenue: 1398 },
-  { date: "Wed", sales: 2000, revenue: 9800 },
-  { date: "Thu", sales: 2780, revenue: 3908 },
-  { date: "Fri", sales: 1890, revenue: 4800 },
-  { date: "Sat", sales: 2390, revenue: 3800 },
-  { date: "Sun", sales: 3490, revenue: 4300 },
-];
+interface DashboardData {
+  kpis: {
+    today_transactions: number;
+    today_revenue:      number;
+    monthly_revenue:    number;
+    total_products:     number;
+    out_of_stock:       number;
+    low_stock:          number;
+    total_suppliers:    number;
+    pending_returns:    number;
+  };
+  weekly_sales:    { sale_date: string; transactions: number; revenue: number }[];
+  monthly_sales:   { month: string; revenue: number }[];
+  top_products:    { name: string; units_sold: number; revenue: number }[];
+  recent_sales:    { invoice_number: string; customer_name: string; total_amount: number; cashier_name: string; created_at: string }[];
+  low_stock_items: { product_name: string; barcode: string; quantity: number; reorder_level: number; urgency: string }[];
+}
 
-const revenueData = [
-  { month: "Jan", revenue: 12000 },
-  { month: "Feb", revenue: 19000 },
-  { month: "Mar", revenue: 15000 },
-  { month: "Apr", revenue: 22000 },
-  { month: "May", revenue: 18000 },
-  { month: "Jun", revenue: 25000 },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const lowStockItems = [
-  { id: 1, name: "Hammer - 16oz", sku: "HMR-001", current: 5, reorder: 20 },
-  { id: 2, name: "Nails - 2 inch", sku: "NLS-002", current: 8, reorder: 50 },
-  { id: 3, name: "Screws - Phillips", sku: "SCR-003", current: 12, reorder: 100 },
-  { id: 4, name: "Wood Glue", sku: "GLU-004", current: 3, reorder: 10 },
-];
+function fmt(n: number) {
+  return "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
-const recentSales = [
-  { id: 1, product: "Drill Bit Set", qty: 2, total: "₱45.99", time: "2 mins ago" },
-  { id: 2, product: "Saw Blade", qty: 1, total: "₱32.50", time: "15 mins ago" },
-  { id: 3, product: "Sandpaper Pack", qty: 3, total: "₱24.75", time: "1 hour ago" },
-  { id: 4, product: "Paint Roller", qty: 2, total: "₱18.99", time: "2 hours ago" },
-];
+function fmtShort(n: number) {
+  if (n >= 1_000_000) return "₱" + (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000)     return "₱" + (n / 1_000).toFixed(1) + "K";
+  return fmt(n);
+}
 
-const recentPurchaseOrders = [
-  { id: "PO-001", supplier: "BuildCo Supplies", items: 15, total: "₱2,450", status: "Pending" },
-  { id: "PO-002", supplier: "Hardware Plus", items: 8, total: "₱1,200", status: "Received" },
-  { id: "PO-003", supplier: "Industrial Tools", items: 12, total: "₱3,890", status: "In Transit" },
-];
+function fmtTime(d: string) {
+  const diff = Date.now() - new Date(d).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
+}
+
+function authHeaders() {
+  const token = loadToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+const CHART_COLORS = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`bg-gray-100 rounded animate-pulse ${className}`} />;
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+
+function KpiCard({ icon: Icon, label, value, sub, color, bg, loading, href }: {
+  icon: React.ElementType; label: string; value: string;
+  sub?: string; color: string; bg: string;
+  loading: boolean; href?: string;
+}) {
+  const inner = (
+    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-start gap-4 ${href ? "hover:border-blue-300 hover:shadow-md transition-all cursor-pointer" : ""}`}>
+      <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+        <Icon className={`h-5 w-5 ${color}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+        {loading
+          ? <Skeleton className="h-7 w-24 mt-1.5" />
+          : <p className={`text-2xl font-bold ${color} leading-tight mt-0.5 tabular-nums`}>{value}</p>
+        }
+        {sub && !loading && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+  return href ? <Link href={href}><a>{inner}</a></Link> : inner;
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const [data,    setData]    = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get<DashboardData>("/api/dashboard", { headers: authHeaders() });
+      setData(res.data);
+    } catch (err) {
+      setError(axios.isAxiosError(err) ? (err.response?.data?.message ?? "Failed to load dashboard.") : "Failed to load dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const kpis = data?.kpis;
+
+  // Build weekly chart — fill missing days with 0
+  const weeklyChart = (() => {
+    const map = new Map((data?.weekly_sales ?? []).map((r) => [r.sale_date, r]));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const key  = d.toISOString().slice(0, 10);
+      const day  = d.toLocaleDateString("en-PH", { weekday: "short" });
+      const row  = map.get(key);
+      return { day, revenue: row ? Number(row.revenue) : 0, transactions: row ? Number(row.transactions) : 0 };
+    });
+  })();
+
+  const monthlyChart = (data?.monthly_sales ?? []).map((r) => ({
+    month: r.month.slice(5) + "/" + r.month.slice(2, 4),
+    revenue: Number(r.revenue),
+  }));
+
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-display font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-1">Welcome back! Here's your business overview.</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" className="h-9 w-9 p-0 border-gray-300 text-gray-600 hover:bg-gray-100"
+          onClick={load} disabled={loading} title="Refresh">
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {kpiData.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          return (
-            <Card key={idx} className="p-6 hover:shadow-lg transition-shadow duration-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{kpi.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{kpi.value}</p>
-                  <p className={`text-sm font-medium mt-2 ${kpi.positive ? "text-green-600" : "text-red-600"}`}>
-                    {kpi.change} from last period
-                  </p>
-                </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <Icon className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </Card>
-          );
-        })}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+          {error}
+          <button onClick={load} className="ml-auto text-red-600 font-semibold hover:underline">Retry</button>
+        </div>
+      )}
+
+      {/* KPI cards — row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={DollarSign}   label="Today's Revenue"   value={fmtShort(kpis?.today_revenue ?? 0)}
+          sub={`${kpis?.today_transactions ?? 0} transaction${(kpis?.today_transactions ?? 0) !== 1 ? "s" : ""}`}
+          color="text-blue-600" bg="bg-blue-50" loading={loading} />
+        <KpiCard icon={TrendingUp}   label="Monthly Revenue"   value={fmtShort(kpis?.monthly_revenue ?? 0)}
+          color="text-emerald-600" bg="bg-emerald-50" loading={loading} />
+        <KpiCard icon={Package}      label="Total Products"    value={(kpis?.total_products ?? 0).toLocaleString()}
+          color="text-purple-600" bg="bg-purple-50" loading={loading} href="/products" />
+        <KpiCard icon={Truck}        label="Active Suppliers"  value={(kpis?.total_suppliers ?? 0).toString()}
+          color="text-cyan-600" bg="bg-cyan-50" loading={loading} href="/suppliers" />
       </div>
 
-      {/* Analytics Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales & Revenue Chart */}
-        <Card className="lg:col-span-2 p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-display font-bold text-gray-900">Sales Analytics</h2>
-            <p className="text-gray-600 text-sm">Weekly sales and revenue trends</p>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={salesChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="date" stroke="#6B7280" />
-              <YAxis stroke="#6B7280" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "8px" }}
-              />
-              <Legend />
-              <Bar dataKey="sales" fill="#2563EB" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="revenue" fill="#10B981" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+      {/* KPI cards — row 2: alert cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={AlertCircle}  label="Out of Stock"      value={(kpis?.out_of_stock ?? 0).toString()}
+          sub="Need immediate restock" color="text-red-600" bg="bg-red-50" loading={loading} href="/reorder-alerts" />
+        <KpiCard icon={TrendingDown} label="Low Stock"         value={(kpis?.low_stock ?? 0).toString()}
+          sub="At or below reorder level" color="text-amber-600" bg="bg-amber-50" loading={loading} href="/reorder-alerts" />
+        <KpiCard icon={RotateCcw}    label="Pending Returns"   value={(kpis?.pending_returns ?? 0).toString()}
+          sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/returns" />
+        <KpiCard icon={ShoppingCart} label="Today's Orders"    value={(kpis?.today_transactions ?? 0).toString()}
+          color="text-indigo-600" bg="bg-indigo-50" loading={loading} href="/sales" />
+      </div>
 
-        {/* Low Stock Alert */}
-        <Card className="p-6">
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Weekly revenue bar chart */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
           <div className="mb-4">
-            <h2 className="text-lg font-display font-bold text-gray-900">Low Stock Alert</h2>
-            <p className="text-gray-600 text-sm">Items below reorder level</p>
+            <h2 className="text-base font-bold text-gray-900">Weekly Revenue</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Last 7 days</p>
+          </div>
+          {loading ? <Skeleton className="h-56 w-full" /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={weeklyChart} barSize={28}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="day" stroke="#94a3b8" tick={{ fontSize: 12 }} />
+                <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                <Tooltip
+                  formatter={(value: number) => [fmt(value), "Revenue"]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+                />
+                <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
+                  {weeklyChart.map((_, i) => (
+                    <Cell key={i} fill={i === weeklyChart.length - 1 ? "#2563eb" : "#bfdbfe"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Low stock alert widget */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Reorder Alerts</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Top urgent items</p>
+            </div>
+            {!loading && (kpis?.low_stock ?? 0) + (kpis?.out_of_stock ?? 0) > 0 && (
+              <Link href="/reorder-alerts">
+                <a className="text-xs text-blue-600 font-semibold hover:underline">View all</a>
+              </Link>
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)
+            ) : data?.low_stock_items.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                  <Package className="h-5 w-5 text-emerald-500" />
+                </div>
+                <p className="text-sm font-semibold text-emerald-700">All stocked up!</p>
+                <p className="text-xs text-gray-400 mt-0.5">No products need restocking</p>
+              </div>
+            ) : (
+              data?.low_stock_items.map((item, i) => (
+                <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg border ${
+                  item.urgency === "Out of Stock" ? "bg-red-50 border-red-200"     :
+                  item.urgency === "Critical"     ? "bg-orange-50 border-orange-200" :
+                                                    "bg-amber-50 border-amber-200"
+                }`}>
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${
+                    item.urgency === "Out of Stock" ? "bg-red-500"    :
+                    item.urgency === "Critical"     ? "bg-orange-500" : "bg-amber-400"
+                  }`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-gray-900 truncate">{item.product_name}</p>
+                    <p className="text-xs text-gray-500">{item.urgency} · {item.quantity} left</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Monthly trend line chart */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-gray-900">Revenue Trend</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Last 6 months</p>
+          </div>
+          {loading ? <Skeleton className="h-44 w-full" /> : monthlyChart.length === 0 ? (
+            <div className="h-44 flex items-center justify-center text-sm text-gray-400">No data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={monthlyChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" stroke="#94a3b8" tick={{ fontSize: 11 }} />
+                <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} tickFormatter={(v) => fmtShort(v)} />
+                <Tooltip
+                  formatter={(value: number) => [fmt(value), "Revenue"]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+                />
+                <Line type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2.5}
+                  dot={{ fill: "#2563eb", r: 4 }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Recent sales */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Recent Sales</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Latest transactions</p>
+            </div>
+            <Link href="/sales">
+              <a className="text-xs text-blue-600 font-semibold hover:underline">View all</a>
+            </Link>
+          </div>
+          <div className="flex-1 divide-y divide-gray-50">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full my-1" />)
+            ) : (data?.recent_sales.length ?? 0) === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">No sales yet today</div>
+            ) : (
+              data?.recent_sales.slice(0, 6).map((sale, i) => (
+                <div key={i} className="flex items-center justify-between py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{sale.customer_name}</p>
+                    <p className="text-xs text-gray-400 font-mono">{sale.invoice_number} · {fmtTime(sale.created_at)}</p>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-600 tabular-nums ml-3 shrink-0">
+                    {fmt(sale.total_amount)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Top products */}
+      {!loading && (data?.top_products.length ?? 0) > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-gray-900">Top Selling Products</h2>
+            <p className="text-xs text-gray-500 mt-0.5">All time, by units sold</p>
           </div>
           <div className="space-y-3">
-            {lowStockItems.map((item) => (
-              <div key={item.id} className="p-3 bg-red-50 rounded-lg border border-red-200">
-                <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                <p className="text-xs text-gray-600">{item.sku}</p>
-                <div className="flex justify-between mt-2">
-                  <span className="text-xs text-red-600 font-medium">Stock: {item.current}</span>
-                  <span className="text-xs text-gray-600">Reorder: {item.reorder}</span>
+            {data?.top_products.map((p, i) => {
+              const maxUnits = data.top_products[0].units_sold;
+              const pct = Math.round((p.units_sold / maxUnits) * 100);
+              return (
+                <div key={i} className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-gray-400 w-4 shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                      <span className="text-xs text-gray-500 ml-2 shrink-0">{p.units_sold} units · {fmt(p.revenue)}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full">
+                      <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        </Card>
-      </div>
-
-      {/* Revenue Trend & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Trend */}
-        <Card className="p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-display font-bold text-gray-900">Revenue Trend</h2>
-            <p className="text-gray-600 text-sm">Last 6 months performance</p>
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="month" stroke="#6B7280" />
-              <YAxis stroke="#6B7280" />
-              <Tooltip 
-                contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "8px" }}
-              />
-              <Line type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2} dot={{ fill: "#2563EB" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Recent Sales */}
-        <Card className="p-6">
-          <div className="mb-4">
-            <h2 className="text-lg font-display font-bold text-gray-900">Recent Sales</h2>
-            <p className="text-gray-600 text-sm">Latest transactions</p>
-          </div>
-          <div className="space-y-3">
-            {recentSales.map((sale) => (
-              <div key={sale.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{sale.product}</p>
-                  <p className="text-xs text-gray-600">Qty: {sale.qty}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">{sale.total}</p>
-                  <p className="text-xs text-gray-600">{sale.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* Purchase Orders */}
-      <Card className="p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-display font-bold text-gray-900">Recent Purchase Orders</h2>
-          <p className="text-gray-600 text-sm">Latest supplier orders</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Order ID</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Supplier</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Items</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Total</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentPurchaseOrders.map((order) => (
-                <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-gray-900 font-medium">{order.id}</td>
-                  <td className="py-3 px-4 text-gray-700">{order.supplier}</td>
-                  <td className="py-3 px-4 text-gray-700">{order.items}</td>
-                  <td className="py-3 px-4 text-gray-900 font-medium">{order.total}</td>
-                  <td className="py-3 px-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      order.status === "Pending" ? "bg-amber-100 text-amber-800" :
-                      order.status === "Received" ? "bg-green-100 text-green-800" :
-                      "bg-blue-100 text-blue-800"
-                    }`}>
-                      {order.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      )}
     </div>
   );
 }

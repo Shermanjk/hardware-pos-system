@@ -1,138 +1,837 @@
-import { Card } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useRef } from "react";
+import JsBarcode from "jsbarcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Barcode, Search, Edit2, Trash2, Eye } from "lucide-react";
+import { Plus, Barcode, Search, Edit2, Trash2, Eye, RefreshCw, AlertCircle, X, Package } from "lucide-react";
+import {
+  getProducts, getNextBarcode, createProduct, updateProduct, deleteProduct,
+  getCategories, getSuppliers, getUnits, deriveStatus,
+} from "@/shared/api/productsApi";
+import type {
+  ProductRecord, Category, Supplier, Unit,
+  CreateProductPayload, UpdateProductPayload, StockStatus,
+} from "@/shared/api/productsApi";
+import axios from "axios";
 
-const products = [
-  { id: 1, barcode: "HW-001", name: "Hammer - 16oz", category: "Tools", supplier: "BuildCo", cost: "₱8.50", price: "₱15.99", stock: 45, reorder: 20, status: "In Stock" },
-  { id: 2, barcode: "HW-002", name: "Nails - 2 inch", category: "Fasteners", supplier: "Hardware Plus", cost: "₱0.15", price: "₱0.35", stock: 5, reorder: 50, status: "Low Stock" },
-  { id: 3, barcode: "HW-003", name: "Screws - Phillips", category: "Fasteners", supplier: "Industrial Tools", cost: "₱0.20", price: "₱0.50", stock: 120, reorder: 100, status: "In Stock" },
-  { id: 4, barcode: "HW-004", name: "Wood Glue", category: "Adhesives", supplier: "BuildCo", cost: "₱3.20", price: "₱7.99", stock: 3, reorder: 10, status: "Critical" },
-  { id: 5, barcode: "HW-005", name: "Drill Bit Set", category: "Tools", supplier: "Hardware Plus", cost: "₱12.00", price: "₱24.99", stock: 28, reorder: 15, status: "In Stock" },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractErrors(err: unknown): Record<string, string> {
+  if (axios.isAxiosError(err)) {
+    const body = err.response?.data;
+    if (body?.errors && Array.isArray(body.errors)) {
+      const map: Record<string, string> = {};
+      for (const e of body.errors as { field: string; message: string }[]) {
+        map[e.field] = e.message;
+      }
+      return map;
+    }
+    if (body?.message) return { general: body.message };
+  }
+  return { general: "An unexpected error occurred. Please try again." };
+}
+
+function statusBadge(status: StockStatus) {
+  const styles =
+    status === "In Stock"  ? "bg-emerald-100 text-emerald-700 border border-emerald-200" :
+    status === "Low Stock" ? "bg-amber-100 text-amber-700 border border-amber-200"       :
+    status === "Critical"  ? "bg-orange-100 text-orange-700 border border-orange-200"   :
+                             "bg-red-100 text-red-700 border border-red-200";
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${styles}`}>
+      {status}
+    </span>
+  );
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
+}
+
+// ─── Barcode print helpers ────────────────────────────────────────────────────
+
+/** Generate an SVG barcode string for a given code using JsBarcode */
+function generateBarcodeSVG(code: string): string {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  JsBarcode(svg, code, {
+    format: "CODE128",
+    width: 2,
+    height: 60,
+    displayValue: false,
+    margin: 0,
+  });
+  return svg.outerHTML;
+}
+
+/** Build the HTML for a single barcode label — bars + code only */
+function buildLabelHTML(product: ProductRecord): string {
+  const svg = generateBarcodeSVG(product.barcode);
+  return `
+    <div class="label">
+      ${svg}
+      <div class="code">${product.barcode}</div>
+    </div>`;
+}
+
+const LABEL_STYLES = `
+  body { font-family: monospace; margin: 0; padding: 8px; background: #fff; }
+  .label { display: inline-block; padding: 6px 10px; margin: 4px;
+           text-align: center; vertical-align: top; }
+  .label svg { display: block; margin: 0 auto; }
+  .code { font-size: 11px; margin-top: 2px; letter-spacing: 1px; }
+  @media print { body { padding: 0; margin: 0; } }
+`;
+
+function printBarcode(product: ProductRecord) {
+  const w = window.open("", "_blank", "width=320,height=280");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html><html><head><title>${product.barcode}</title>
+    <style>${LABEL_STYLES}</style></head><body>
+    ${buildLabelHTML(product)}
+    <script>window.onload=function(){window.print();window.close();}<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+function printBarcodeList(products: ProductRecord[]) {
+  if (products.length === 0) return;
+  const w = window.open("", "_blank", "width=700,height=600");
+  if (!w) return;
+  const labels = products.map(buildLabelHTML).join("");
+  w.document.write(`<!DOCTYPE html><html><head><title>Barcodes</title>
+    <style>${LABEL_STYLES}</style></head><body>
+    ${labels}
+    <script>window.onload=function(){window.print();window.close();}<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+// ─── Form types ───────────────────────────────────────────────────────────────
+
+function emptyForm() {
+  return {
+    barcode:          "",
+    supplier_barcode: "",
+    product_name:     "",
+    description:      "",
+    category_id:      "" as unknown as number,
+    supplier_id:      "" as unknown as number | null,
+    unit_id:          "" as unknown as number,
+    cost_price:       "" as unknown as number,
+    selling_price:    "" as unknown as number,
+    reorder_level:    "" as unknown as number,
+    is_returnable:    true,
+    status:           "Active" as "Active" | "Inactive",
+  };
+}
+type ProductForm = ReturnType<typeof emptyForm>;
+
+function formFromRecord(p: ProductRecord): ProductForm {
+  return {
+    barcode:          p.barcode,
+    supplier_barcode: p.supplier_barcode ?? "",
+    product_name:     p.product_name,
+    description:      p.description ?? "",
+    category_id:      p.category_id ?? ("" as unknown as number),
+    supplier_id:      p.supplier_id ?? ("" as unknown as number | null),
+    unit_id:          p.unit_id ?? ("" as unknown as number),
+    cost_price:       p.cost_price,
+    selling_price:    p.selling_price,
+    reorder_level:    p.reorder_level,
+    is_returnable:    Boolean(p.is_returnable),
+    status:           p.status,
+  };
+}
+
+function validateForm(form: ProductForm): Record<string, string> {
+  const e: Record<string, string> = {};
+  if (!form.barcode.trim())    e.barcode      = "Barcode is required.";
+  if (!form.product_name.trim()) e.product_name = "Product name is required.";
+  if (!form.category_id)       e.category_id  = "Category is required.";
+  if (!form.unit_id)           e.unit_id      = "Unit is required.";
+  if (form.cost_price === "" as unknown as number || Number(form.cost_price) < 0)
+                               e.cost_price   = "Cost price must be 0 or greater.";
+  if (form.selling_price === "" as unknown as number || Number(form.selling_price) < 0)
+                               e.selling_price= "Selling price must be 0 or greater.";
+  if (form.reorder_level === "" as unknown as number || Number(form.reorder_level) < 0)
+                               e.reorder_level= "Reorder level must be 0 or greater.";
+  return e;
+}
+
+// ─── ProductFormModal ─────────────────────────────────────────────────────────
+
+interface ProductFormModalProps {
+  mode: "add" | "edit";
+  open: boolean;
+  initial?: ProductRecord | null;
+  categories: Category[];
+  suppliers: Supplier[];
+  units: Unit[];
+  onClose: () => void;
+  onSaved: (product: ProductRecord) => void;
+}
+
+function ProductFormModal({ mode, open, initial, categories, suppliers, units, onClose, onSaved }: ProductFormModalProps) {
+  const [form,           setForm]           = useState<ProductForm>(emptyForm());
+  const [errors,         setErrors]         = useState<Record<string, string>>({});
+  const [isLoading,      setIsLoading]      = useState(false);
+  const [loadingBarcode, setLoadingBarcode] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "edit" && initial) {
+      setForm(formFromRecord(initial));
+    } else {
+      setForm(emptyForm());
+      setLoadingBarcode(true);
+      getNextBarcode()
+        .then((bc) => setForm((prev) => ({ ...prev, barcode: bc })))
+        .catch(() => {})
+        .finally(() => setLoadingBarcode(false));
+    }
+    setErrors({});
+  }, [open, mode, initial]);
+
+  const set = (key: keyof ProductForm, value: unknown) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clientErrors = validateForm(form);
+    if (Object.keys(clientErrors).length > 0) { setErrors(clientErrors); return; }
+    setErrors({});
+    setIsLoading(true);
+    try {
+      const payload: CreateProductPayload = {
+        barcode:          form.barcode.trim(),
+        supplier_barcode: form.supplier_barcode?.trim() || null,
+        product_name:     form.product_name.trim(),
+        description:      form.description?.trim() || null,
+        category_id:      Number(form.category_id),
+        supplier_id:      form.supplier_id ? Number(form.supplier_id) : null,
+        unit_id:          Number(form.unit_id),
+        cost_price:       Number(form.cost_price),
+        selling_price:    Number(form.selling_price),
+        reorder_level:    Number(form.reorder_level),
+        is_returnable:    form.is_returnable,
+        status:           form.status,
+      };
+      const saved = mode === "add"
+        ? await createProduct(payload)
+        : await updateProduct(initial!.id, payload as UpdateProductPayload);
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      setErrors(extractErrors(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {errors.general && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{errors.general}</p>
+            </div>
+          )}
+
+          {/* Barcode + Product Name */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-1.5 block font-semibold">Barcode <span className="text-red-500">*</span></Label>
+              <div className="relative">
+                <Input value={form.barcode} onChange={(e) => set("barcode", e.target.value)}
+                  placeholder={loadingBarcode ? "Generating…" : "e.g. HW-021"}
+                  disabled={isLoading || loadingBarcode}
+                  className={errors.barcode ? "border-red-400" : ""} />
+                {loadingBarcode && <Spinner className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />}
+              </div>
+              {errors.barcode && <p className="mt-1 text-xs text-red-600">{errors.barcode}</p>}
+            </div>
+            <div>
+              <Label className="mb-1.5 block font-semibold">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
+                placeholder="Supplier's barcode" disabled={isLoading} />
+            </div>
+          </div>
+
+          {/* Product Name */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Product Name <span className="text-red-500">*</span></Label>
+            <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
+              placeholder="e.g. Claw Hammer 16oz" disabled={isLoading}
+              className={errors.product_name ? "border-red-400" : ""} />
+            {errors.product_name && <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>}
+          </div>
+
+          {/* Category + Supplier */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-1.5 block font-semibold">Category <span className="text-red-500">*</span></Label>
+              <Select value={form.category_id ? String(form.category_id) : ""}
+                onValueChange={(v) => set("category_id", v)} disabled={isLoading}>
+                <SelectTrigger className={errors.category_id ? "border-red-400" : ""}>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.category_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.category_id && <p className="mt-1 text-xs text-red-600">{errors.category_id}</p>}
+            </div>
+            <div>
+              <Label className="mb-1.5 block font-semibold">Supplier <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Select value={form.supplier_id ? String(form.supplier_id) : "none"}
+                onValueChange={(v) => set("supplier_id", v === "none" ? null : v)} disabled={isLoading}>
+                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— No supplier —</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Unit + Reorder Level */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-1.5 block font-semibold">Unit <span className="text-red-500">*</span></Label>
+              <Select value={form.unit_id ? String(form.unit_id) : ""}
+                onValueChange={(v) => set("unit_id", v)} disabled={isLoading}>
+                <SelectTrigger className={errors.unit_id ? "border-red-400" : ""}>
+                  <SelectValue placeholder="Select unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.unit_name} ({u.abbreviation})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.unit_id && <p className="mt-1 text-xs text-red-600">{errors.unit_id}</p>}
+            </div>
+            <div>
+              <Label className="mb-1.5 block font-semibold">Reorder Level <span className="text-red-500">*</span></Label>
+              <Input type="number" min="0" value={form.reorder_level}
+                onChange={(e) => set("reorder_level", e.target.value)}
+                placeholder="e.g. 20" disabled={isLoading}
+                className={errors.reorder_level ? "border-red-400" : ""} />
+              {errors.reorder_level && <p className="mt-1 text-xs text-red-600">{errors.reorder_level}</p>}
+            </div>
+          </div>
+
+          {/* Cost + Selling Price */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-1.5 block font-semibold">Cost Price (₱) <span className="text-red-500">*</span></Label>
+              <Input type="number" min="0" step="0.01" value={form.cost_price}
+                onChange={(e) => set("cost_price", e.target.value)}
+                placeholder="0.00" disabled={isLoading}
+                className={errors.cost_price ? "border-red-400" : ""} />
+              {errors.cost_price && <p className="mt-1 text-xs text-red-600">{errors.cost_price}</p>}
+            </div>
+            <div>
+              <Label className="mb-1.5 block font-semibold">Selling Price (₱) <span className="text-red-500">*</span></Label>
+              <Input type="number" min="0" step="0.01" value={form.selling_price}
+                onChange={(e) => set("selling_price", e.target.value)}
+                placeholder="0.00" disabled={isLoading}
+                className={errors.selling_price ? "border-red-400" : ""} />
+              {errors.selling_price && <p className="mt-1 text-xs text-red-600">{errors.selling_price}</p>}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Description <span className="text-gray-400 font-normal">(optional)</span></Label>
+            <textarea value={form.description} onChange={(e) => set("description", e.target.value)}
+              rows={2} disabled={isLoading} placeholder="Additional product details…"
+              className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+          </div>
+
+          {/* Flags */}
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.is_returnable}
+                onChange={(e) => set("is_returnable", e.target.checked)}
+                className="h-4 w-4 accent-blue-600" disabled={isLoading} />
+              Returnable
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.status === "Active"}
+                onChange={(e) => set("status", e.target.checked ? "Active" : "Inactive")}
+                className="h-4 w-4 accent-blue-600" disabled={isLoading} />
+              Active
+            </label>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading ? (mode === "add" ? "Adding…" : "Saving…") : (mode === "add" ? "Add Product" : "Save Changes")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── View Modal ───────────────────────────────────────────────────────────────
+
+interface ViewProductModalProps {
+  product: ProductRecord | null;
+  onClose: () => void;
+  onEdit: (p: ProductRecord) => void;
+}
+
+function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
+  if (!product) return null;
+  const status = deriveStatus(product.quantity, product.reorder_level);
+  return (
+    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-blue-600" /> Product Details
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-lg font-bold text-gray-900">{product.barcode}</span>
+            {statusBadge(status)}
+          </div>
+          <p className="text-lg font-semibold text-gray-900">{product.product_name}</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
+            <div><span className="font-medium text-gray-500">Category:</span> {product.category || "—"}</div>
+            <div><span className="font-medium text-gray-500">Supplier:</span> {product.supplier || "—"}</div>
+            <div><span className="font-medium text-gray-500">Unit:</span> {product.unit} ({product.unit_abbreviation})</div>
+            <div><span className="font-medium text-gray-500">Reorder Level:</span> {product.reorder_level}</div>
+            <div><span className="font-medium text-gray-500">Cost Price:</span> ₱{Number(product.cost_price).toFixed(2)}</div>
+            <div><span className="font-medium text-gray-500">Selling Price:</span> ₱{Number(product.selling_price).toFixed(2)}</div>
+            <div><span className="font-medium text-gray-500">Stock:</span> <span className="font-bold text-gray-900">{product.quantity}</span></div>
+            <div><span className="font-medium text-gray-500">Damaged:</span> {product.damaged_stock}</div>
+            <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>
+            <div><span className="font-medium text-gray-500">Status:</span> {product.status}</div>
+          </div>
+          {product.supplier_barcode && (
+            <div><span className="font-medium text-gray-500">Supplier Barcode:</span> {product.supplier_barcode}</div>
+          )}
+          {product.description && (
+            <div className="pt-1 border-t border-gray-100">
+              <p className="font-medium text-gray-500 mb-1">Description</p>
+              <p className="text-gray-700">{product.description}</p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button className="gap-2" onClick={() => { onClose(); onEdit(product); }}>
+            <Edit2 className="h-4 w-4" /> Edit
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => printBarcode(product)}>
+            <Barcode className="h-4 w-4" /> Print Barcode
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Delete Dialog ────────────────────────────────────────────────────────────
+
+interface DeleteDialogProps {
+  product: ProductRecord | null;
+  onClose: () => void;
+  onDeleted: (id: number, soft: boolean) => void;
+}
+
+function DeleteDialog({ product, onClose, onDeleted }: DeleteDialogProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+
+  useEffect(() => { if (product) setError(null); }, [product]);
+
+  const handleConfirm = async () => {
+    if (!product) return;
+    setIsLoading(true);
+    try {
+      const result = await deleteProduct(product.id);
+      onDeleted(product.id, result.soft);
+      onClose();
+    } catch (err) {
+      setError(extractErrors(err).general ?? "Failed to remove product.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <AlertDialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Product?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will remove <span className="font-semibold text-gray-900">{product?.product_name}</span>{" "}
+            ({product?.barcode}). If it has sales history it will be deactivated instead.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg mt-2">
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirm} disabled={isLoading}
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+            {isLoading && <Spinner className="mr-2 text-white" />}
+            {isLoading ? "Removing…" : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// ─── Main Products Page ───────────────────────────────────────────────────────
 
 export default function Products() {
+  const [products,   setProducts]   = useState<ProductRecord[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers,  setSuppliers]  = useState<Supplier[]>([]);
+  const [units,      setUnits]      = useState<Unit[]>([]);
+  const [isLoading,  setIsLoading]  = useState(true);
+  const [loadError,  setLoadError]  = useState<string | null>(null);
+
+  const [search,       setSearch]       = useState("");
+  const [filterCat,    setFilterCat]    = useState("");
+  const [filterSup,    setFilterSup]    = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showAdd,      setShowAdd]      = useState(false);
+  const [editTarget,   setEditTarget]   = useState<ProductRecord | null>(null);
+  const [viewTarget,   setViewTarget]   = useState<ProductRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
+
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "info" } | null>(null);
+  const showToast = (msg: string, type: "success" | "info" = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Load reference data
+  useEffect(() => {
+    Promise.all([getCategories(), getSuppliers(), getUnits()])
+      .then(([cats, sups, uns]) => {
+        setCategories(cats);
+        setSuppliers(sups);
+        setUnits(uns);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadProducts = useCallback(async (searchVal: string) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getProducts({
+        search:      searchVal || undefined,
+        category_id: filterCat    || undefined,
+        supplier_id: filterSup    || undefined,
+        status:      filterStatus as StockStatus | "" || undefined,
+      });
+      setProducts(data);
+    } catch (err) {
+      setLoadError(extractErrors(err).general ?? "Failed to load products.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filterCat, filterSup, filterStatus]);
+
+  useEffect(() => { loadProducts(search); }, [filterCat, filterSup, filterStatus, loadProducts]);
+
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => loadProducts(val), 350);
+  };
+
+  const handleSaved = (product: ProductRecord) => {
+    setProducts((prev) => {
+      const exists = prev.find((p) => p.id === product.id);
+      return exists ? prev.map((p) => p.id === product.id ? product : p) : [product, ...prev];
+    });
+    showToast(`${product.product_name} saved successfully.`);
+  };
+
+  const handleDeleted = (id: number, soft: boolean) => {
+    if (soft) {
+      setProducts((prev) => prev.map((p) => p.id === id ? { ...p, status: "Inactive" as const } : p));
+      showToast("Product deactivated (has sales history).", "info");
+    } else {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      showToast("Product deleted.", "info");
+    }
+  };
+
+  const clearFilters = () => { setSearch(""); setFilterCat(""); setFilterSup(""); setFilterStatus(""); };
+  const hasFilters = search || filterCat || filterSup || filterStatus;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border
+          ${toast.type === "success"
+            ? "bg-emerald-600 text-white border-emerald-700"
+            : "bg-blue-600 text-white border-blue-700"}`}>
+          {toast.msg}
+          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold text-gray-900">Products</h1>
-          <p className="text-gray-600 mt-1">Manage your product catalog</p>
+          <h1 className="text-2xl font-bold text-gray-900">Products</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Manage your product catalog</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="gap-2">
-            <Barcode className="h-4 w-4" />
-            Print Barcode
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100 h-9 text-sm"
+            onClick={() => printBarcodeList(products)} disabled={products.length === 0}>
+            <Barcode className="h-4 w-4" /> Print Barcodes
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Product
+          <Button variant="outline" size="sm" className="h-9 w-9 p-0 border-gray-300 text-gray-600 hover:bg-gray-100"
+            onClick={() => loadProducts(search)} disabled={isLoading} title="Refresh">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          </Button>
+          <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white h-9 text-sm shadow-sm" onClick={() => setShowAdd(true)}>
+            <Plus className="h-4 w-4" /> Add Product
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-            <Search className="h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search products..."
-              className="border-0 bg-transparent text-sm focus-visible:ring-0"
-            />
+      {/* Error banner */}
+      {loadError && (
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-700 font-semibold">Failed to load products</p>
+            <p className="text-sm text-red-600 mt-0.5">{loadError}</p>
           </div>
-          <Select>
-            <SelectTrigger className="bg-gray-50">
-              <SelectValue placeholder="Category" />
+          <button onClick={() => loadProducts(search)} className="text-red-600 hover:text-red-800 text-sm font-semibold">Retry</button>
+          <button onClick={() => setLoadError(null)} className="text-red-400 hover:text-red-600"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {/* Search */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <Search className="h-4 w-4 text-gray-400 shrink-0" />
+            <input value={search} onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search name or barcode…"
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-gray-400 min-w-0 text-gray-800" />
+            {search && (
+              <button onClick={() => handleSearchChange("")} className="text-gray-400 hover:text-gray-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {/* Category */}
+          <Select value={filterCat || "all"} onValueChange={(v) => setFilterCat(v === "all" ? "" : v)}>
+            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700 h-10">
+              <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="tools">Tools</SelectItem>
-              <SelectItem value="fasteners">Fasteners</SelectItem>
-              <SelectItem value="adhesives">Adhesives</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.category_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select>
-            <SelectTrigger className="bg-gray-50">
-              <SelectValue placeholder="Supplier" />
+          {/* Supplier */}
+          <Select value={filterSup || "all"} onValueChange={(v) => setFilterSup(v === "all" ? "" : v)}>
+            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700 h-10">
+              <SelectValue placeholder="All Suppliers" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="buildco">BuildCo</SelectItem>
-              <SelectItem value="hardware">Hardware Plus</SelectItem>
-              <SelectItem value="industrial">Industrial Tools</SelectItem>
+              <SelectItem value="all">All Suppliers</SelectItem>
+              {suppliers.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select>
-            <SelectTrigger className="bg-gray-50">
-              <SelectValue placeholder="Stock Status" />
+          {/* Status */}
+          <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700 h-10">
+              <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="in-stock">In Stock</SelectItem>
-              <SelectItem value="low">Low Stock</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="In Stock">In Stock</SelectItem>
+              <SelectItem value="Low Stock">Low Stock</SelectItem>
+              <SelectItem value="Critical">Critical</SelectItem>
+              <SelectItem value="Out of Stock">Out of Stock</SelectItem>
             </SelectContent>
           </Select>
         </div>
-      </Card>
+        {hasFilters && (
+          <div className="mt-3 flex items-center gap-3 pt-3 border-t border-gray-100">
+            <span className="text-xs text-gray-500 font-medium">{products.length} result{products.length !== 1 ? "s" : ""} found</span>
+            <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline">
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
 
-      {/* Products Table */}
-      <Card className="overflow-hidden">
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Barcode</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Product Name</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Category</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Supplier</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Cost Price</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Selling Price</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Stock</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Reorder</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Status</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Actions</th>
+              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Barcode</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Product Name</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Category</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Supplier</th>
+                <th className="text-right py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Cost</th>
+                <th className="text-right py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Selling</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Stock</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Reorder</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {products.map((product, idx) => (
-                <tr key={product.id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors`}>
-                  <td className="py-4 px-6 text-gray-900 font-medium">{product.barcode}</td>
-                  <td className="py-4 px-6 text-gray-900">{product.name}</td>
-                  <td className="py-4 px-6 text-gray-700">{product.category}</td>
-                  <td className="py-4 px-6 text-gray-700">{product.supplier}</td>
-                  <td className="py-4 px-6 text-gray-900 font-medium">{product.cost}</td>
-                  <td className="py-4 px-6 text-gray-900 font-medium">{product.price}</td>
-                  <td className="py-4 px-6 text-gray-900 font-medium">{product.stock}</td>
-                  <td className="py-4 px-6 text-gray-700">{product.reorder}</td>
-                  <td className="py-4 px-6">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      product.status === "In Stock" ? "bg-green-100 text-green-800" :
-                      product.status === "Low Stock" ? "bg-amber-100 text-amber-800" :
-                      "bg-red-100 text-red-800"
-                    }`}>
-                      {product.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+            <tbody className="divide-y divide-gray-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="py-20 text-center">
+                    <div className="flex items-center justify-center gap-2 text-gray-400">
+                      <Spinner className="text-blue-500" />
+                      <span className="text-sm">Loading products…</span>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Package className="h-7 w-7 text-gray-400" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-700">No products found</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {hasFilters ? "Try adjusting your filters" : "Click Add Product to get started"}
+                        </p>
+                      </div>
+                      {hasFilters
+                        ? <button onClick={clearFilters} className="text-blue-600 text-sm font-semibold hover:underline">Clear filters</button>
+                        : <button onClick={() => setShowAdd(true)} className="text-blue-600 text-sm font-semibold hover:underline">Add your first product</button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                products.map((product) => {
+                  const stockStatus = deriveStatus(product.quantity, product.reorder_level);
+                  const inactive = product.status === "Inactive";
+                  return (
+                    <tr key={product.id}
+                      className={`hover:bg-blue-50/50 transition-colors ${inactive ? "opacity-50" : ""}`}>
+                      <td className="py-3.5 px-5">
+                        <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                          {product.barcode}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <p className="font-semibold text-gray-900 text-sm">{product.product_name}</p>
+                        {inactive && (
+                          <span className="text-xs text-gray-400 font-medium">Inactive</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span className="text-xs font-medium text-gray-600 bg-slate-100 px-2 py-1 rounded-full">
+                          {product.category || "—"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-sm text-gray-600">{product.supplier || "—"}</td>
+                      <td className="py-3.5 px-5 text-right text-sm text-gray-600">₱{Number(product.cost_price).toFixed(2)}</td>
+                      <td className="py-3.5 px-5 text-right">
+                        <span className="text-sm font-bold text-gray-900">₱{Number(product.selling_price).toFixed(2)}</span>
+                      </td>
+                      <td className="py-3.5 px-5 text-center">
+                        <span className={`text-sm font-bold tabular-nums ${
+                          product.quantity === 0 ? "text-red-600" :
+                          product.quantity <= product.reorder_level ? "text-amber-600" :
+                          "text-gray-900"}`}>
+                          {product.quantity}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-center text-sm text-gray-500">{product.reorder_level}</td>
+                      <td className="py-3.5 px-5 text-center">{statusBadge(stockStatus)}</td>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center justify-center gap-1">
+                          <button title="View" onClick={() => setViewTarget(product)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button title="Edit" onClick={() => setEditTarget(product)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button title="Print barcode" onClick={() => printBarcode(product)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors">
+                            <Barcode className="h-4 w-4" />
+                          </button>
+                          <button title="Remove" onClick={() => setDeleteTarget(product)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
-      </Card>
+        {!isLoading && products.length > 0 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <p className="text-xs text-gray-500 font-medium">
+              {products.length} product{products.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-gray-400">Isra Hardware POS</p>
+          </div>
+        )}
+      </div>
+
+      <ProductFormModal mode="add" open={showAdd} categories={categories} suppliers={suppliers} units={units}
+        onClose={() => setShowAdd(false)} onSaved={handleSaved} />
+      <ProductFormModal mode="edit" open={!!editTarget} initial={editTarget} categories={categories}
+        suppliers={suppliers} units={units} onClose={() => setEditTarget(null)} onSaved={handleSaved} />
+      <ViewProductModal product={viewTarget} onClose={() => setViewTarget(null)} onEdit={(p) => setEditTarget(p)} />
+      <DeleteDialog product={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />
     </div>
   );
 }
