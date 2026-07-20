@@ -29,6 +29,7 @@ export interface Unit {
 export interface ProductRecord {
   id: number;
   barcode: string;
+  barcode_source: "manufacturer" | "store";
   supplier_barcode: string | null;
   product_name: string;
   description: string | null;
@@ -62,6 +63,7 @@ export function deriveStatus(quantity: number, reorderLevel: number): StockStatu
 
 export interface CreateProductPayload {
   barcode: string;
+  barcode_source: "manufacturer" | "store";
   supplier_barcode?: string | null;
   product_name: string;
   description?: string | null;

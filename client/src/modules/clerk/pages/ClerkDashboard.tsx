@@ -16,24 +16,8 @@ import {
   Printer,
   ClipboardList,
 } from "lucide-react";
-import { mockProducts, mockActivityLogs } from "@/modules/clerk/mockData";
-import type { ActivityLog } from "@/modules/clerk/types";
-
-// ─── Derived summary stats ────────────────────────────────────────────────────
-
-function useDashboardStats() {
-  const totalProducts = mockProducts.length;
-  const totalQty = mockProducts.reduce((sum, p) => sum + p.quantity, 0);
-  const lowStockCount = mockProducts.filter(
-    (p) => p.quantity <= p.reorderLevel
-  ).length;
-  // "Today's Stock In" — mock: count logs from today with "Received Stock"
-  const todayStockIn = mockActivityLogs.filter(
-    (l) => l.action === "Received Stock" && l.timestamp.startsWith("2025-01-15")
-  ).length;
-
-  return { totalProducts, totalQty, lowStockCount, todayStockIn };
-}
+import { getInventorySummary, getInventoryLogs, getInventory } from "@/shared/api/inventoryApi";
+import { type InventoryItem } from "@/shared/api/inventoryApi";
 
 // ─── Summary card ─────────────────────────────────────────────────────────────
 
@@ -74,11 +58,24 @@ function StatCard({ icon: Icon, label, value, sub, iconBg, iconColor, loading }:
 
 // ─── Action icon map ──────────────────────────────────────────────────────────
 
-function ActivityIcon({ action }: { action: ActivityLog["action"] }) {
+interface ActivityLog {
+  id: string;
+  action: string;
+  product_name: string;
+  quantity_change: string;
+  performed_by: string;
+  timestamp: string;
+}
+
+function ActivityIcon({ action }: { action: string }) {
   switch (action) {
     case "Received Stock":
     case "Stock In Saved":
       return <TrendingUp className="h-4 w-4 text-green-600" />;
+    case "Damaged":
+    case "Lost":
+    case "Expired":
+    case "Correction":
     case "Stock Adjustment":
       return <TrendingDown className="h-4 w-4 text-amber-600" />;
     case "Printed Barcode":
@@ -90,10 +87,14 @@ function ActivityIcon({ action }: { action: ActivityLog["action"] }) {
   }
 }
 
-function activityIconBg(action: ActivityLog["action"]): string {
+function activityIconBg(action: string): string {
   switch (action) {
     case "Received Stock":
     case "Stock In Saved":   return "bg-green-50";
+    case "Damaged":
+    case "Lost":
+    case "Expired":
+    case "Correction":
     case "Stock Adjustment": return "bg-amber-50";
     case "Printed Barcode":  return "bg-blue-50";
     case "Completed Stock Count": return "bg-purple-50";
@@ -105,12 +106,55 @@ function activityIconBg(action: ActivityLog["action"]): string {
 
 export default function ClerkDashboard() {
   const [loading, setLoading] = useState(true);
-  const stats = useDashboardStats();
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    totalQty: 0,
+    lowStockCount: 0,
+    todayStockIn: 0,
+  });
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<InventoryItem[]>([]);
 
-  // Simulate async data fetch
+  // Fetch real data
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(t);
+    const fetchData = async () => {
+      try {
+        const [summary, inventoryLogs, inventoryData] = await Promise.all([
+          getInventorySummary(),
+          getInventoryLogs({ limit: 10 }),
+          getInventory(),
+        ]);
+        const allProducts = inventoryData;
+        setLowStockProducts(allProducts.filter((p) => p.quantity <= p.reorder_level).slice(0, 6));
+
+        setStats({
+          totalProducts: summary.total_products,
+          totalQty: summary.total_units,
+          lowStockCount: summary.low_stock + summary.critical + summary.out_of_stock,
+          todayStockIn: inventoryLogs.filter(
+            (l) =>
+              l.action === "Received Stock" &&
+              new Date(l.created_at).toDateString() === new Date().toDateString()
+          ).length,
+        });
+
+        setLogs(
+          inventoryLogs.map((l) => ({
+            id: String(l.id),
+            action: l.action || "",
+            product_name: l.product_name,
+            quantity_change: l.quantity_change ? (l.quantity_change > 0 ? `+${l.quantity_change}` : String(l.quantity_change)) : "—",
+            performed_by: l.performed_by,
+            timestamp: l.created_at,
+          }))
+        );
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const cards = [
@@ -173,61 +217,55 @@ export default function ClerkDashboard() {
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/clerk/stock-in">
-          <a className="block">
-            <Card className="p-4 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:shadow-md transition-all cursor-pointer group">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-600 rounded-lg">
-                    <PackagePlus className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900">New Stock In</p>
-                    <p className="text-xs text-blue-600">Receive a delivery</p>
-                  </div>
+        <Link href="/clerk/stock-in" className="block">
+          <Card className="p-4 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:shadow-md transition-all cursor-pointer group">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600 rounded-lg">
+                  <PackagePlus className="h-5 w-5 text-white" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-blue-500 group-hover:translate-x-1 transition-transform" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">New Stock In</p>
+                  <p className="text-xs text-blue-600">Receive a delivery</p>
+                </div>
               </div>
-            </Card>
-          </a>
+              <ArrowRight className="h-4 w-4 text-blue-500 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Card>
         </Link>
 
-        <Link href="/clerk/stock-adjustment">
-          <a className="block">
-            <Card className="p-4 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:shadow-md transition-all cursor-pointer group">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500 rounded-lg">
-                    <SlidersHorizontal className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-amber-900">Stock Adjustment</p>
-                    <p className="text-xs text-amber-700">Damaged, lost, expired</p>
-                  </div>
+        <Link href="/clerk/stock-adjustment" className="block">
+          <Card className="p-4 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:shadow-md transition-all cursor-pointer group">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500 rounded-lg">
+                  <SlidersHorizontal className="h-5 w-5 text-white" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-amber-500 group-hover:translate-x-1 transition-transform" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Stock Adjustment</p>
+                  <p className="text-xs text-amber-700">Damaged, lost, expired</p>
+                </div>
               </div>
-            </Card>
-          </a>
+              <ArrowRight className="h-4 w-4 text-amber-500 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Card>
         </Link>
 
-        <Link href="/clerk/low-stock">
-          <a className="block">
-            <Card className="p-4 border-red-200 bg-red-50 hover:bg-red-100 hover:shadow-md transition-all cursor-pointer group">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-500 rounded-lg">
-                    <AlertTriangle className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-red-900">View Low Stock</p>
-                    <p className="text-xs text-red-600">{stats.lowStockCount} items need attention</p>
-                  </div>
+        <Link href="/clerk/low-stock" className="block">
+          <Card className="p-4 border-red-200 bg-red-50 hover:bg-red-100 hover:shadow-md transition-all cursor-pointer group">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-500 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-white" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-red-500 group-hover:translate-x-1 transition-transform" />
+                <div>
+                  <p className="text-sm font-semibold text-red-900">View Low Stock</p>
+                  <p className="text-xs text-red-600">{stats.lowStockCount} items need attention</p>
+                </div>
               </div>
-            </Card>
-          </a>
+              <ArrowRight className="h-4 w-4 text-red-500 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Card>
         </Link>
       </div>
 
@@ -241,9 +279,7 @@ export default function ClerkDashboard() {
               <p className="text-xs text-gray-500 mt-0.5">Latest transactions by you</p>
             </div>
             <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs gap-1">
-              <Link href="/clerk/inventory">
-                <a>View all <ArrowRight className="h-3 w-3" /></a>
-              </Link>
+              <Link href="/clerk/inventory">View all <ArrowRight className="h-3 w-3" /></Link>
             </Button>
           </div>
 
@@ -272,7 +308,7 @@ export default function ClerkDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockActivityLogs.map((log, idx) => (
+                  {logs.map((log, idx) => (
                     <tr
                       key={log.id}
                       className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${
@@ -288,19 +324,19 @@ export default function ClerkDashboard() {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-gray-700 text-xs max-w-[160px] truncate">
-                        {log.product}
+                        {log.product_name}
                       </td>
                       <td className="py-3 px-4">
                         <span
                           className={`font-semibold text-xs ${
-                            log.qtyChange.startsWith("+")
+                            log.quantity_change.startsWith("+")
                               ? "text-green-600"
-                              : log.qtyChange.startsWith("-")
+                              : log.quantity_change.startsWith("-")
                               ? "text-red-600"
                               : "text-gray-500"
                           }`}
                         >
-                          {log.qtyChange}
+                          {log.quantity_change}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-gray-400 text-xs whitespace-nowrap">
@@ -322,9 +358,7 @@ export default function ClerkDashboard() {
               <p className="text-xs text-gray-500 mt-0.5">Products needing attention</p>
             </div>
             <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs gap-1">
-              <Link href="/clerk/low-stock">
-                <a>See all <ArrowRight className="h-3 w-3" /></a>
-              </Link>
+              <Link href="/clerk/low-stock">See all <ArrowRight className="h-3 w-3" /></Link>
             </Button>
           </div>
 
@@ -336,11 +370,8 @@ export default function ClerkDashboard() {
             </div>
           ) : (
             <div className="p-4 space-y-3">
-              {mockProducts
-                .filter((p) => p.quantity <= p.reorderLevel)
-                .slice(0, 6)
-                .map((p) => {
-                  const isCritical = p.quantity === 0 || p.quantity <= p.reorderLevel * 0.5;
+              {lowStockProducts.map((p) => {
+                  const isCritical = p.quantity === 0 || p.quantity <= p.reorder_level * 0.5;
                   return (
                     <div
                       key={p.id}
@@ -352,7 +383,7 @@ export default function ClerkDashboard() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">{p.name}</p>
+                          <p className="text-xs font-semibold text-gray-900 truncate">{p.product_name}</p>
                           <p className="text-xs text-gray-500 mt-0.5">{p.barcode}</p>
                         </div>
                         <span
@@ -366,17 +397,16 @@ export default function ClerkDashboard() {
                         </span>
                       </div>
                       <div className="mt-2 flex items-center gap-1.5">
-                        {/* Mini progress bar */}
                         <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${isCritical ? "bg-red-500" : "bg-amber-400"}`}
                             style={{
-                              width: `${Math.min(100, Math.max(4, (p.quantity / (p.reorderLevel * 1.5)) * 100))}%`,
+                              width: `${Math.min(100, Math.max(4, (p.quantity / (p.reorder_level * 1.5)) * 100))}%`,
                             }}
                           />
                         </div>
                         <span className="text-xs text-gray-400 whitespace-nowrap">
-                          /{p.reorderLevel}
+                          /{p.reorder_level}
                         </span>
                       </div>
                     </div>
@@ -384,10 +414,8 @@ export default function ClerkDashboard() {
                 })}
 
               {stats.lowStockCount > 6 && (
-                <Link href="/clerk/low-stock">
-                  <a className="block text-center py-2 text-xs text-blue-600 hover:underline font-medium">
-                    +{stats.lowStockCount - 6} more items
-                  </a>
+                <Link href="/clerk/low-stock" className="block text-center py-2 text-xs text-blue-600 hover:underline font-medium">
+                  +{stats.lowStockCount - 6} more items
                 </Link>
               )}
             </div>
@@ -405,18 +433,16 @@ export default function ClerkDashboard() {
         ].map((item) => {
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href}>
-              <a>
-                <Card className="p-4 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group">
-                  <div className="flex items-center gap-3">
-                    <Icon className={`h-5 w-5 ${item.color}`} />
-                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                      {item.label}
-                    </span>
-                    <ArrowRight className="h-3.5 w-3.5 text-gray-400 ml-auto group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </Card>
-              </a>
+            <Link key={item.href} href={item.href} className="block">
+              <Card className="p-4 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group">
+                <div className="flex items-center gap-3">
+                  <Icon className={`h-5 w-5 ${item.color}`} />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    {item.label}
+                  </span>
+                  <ArrowRight className="h-3.5 w-3.5 text-gray-400 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </Card>
             </Link>
           );
         })}

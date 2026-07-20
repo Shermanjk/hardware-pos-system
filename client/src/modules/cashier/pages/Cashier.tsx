@@ -25,6 +25,7 @@ import { toast } from "sonner";
 interface CartItem {
   id: number;
   name: string;
+  unit: string;
   quantity: number;
   unitPrice: number;
   subtotal: number;
@@ -93,85 +94,128 @@ interface SaleReceiptParams {
   totalCents: number;
   cashCents: number;
   changeCents: number | null;
-  isExactChange: boolean;
   cashierName: string;
 }
 
-function printSaleReceipt(params: SaleReceiptParams): void {
+// ─── Text helpers for monospace receipt layout ───────────────────────────────
+
+const W = 72; // total receipt width in characters
+
+const center = (s: string, w = W) =>
+  s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
+
+const rule = (ch = "=") => ch.repeat(W);
+
+/** Left-align `left`, right-align `right` within `w` chars. */
+const lr = (left: string, right: string, w = W) => {
+  const gap = w - left.length - right.length;
+  return left + (gap > 0 ? " ".repeat(gap) : " ") + right;
+};
+
+/** Pad a peso amount string to a fixed width for alignment. */
+const peso = (cents: number, w = 10) => {
+  const s = `P ${fmtCents(cents)}`;
+  return s.padStart(w);
+};
+
+function buildReceiptText(params: SaleReceiptParams): string {
   const {
-    invoiceNumber,
-    cartItems,
-    customerInfo,
-    subtotalCents,
-    taxCents,
-    totalCents,
-    cashCents,
-    changeCents,
-    isExactChange,
-    cashierName,
+    invoiceNumber, cartItems, customerInfo,
+    subtotalCents, taxCents, totalCents,
+    cashCents, changeCents, cashierName,
   } = params;
 
   const now     = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
 
-  const rows = cartItems.map((i) =>
-    `<tr>
-      <td style="padding:3px 4px;border-bottom:1px solid #eee;">${i.name}</td>
-      <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:center;">${i.quantity}</td>
-      <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">&#8369;${fmtCents(toCentavos(i.unitPrice))}</td>
-      <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">&#8369;${fmtCents(toCentavos(i.subtotal))}</td>
-    </tr>`
-  ).join("");
+  const lines: string[] = [];
+  const ln = (s = "") => lines.push(s);
 
-  const w = window.open("", "_blank", "width=420,height=720");
-  if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Receipt ${invoiceNumber}</title>
+  ln(rule("="));
+  ln(center("ISRA HARDWARE"));
+  ln(center("Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur"));
+  ln(center("Philippines"));
+  ln(center("TIN: 765-490-574-00000 (VAT-Registered)"));
+  ln(center("Fb: Rexjie Saludo   |   Tel No: 09093250717"));
+  ln(rule("="));
+  ln(center("SALES INVOICE"));
+  ln();
+  ln(lr(`SI No: ${invoiceNumber}`, `Date: ${dateStr}`));
+  ln(rule("-"));
+  ln(`SOLD TO: ${customerInfo.name}`);
+  ln(`TIN: ${customerInfo.tin || ""}`);
+  ln(`ADDRESS: ${customerInfo.address || ""}`);
+  ln(`BUSINESS STYLE: ${customerInfo.businessStyle || ""}`);
+  ln(rule("-"));
+
+  // Column header
+  // QTY(5) UNIT(8) DESCRIPTION(28) UNIT PRICE(14) AMOUNT(12) = 67 + 5 spaces = 72
+  ln("QTY   UNIT     DESCRIPTION                   UNIT PRICE         AMOUNT");
+  ln(rule("-"));
+
+  for (const item of cartItems) {
+    const qty  = String(item.quantity).padEnd(5);
+    const unit = (item.unit || "").padEnd(8);
+    const desc = item.name.length > 28 ? item.name.slice(0, 27) + "…" : item.name.padEnd(28);
+    const up   = `P ${fmtCents(toCentavos(item.unitPrice))}`.padStart(14);
+    const amt  = `P ${fmtCents(toCentavos(item.subtotal))}`.padStart(12);
+    ln(`${qty} ${unit} ${desc} ${up} ${amt}`);
+  }
+
+  ln(rule("-"));
+  ln(lr(`ITEMS TOTAL: ${totalItems}`, `TOTAL:    P ${fmtCents(totalCents)}`));
+  ln(rule("-"));
+  ln(center("BREAKDOWN:"));
+
+  const bw = 42; // breakdown block width
+  const bline = (label: string, cents: number) => {
+    const val = `P ${fmtCents(cents)}`;
+    const row = `${label}${val.padStart(bw - label.length)}`;
+    ln(" ".repeat(Math.floor((W - bw) / 2)) + row);
+  };
+  bline("VATable Sales:", subtotalCents);
+  bline("12% VAT:",       taxCents);
+  bline("Zero-Rated:",    0);
+  bline("VAT Exempt:",    0);
+  ln(" ".repeat(Math.floor((W - bw) / 2)) + "-".repeat(bw));
+  bline("TOTAL DUE:",     totalCents);
+  ln();
+  ln(`Cash Tendered:  P ${fmtCents(cashCents)}`);
+  ln(`Change:         P ${fmtCents(changeCents ?? 0)}`);
+  ln(rule("-"));
+  ln(`PROCESSED BY: ${cashierName}`);
+  ln(rule("-"));
+  ln(center("Thank you for partnering with Isra Hardware!"));
+  ln(center("Your trusted provider for quality building materials."));
+  ln(center('"This serves as your Sales Invoice"'));
+  ln(rule("="));
+
+  return lines.join("\n");
+}
+
+function printSaleReceipt(params: SaleReceiptParams): void {
+  const text = buildReceiptText(params);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Receipt</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',monospace;font-size:12px;color:#111;padding:16px;width:340px}
-  .c{text-align:center}.b{font-weight:bold}
-  hr{border:none;border-top:1px dashed #999;margin:8px 0}
-  .r{display:flex;justify-content:space-between;margin:2px 0}
-  .lbl{color:#555}
-  table{width:100%;border-collapse:collapse;margin:6px 0}
-  th{padding:3px 4px;border-bottom:2px solid #333;font-size:11px;text-align:left}
-  .tr td{font-weight:bold;padding:5px 4px 2px}
-  .gt{font-size:13px}
-  .ft{margin-top:10px;font-size:11px;color:#666;text-align:center}
+  body{font-family:'Courier New',Courier,monospace;font-size:11px;white-space:pre;color:#000;padding:8px;}
   @media print{body{padding:0}}
-</style></head><body>
-<div class="c"><div class="b" style="font-size:15px">ISRA HARDWARE</div>
-<div>Point of Sale &amp; Inventory System</div>
-<div style="font-size:11px;color:#555;margin-top:3px">Official Receipt</div></div>
-<hr/>
-<div class="r"><span class="lbl">Invoice No.:</span><span class="b">${invoiceNumber}</span></div>
-<div class="r"><span class="lbl">Date:</span><span>${dateStr}</span></div>
-<div class="r"><span class="lbl">Time:</span><span>${timeStr}</span></div>
-<div class="r"><span class="lbl">Cashier:</span><span>${cashierName}</span></div>
-<hr/>
-<div class="r"><span class="lbl">Sold To:</span><span class="b">${customerInfo.name || "Walk-in Customer"}</span></div>
-${customerInfo.address       ? `<div class="r"><span class="lbl">Address:</span><span>${customerInfo.address}</span></div>` : ""}
-${customerInfo.tin           ? `<div class="r"><span class="lbl">TIN:</span><span>${customerInfo.tin}</span></div>` : ""}
-${customerInfo.businessStyle ? `<div class="r"><span class="lbl">Business Style:</span><span>${customerInfo.businessStyle}</span></div>` : ""}
-<hr/>
-<table>
-  <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amt</th></tr></thead>
-  <tbody>${rows}</tbody>
-  <tfoot>
-    <tr class="tr"><td colspan="3">Subtotal</td><td style="text-align:right">&#8369;${fmtCents(subtotalCents)}</td></tr>
-    <tr class="tr"><td colspan="3">VAT (12%)</td><td style="text-align:right">&#8369;${fmtCents(taxCents)}</td></tr>
-    <tr class="tr gt"><td colspan="3">TOTAL</td><td style="text-align:right">&#8369;${fmtCents(totalCents)}</td></tr>
-    ${cashCents > 0 ? `<tr class="tr"><td colspan="3">Cash Tendered</td><td style="text-align:right">&#8369;${fmtCents(cashCents)}</td></tr>` : ""}
-    ${changeCents !== null ? `<tr class="tr" style="color:${isExactChange ? "#555" : "#060"}"><td colspan="3">Change</td><td style="text-align:right">&#8369;${fmtCents(changeCents)}</td></tr>` : ""}
-  </tfoot>
-</table>
-<hr/>
-<div class="ft"><p>Thank you for your purchase!</p><p style="margin-top:3px">This serves as your official receipt.</p></div>
-<script>window.onload=function(){window.print();window.close();}<\/script>
-</body></html>`);
-  w.document.close();
+</style></head><body>${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</body></html>`;
+
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (!doc) { document.body.removeChild(iframe); return; }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  iframe.contentWindow?.focus();
+  iframe.contentWindow?.print();
+  setTimeout(() => document.body.removeChild(iframe), 1000);
 }
 
 // ─── Clock ────────────────────────────────────────────────────────────────────
@@ -243,10 +287,10 @@ export default function Cashier() {
 
   // ─── Calculations (integer centavo arithmetic — no float drift) ───────────
 
-  // Sum item subtotals in centavos
-  const subtotalCents  = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
-  const taxCents       = Math.round(subtotalCents * 0.12);
-  const totalCents     = subtotalCents + taxCents;
+  // Sum item subtotals in centavos (prices are VAT-inclusive)
+  const totalCents     = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
+  const taxCents       = Math.round(totalCents * 12 / 112);
+  const subtotalCents  = totalCents - taxCents;
 
   const cashCents      = parseCashInput(cashTendered);
   const changeCents    = cashCents >= totalCents ? cashCents - totalCents : null;
@@ -301,6 +345,7 @@ export default function Cashier() {
       return [...prev, {
         id:        product.id,
         name:      product.product_name,
+        unit:      product.unit_abbreviation,
         quantity:  1,
         unitPrice: product.selling_price,
         subtotal:  product.selling_price,
@@ -559,7 +604,7 @@ export default function Cashier() {
   // ─── Process payment (save sale + print receipt) ──────────────────────────
 
   const handleProcessPayment = async () => {
-    if (cartItems.length === 0 || cashCents < totalCents) return;
+    if (cartItems.length === 0 || cashCents < totalCents || !customerInfo.name.trim()) return;
     setIsProcessing(true);
     try {
       const payload: CreateSalePayload = {
@@ -590,7 +635,6 @@ export default function Cashier() {
         totalCents,
         cashCents,
         changeCents,
-        isExactChange,
         cashierName: user?.full_name ?? "—",
       });
 
@@ -970,7 +1014,7 @@ export default function Cashier() {
           <div className="flex-1 flex flex-col justify-end gap-2">
             <Button
               className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
-              disabled={cartItems.length === 0 || cashCents < totalCents || isProcessing}
+              disabled={cartItems.length === 0 || cashCents < totalCents || !customerInfo.name.trim() || isProcessing}
               onClick={handleProcessPayment}
             >
               {isProcessing ? (
@@ -980,6 +1024,8 @@ export default function Cashier() {
               )}
               {isProcessing
                 ? "Processing..."
+                : !customerInfo.name.trim()
+                ? "Enter Customer Name"
                 : cashCents > 0 && cashCents < totalCents
                 ? "Insufficient Cash"
                 : "Process Payment"}
@@ -1006,7 +1052,7 @@ export default function Cashier() {
               </div>
               {cartItems.length > 0 && !customerInfo.name.trim() && (
                 <p className="text-xs text-center text-amber-600">
-                  Fill in <span className="font-semibold">Sold To</span> before holding
+                  Fill in <span className="font-semibold">Sold To</span> to proceed
                 </p>
               )}
             </div>
@@ -1052,9 +1098,9 @@ export default function Cashier() {
             </div>
           ) : (
             heldOrders.map((hold) => {
-              const holdSubtotalCents = hold.cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
-              const holdTax   = Math.round(holdSubtotalCents * 0.12);
-              const holdTotal = holdSubtotalCents + holdTax;
+              const holdTotalCents = hold.cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
+              const holdTax   = Math.round(holdTotalCents * 12 / 112);
+              const holdTotal = holdTotalCents;
               const heldTime  = hold.heldAt.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 
               return (

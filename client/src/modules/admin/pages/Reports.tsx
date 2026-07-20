@@ -1,371 +1,460 @@
-import { useState, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
+﻿import { useState, useCallback } from "react";
+import { FileText, Download, RefreshCw, AlertCircle, Calendar, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Download, FileText, Sheet, RefreshCw } from "lucide-react";
-import * as XLSX from "xlsx";
-import html2canvas from "html2canvas";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { jsPDF } from "jspdf";
-import { getDashboardData, type DashboardData } from "@/shared/api/dashboardApi";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+import axios from "axios";
+import { loadToken } from "@/shared/utils/auth";
 
-const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+interface InventoryRow {
+  barcode: string; product_name: string; category: string;
+  supplier: string; unit: string; quantity: number;
+  reorder_level: number; damaged_stock: number;
+  cost_price: number; selling_price: number; stock_status: string;
+}
+
+interface ReportData {
+  period:      { date_from: string; date_to: string };
+  summary: {
+    total_transactions: number; total_revenue: number;
+    total_vat: number; total_subtotal: number;
+    avg_order_value: number; largest_sale: number; smallest_sale: number;
+  };
+  daily_sales:  { sale_date: string; transactions: number; subtotal: number; vat: number; total: number }[];
+  top_products: { barcode: string; product_name: string; category: string; units_sold: number; revenue: number; unit_price: number }[];
+  by_cashier:   { cashier: string; transactions: number; revenue: number }[];
+  inventory:    InventoryRow[];
+  low_stock:    InventoryRow[];
+  generated_at: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number | string) {
+  return "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDate(d: string) {
+  return new Date(d + (d.length === 10 ? "T00:00:00" : "")).toLocaleDateString("en-PH", {
+    year: "numeric", month: "long", day: "numeric",
+  });
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
+}
+
+function authHeaders() {
+  const token = loadToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function urgencyColor(s: string) {
+  return s === "Out of Stock" ? "text-red-600" : s === "Critical" ? "text-orange-600" : s === "Low Stock" ? "text-amber-600" : "text-emerald-600";
+}
+
+function urgencyBadge(s: string) {
+  const c =
+    s === "Out of Stock" ? "bg-red-100 text-red-700 border-red-200" :
+    s === "Critical"     ? "bg-orange-100 text-orange-700 border-orange-200" :
+    s === "Low Stock"    ? "bg-amber-100 text-amber-700 border-amber-200" :
+                           "bg-emerald-100 text-emerald-700 border-emerald-200";
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${c}`}>{s}</span>;
+}
+
+// ─── PDF Generator ────────────────────────────────────────────────────────────
+
+// ─── Excel Generator ──────────────────────────────────────────────────────────
+
+function generateExcel(data: ReportData) {
+  const wb = XLSX.utils.book_new();
+  const add = (name: string, headers: string[], rows: (string | number)[][]) => {
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws["!cols"] = headers.map(() => ({ wch: 22 }));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+  add("Summary", ["Metric","Value"], [
+    ["Report Period", `${data.period.date_from} to ${data.period.date_to}`],
+    ["Generated", new Date(data.generated_at).toLocaleString("en-PH")], [""],
+    ["Total Transactions", data.summary.total_transactions],
+    ["Total Revenue", Number(data.summary.total_revenue)],
+    ["Total VAT (12%)", Number(data.summary.total_vat)],
+    ["Net Subtotal", Number(data.summary.total_subtotal)],
+    ["Avg Order Value", Number(data.summary.avg_order_value)],
+    ["Largest Sale", Number(data.summary.largest_sale)],
+    ["Smallest Sale", Number(data.summary.smallest_sale)],
+  ]);
+  add("Daily Sales", ["Date","Transactions","Subtotal (₱)","VAT (₱)","Total (₱)"], [
+    ...data.daily_sales.map((r) => [fmtDate(r.sale_date), r.transactions, Number(r.subtotal), Number(r.vat), Number(r.total)]),
+    ["TOTAL", data.summary.total_transactions, Number(data.summary.total_subtotal), Number(data.summary.total_vat), Number(data.summary.total_revenue)],
+  ]);
+  add("Top Products", ["#","Barcode","Product","Category","Unit Price (₱)","Units Sold","Revenue (₱)"],
+    data.top_products.map((r, i) => [i+1, r.barcode, r.product_name, r.category, Number(r.unit_price), r.units_sold, Number(r.revenue)]));
+  add("By Cashier", ["Cashier","Transactions","Revenue (₱)"],
+    data.by_cashier.map((r) => [r.cashier, r.transactions, Number(r.revenue)]));
+  add("Inventory", ["Barcode","Product","Category","Supplier","Unit","Stock","Reorder","Damaged","Cost (₱)","Selling (₱)","Status"],
+    data.inventory.map((r) => [r.barcode, r.product_name, r.category, r.supplier, r.unit, r.quantity, r.reorder_level, r.damaged_stock, Number(r.cost_price), Number(r.selling_price), r.stock_status]));
+  add("Low Stock", ["Barcode","Product","Category","Stock","Reorder Level","Units Needed","Status"],
+    data.low_stock.length > 0
+      ? data.low_stock.map((r) => [r.barcode, r.product_name, r.category, r.quantity, r.reorder_level, Math.max(0, r.reorder_level - r.quantity), r.stock_status])
+      : [["All products are sufficiently stocked"]]);
+  XLSX.writeFile(wb, `Isra_Hardware_Report_${data.period.date_from}_to_${data.period.date_to}.xlsx`);
+}
+
+// ─── PDF Generator ────────────────────────────────────────────────────────────
+
+function generatePDF(data: ReportData) {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const PW = doc.internal.pageSize.getWidth(), M = 14;
+  let y = 14;
+  const check = (n = 30) => { if (y + n > doc.internal.pageSize.getHeight() - 14) { doc.addPage(); y = 14; } };
+  const sec = (t: string) => {
+    check(16); doc.setFillColor(241, 245, 249); doc.rect(M, y, PW - M * 2, 7, "F");
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 64, 175);
+    doc.text(t.toUpperCase(), M + 2, y + 5); doc.setTextColor(0, 0, 0); y += 10;
+  };
+  const tbl = (head: string[][], body: string[][], foot?: string[][], col?: Record<string, unknown>) => {
+    autoTable(doc, { startY: y, margin: { left: M, right: M }, head, body, foot,
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 8 }, footStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: [248, 250, 252] }, ...(col ?? {}) });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  };
+  doc.setFillColor(37, 99, 235); doc.rect(0, 0, PW, 20, "F");
+  doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont("helvetica", "bold");
+  doc.text("ISRA HARDWARE — BUSINESS PERFORMANCE REPORT", M, 13);
+  doc.setTextColor(0, 0, 0); y = 26; doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(90, 90, 90);
+  doc.text(`Period: ${fmtDate(data.period.date_from)} to ${fmtDate(data.period.date_to)}`, M, y);
+  doc.text(`Generated: ${new Date(data.generated_at).toLocaleString("en-PH")}`, M, y + 4);
+  doc.setTextColor(0, 0, 0); y += 12;
+  sec("1. Revenue Summary");
+  tbl([["Metric","Value"]], [
+    ["Total Transactions", String(data.summary.total_transactions)], ["Total Revenue", fmt(data.summary.total_revenue)],
+    ["Total VAT (12%)", fmt(data.summary.total_vat)], ["Net Subtotal", fmt(data.summary.total_subtotal)],
+    ["Avg Order Value", fmt(data.summary.avg_order_value)], ["Largest Sale", fmt(data.summary.largest_sale)],
+    ["Smallest Sale", fmt(data.summary.smallest_sale)],
+  ], undefined, { columnStyles: { 0: { fontStyle: "bold", cellWidth: 70 }, 1: { halign: "right" } } });
+  if (data.daily_sales.length > 0) {
+    check(40); sec("2. Daily Sales Breakdown");
+    tbl([["Date","Transactions","Subtotal","VAT","Total"]],
+      data.daily_sales.map((r) => [fmtDate(r.sale_date), String(r.transactions), fmt(r.subtotal), fmt(r.vat), fmt(r.total)]),
+      [["TOTAL", String(data.summary.total_transactions), fmt(data.summary.total_subtotal), fmt(data.summary.total_vat), fmt(data.summary.total_revenue)]],
+      { columnStyles: { 1: { halign: "center" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } } });
+  }
+  if (data.top_products.length > 0) {
+    check(40); sec("3. Top Selling Products");
+    autoTable(doc, { startY: y, margin: { left: M, right: M },
+      head: [["#","Barcode","Product","Category","Unit Price","Units Sold","Revenue"]],
+      body: data.top_products.map((r, i) => [String(i+1), r.barcode, r.product_name, r.category, fmt(r.unit_price), String(r.units_sold), fmt(r.revenue)]),
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold", fontSize: 7 },
+      bodyStyles: { fontSize: 7 }, alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: { 0: { halign: "center", cellWidth: 8 }, 4: { halign: "right" }, 5: { halign: "center" }, 6: { halign: "right" } },
+    }); y = (doc as any).lastAutoTable.finalY + 8;
+  }
+  if (data.by_cashier.length > 0) {
+    check(40); sec("4. Sales by Cashier");
+    tbl([["Cashier","Transactions","Revenue"]], data.by_cashier.map((r) => [r.cashier, String(r.transactions), fmt(r.revenue)]),
+      undefined, { columnStyles: { 1: { halign: "center" }, 2: { halign: "right" } } });
+  }
+  doc.addPage(); y = 14; sec("5. Reorder / Low Stock Report");
+  autoTable(doc, { startY: y, margin: { left: M, right: M },
+    head: [["Barcode","Product","Category","Stock","Reorder","Need","Status"]],
+    body: data.low_stock.length > 0
+      ? data.low_stock.map((r) => [r.barcode, r.product_name, r.category, String(r.quantity), String(r.reorder_level), String(Math.max(0, r.reorder_level - r.quantity)), r.stock_status])
+      : [["—","All products are sufficiently stocked","","","","","In Stock"]],
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold", fontSize: 7 },
+    bodyStyles: { fontSize: 7 }, alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: { 3: { halign: "center" }, 4: { halign: "center" }, 5: { halign: "center" }, 6: { halign: "center" } },
+    didParseCell: (h) => {
+      if (h.column.index === 6 && h.section === "body") {
+        const v = h.cell.raw as string;
+        if (v === "Out of Stock") h.cell.styles.textColor = [220, 38, 38];
+        else if (v === "Critical") h.cell.styles.textColor = [234, 88, 12];
+        else if (v === "Low Stock") h.cell.styles.textColor = [217, 119, 6];
+        else h.cell.styles.textColor = [22, 163, 74];
+      }
+    },
+  });
+  const pages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150, 150, 150);
+    doc.text("Isra Hardware POS — Confidential", M, doc.internal.pageSize.getHeight() - 6);
+    doc.text(`Page ${i} of ${pages}`, PW - M, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+  }
+  doc.save(`Isra_Hardware_Report_${data.period.date_from}_to_${data.period.date_to}.pdf`);
+}
+
+// ─── Print Helper ─────────────────────────────────────────────────────────────
+
+function printReport(data: ReportData) {
+  const css = `body{font-family:Arial,sans-serif;font-size:11px;color:#111;margin:20px}h1{font-size:15px;margin:0 0 2px}h2{font-size:11px;background:#1e3a8a;color:#fff;padding:4px 8px;margin:16px 0 6px}p.m{font-size:10px;color:#555;margin:0 0 14px}table{width:100%;border-collapse:collapse;margin-bottom:4px}th{background:#2563eb;color:#fff;font-size:9px;font-weight:bold;padding:4px 6px;text-align:left}td{padding:3px 6px;font-size:9px;border-bottom:1px solid #e5e7eb}tr:nth-child(even) td{background:#f8fafc}tfoot td{background:#1e3a8a;color:#fff;font-weight:bold}.r{text-align:right}.c{text-align:center}.red{color:#dc2626}.ora{color:#ea580c}.amb{color:#d97706}.grn{color:#16a34a}@media print{@page{margin:15mm}}`;
+  const tr = (cells: string[], cls: string[] = []) => `<tr>${cells.map((c, i) => `<td class="${cls[i]??""}">${c}</td>`).join("")}</tr>`;
+  const th = (cols: string[]) => `<thead><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead>`;
+  const sc = (s: string) => s==="Out of Stock"?"red":s==="Critical"?"ora":s==="Low Stock"?"amb":"grn";
+  const w = window.open("","_blank","width=900,height=700");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Report</title><style>${css}</style></head><body>
+    <h1>ISRA HARDWARE — BUSINESS PERFORMANCE REPORT</h1>
+    <p class="m">Period: ${fmtDate(data.period.date_from)} – ${fmtDate(data.period.date_to)} | Generated: ${new Date(data.generated_at).toLocaleString("en-PH")}</p>
+    <h2>1. REVENUE SUMMARY</h2><table>${th(["Metric","Value"])}<tbody>
+    ${[["Total Transactions",String(data.summary.total_transactions)],["Total Revenue",fmt(data.summary.total_revenue)],["Total VAT (12%)",fmt(data.summary.total_vat)],["Net Subtotal",fmt(data.summary.total_subtotal)],["Avg Order Value",fmt(data.summary.avg_order_value)],["Largest Sale",fmt(data.summary.largest_sale)],["Smallest Sale",fmt(data.summary.smallest_sale)]].map((r)=>tr(r,["","r"])).join("")}</tbody></table>
+    <h2>2. DAILY SALES BREAKDOWN</h2><table>${th(["Date","Transactions","Subtotal","VAT","Total"])}<tbody>
+    ${data.daily_sales.map((r)=>tr([fmtDate(r.sale_date),String(r.transactions),fmt(r.subtotal),fmt(r.vat),fmt(r.total)],["","c","r","r","r"])).join("")}
+    </tbody><tfoot>${tr(["TOTAL",String(data.summary.total_transactions),fmt(data.summary.total_subtotal),fmt(data.summary.total_vat),fmt(data.summary.total_revenue)],["","c","r","r","r"])}</tfoot></table>
+    <h2>3. TOP SELLING PRODUCTS</h2><table>${th(["#","Barcode","Product","Category","Unit Price","Units Sold","Revenue"])}<tbody>
+    ${data.top_products.map((r,i)=>tr([String(i+1),r.barcode,r.product_name,r.category,fmt(r.unit_price),String(r.units_sold),fmt(r.revenue)],["c","","","","r","c","r"])).join("")}</tbody></table>
+    <h2>4. SALES BY CASHIER</h2><table>${th(["Cashier","Transactions","Revenue"])}<tbody>
+    ${data.by_cashier.map((r)=>tr([r.cashier,String(r.transactions),fmt(r.revenue)],["","c","r"])).join("")}</tbody></table>
+    <h2>5. REORDER / LOW STOCK REPORT</h2><table>${th(["Barcode","Product","Category","Stock","Reorder","Need to Buy","Status"])}<tbody>
+    ${data.low_stock.length===0?`<tr><td colspan="7" class="grn" style="text-align:center;font-weight:bold">All products are sufficiently stocked</td></tr>`:data.low_stock.map((r)=>tr([r.barcode,r.product_name,r.category,String(r.quantity),String(r.reorder_level),String(Math.max(0,r.reorder_level-r.quantity)),r.stock_status],["","","","c","c","c",sc(r.stock_status)])).join("")}
+    </tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
+// ─── Main Reports Page ────────────────────────────────────────────────────────
 
 export default function Reports() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const reportsRef = useRef<HTMLDivElement>(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(today.slice(0, 7) + "-01");
+  const [dateTo,   setDateTo]   = useState(today);
+  const [data,     setData]     = useState<ReportData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"pdf"|"excel"|"print"|null>(null);
 
-  const fetchData = async () => {
+  const load = useCallback(async () => {
+    setIsLoading(true); setLoadError(null);
     try {
-      const dashboardData = await getDashboardData();
-      setData(dashboardData);
+      const res = await axios.get<ReportData>("/api/reports", { headers: authHeaders(), params: { date_from: dateFrom, date_to: dateTo } });
+      setData(res.data);
     } catch (err) {
-      console.error("Error fetching reports data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setLoadError(axios.isAxiosError(err) ? (err.response?.data?.message ?? "Failed to load report.") : "Failed.");
+    } finally { setIsLoading(false); }
+  }, [dateFrom, dateTo]);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleExcelExport = () => {
+  const handleExport = (type: "pdf"|"excel"|"print") => {
     if (!data) return;
-
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-
-    // 1. Summary sheet
-    const summaryData = [
-      ["Metric", "Value"],
-      ["Total Revenue", `₱${data.kpis.monthly_revenue.toLocaleString()}`],
-      ["Total Orders", data.kpis.today_transactions.toLocaleString()],
-      ["Avg Order Value", `₱${(data.kpis.today_transactions > 0 ? data.kpis.today_revenue / data.kpis.today_transactions : 0).toFixed(2)}`],
-      ["Total Profit", `₱${(data.kpis.monthly_revenue * 0.32).toLocaleString()}`]
-    ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
-
-    // 2. Daily Sales sheet
-    const dailySalesData = data.weekly_sales.map((item) => {
-      const date = new Date(item.sale_date);
-      return {
-        Day: dayNames[date.getDay()],
-        Sales: item.revenue,
-        Orders: item.transactions
-      };
-    });
-    const wsDaily = XLSX.utils.json_to_sheet(dailySalesData);
-    XLSX.utils.book_append_sheet(wb, wsDaily, "Daily Sales");
-
-    // 3. Monthly Sales sheet
-    const monthlySalesData = data.monthly_sales.map((item) => {
-      const [year, month] = item.month.split("-").map(Number);
-      return {
-        Month: `${monthNames[month - 1]} ${year}`,
-        Revenue: item.revenue
-      };
-    });
-    const wsMonthly = XLSX.utils.json_to_sheet(monthlySalesData);
-    XLSX.utils.book_append_sheet(wb, wsMonthly, "Monthly Sales");
-
-    // 4. Top Products sheet
-    const topProductsData = data.top_products.map((item) => ({
-      Product: item.name,
-      UnitsSold: item.units_sold,
-      Revenue: item.revenue
-    }));
-    const wsTopProducts = XLSX.utils.json_to_sheet(topProductsData);
-    XLSX.utils.book_append_sheet(wb, wsTopProducts, "Top Products");
-
-    // 5. Low Stock sheet
-    const lowStockData = data.low_stock_items.map((item) => ({
-      Product: item.product_name,
-      CurrentStock: item.quantity,
-      ReorderLevel: item.reorder_level,
-      Shortage: Math.max(0, item.reorder_level - item.quantity)
-    }));
-    const wsLowStock = XLSX.utils.json_to_sheet(lowStockData);
-    XLSX.utils.book_append_sheet(wb, wsLowStock, "Low Stock");
-
-    // Download
-    const fileName = `Reports_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handlePDFExport = async () => {
-    if (!reportsRef.current) return;
-
+    setExporting(type);
     try {
-      const canvas = await html2canvas(reportsRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff"
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4"
-      });
-
-      const imgWidth = 280;
-      const pageHeight = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const fileName = `Reports_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-    } catch (err) {
-      console.error("Error generating PDF:", err);
-    }
+      if (type === "pdf")   generatePDF(data);
+      if (type === "excel") generateExcel(data);
+      if (type === "print") printReport(data);
+    } finally { setExporting(null); }
   };
-
-  if (loading || !data) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  // Transform data for display
-  const dailySalesData = data.weekly_sales.map((item) => {
-    const date = new Date(item.sale_date);
-    return {
-      day: dayNames[date.getDay()],
-      sales: item.revenue,
-      orders: item.transactions,
-    };
-  });
-
-  const monthlySalesData = data.monthly_sales.map((item) => {
-    const [year, month] = item.month.split("-").map(Number);
-    return {
-      month: monthNames[month - 1],
-      revenue: item.revenue,
-    };
-  });
-
-  const bestSellingProducts = data.top_products.map((item) => ({
-    name: item.name,
-    value: item.revenue,
-  }));
-
-  const lowStockReport = data.low_stock_items.map((item) => ({
-    product: item.product_name,
-    current: item.quantity,
-    reorder: item.reorder_level,
-    shortage: Math.max(0, item.reorder_level - item.quantity),
-  }));
-
-  const totalRevenue = data.kpis.monthly_revenue;
-  const totalProfit = totalRevenue * 0.32;
-  const avgOrderValue = data.kpis.today_transactions > 0 ? data.kpis.today_revenue / data.kpis.today_transactions : 0;
 
   return (
-    <div className="space-y-6" ref={reportsRef}>
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          #print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 20px;
-            background: white;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
-      <div id="print-area">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-display font-bold text-gray-900">Reports</h1>
-            <p className="text-gray-600 mt-1">Business analytics and insights</p>
-            <p className="text-sm text-gray-500 mt-1">Generated on: {new Date().toLocaleString()}</p>
-          </div>
-          <div className="flex gap-2 no-print">
-            <Button variant="outline" className="gap-2" onClick={fetchData}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={handlePDFExport}>
-              <FileText className="h-4 w-4" />
-              PDF
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={handleExcelExport}>
-              <Sheet className="h-4 w-4" />
-              Excel
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={handlePrint}>
-              <Download className="h-4 w-4" />
-              Print
-            </Button>
-          </div>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Generate and export business performance reports</p>
         </div>
-
-        {/* Revenue Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card className="p-4">
-            <p className="text-gray-600 text-sm font-medium">Total Revenue</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">₱{totalRevenue.toLocaleString()}</p>
-            <p className="text-xs text-green-600 font-medium mt-2">+12.5% from last month</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-gray-600 text-sm font-medium">Total Orders</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">{data.kpis.today_transactions.toLocaleString()}</p>
-            <p className="text-xs text-green-600 font-medium mt-2">+8.2% from last month</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-gray-600 text-sm font-medium">Avg Order Value</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">₱{avgOrderValue.toFixed(2)}</p>
-            <p className="text-xs text-green-600 font-medium mt-2">+3.1% from last month</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-gray-600 text-sm font-medium">Total Profit</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">₱{totalProfit.toLocaleString()}</p>
-            <p className="text-xs text-green-600 font-medium mt-2">+15.8% from last month</p>
-          </Card>
-        </div>
-
-        {/* Daily Sales Report */}
-        <Card className="p-6 mb-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-display font-bold text-gray-900">Daily Sales</h2>
-            <p className="text-gray-600 text-sm">Weekly sales performance</p>
+        {data && (
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2 h-9 text-sm border-gray-300" onClick={() => handleExport("print")} disabled={!!exporting}>
+              <Download className="h-4 w-4" />{exporting==="print"?"Preparing…":"Print"}
+            </Button>
+            <Button variant="outline" className="gap-2 h-9 text-sm text-emerald-700 border-gray-300 hover:bg-emerald-50" onClick={() => handleExport("excel")} disabled={!!exporting}>
+              <Table2 className="h-4 w-4" />{exporting==="excel"?"Generating…":"Excel"}
+            </Button>
+            <Button className="gap-2 h-9 text-sm bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleExport("pdf")} disabled={!!exporting}>
+              {exporting==="pdf" && <Spinner className="text-white" />}
+              <FileText className="h-4 w-4" />{exporting==="pdf"?"Generating…":"PDF"}
+            </Button>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={dailySalesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="day" stroke="#6B7280" />
-              <YAxis stroke="#6B7280" />
-              <Tooltip contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "8px" }} />
-              <Legend />
-              <Bar dataKey="sales" fill="#2563EB" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="orders" fill="#10B981" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Monthly Sales & Best Sellers */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Monthly Sales */}
-          <Card className="p-6">
-            <div className="mb-6">
-              <h2 className="text-lg font-display font-bold text-gray-900">Monthly Sales</h2>
-              <p className="text-gray-600 text-sm">6-month revenue trend</p>
-            </div>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={monthlySalesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="month" stroke="#6B7280" />
-                <YAxis stroke="#6B7280" />
-                <Tooltip contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "8px" }} />
-                <Line type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2} dot={{ fill: "#2563EB" }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Best Selling Products */}
-          <Card className="p-6">
-            <div className="mb-6">
-              <h2 className="text-lg font-display font-bold text-gray-900">Best Selling Products</h2>
-              <p className="text-gray-600 text-sm">Top 5 products by revenue</p>
-            </div>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={bestSellingProducts}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ₱${value}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {bestSellingProducts.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        {/* Inventory Report */}
-        <Card className="p-6">
-          <div className="mb-4">
-            <h2 className="text-lg font-display font-bold text-gray-900">Low Stock Report</h2>
-            <p className="text-gray-600 text-sm">Items below reorder level</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Product</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Current Stock</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Reorder Level</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Shortage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lowStockReport.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-gray-500">
-                      No low stock items found
-                    </td>
-                  </tr>
-                ) : (
-                  lowStockReport.map((item, idx) => (
-                    <tr key={idx} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="py-3 px-4 text-gray-900 font-medium">{item.product}</td>
-                      <td className="py-3 px-4 text-gray-700">{item.current}</td>
-                      <td className="py-3 px-4 text-gray-700">{item.reorder}</td>
-                      <td className="py-3 px-4">
-                        <span className="text-red-600 font-semibold">{item.shortage}</span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        )}
       </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Date From</Label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm pl-8 w-44" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Date To</Label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm pl-8 w-44" />
+            </div>
+          </div>
+          <Button onClick={load} disabled={isLoading} className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm">
+            {isLoading ? <Spinner className="text-white" /> : <RefreshCw className="h-4 w-4" />}
+            {isLoading ? "Generating…" : "Generate Report"}
+          </Button>
+        </div>
+        {data && <p className="text-xs text-gray-400 mt-3">Generated: {new Date(data.generated_at).toLocaleString("en-PH")} · Period: {fmtDate(data.period.date_from)} – {fmtDate(data.period.date_to)}</p>}
+      </div>
+
+      {loadError && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700 flex-1">{loadError}</p>
+          <button onClick={load} className="text-red-600 font-semibold text-sm hover:underline">Retry</button>
+        </div>
+      )}
+
+      {!data && !isLoading && !loadError && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
+              <FileText className="h-7 w-7 text-blue-400" />
+            </div>
+            <p className="font-semibold text-gray-700">No report generated yet</p>
+            <p className="text-xs text-gray-400">Select a date range and click Generate Report</p>
+          </div>
+        </div>
+      )}
+
+      {data && (
+        <>
+          <section>
+            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">1. Revenue Summary</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[{l:"Total Transactions",v:data.summary.total_transactions.toLocaleString(),c:"text-blue-600"},
+                {l:"Total Revenue",v:fmt(data.summary.total_revenue),c:"text-emerald-600"},
+                {l:"Total VAT (12%)",v:fmt(data.summary.total_vat),c:"text-purple-600"},
+                {l:"Avg Order Value",v:fmt(data.summary.avg_order_value),c:"text-amber-600"},
+              ].map((c) => (
+                <div key={c.l} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 font-medium">{c.l}</p>
+                  <p className={`text-xl font-bold ${c.c} tabular-nums mt-1`}>{c.v}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {data.daily_sales.length > 0 && (
+            <section>
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">2. Daily Sales Breakdown</h2>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 border-b-2 border-gray-200">
+                    {["Date","Transactions","Subtotal","VAT","Total"].map((h,i) => (
+                      <th key={h} className={`py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide ${i===0?"text-left":"text-right"}`}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.daily_sales.map((r) => (
+                      <tr key={r.sale_date} className="hover:bg-gray-50">
+                        <td className="py-3 px-5 font-medium text-gray-800">{fmtDate(r.sale_date)}</td>
+                        <td className="py-3 px-5 text-right text-gray-700 tabular-nums">{r.transactions}</td>
+                        <td className="py-3 px-5 text-right text-gray-700 tabular-nums">{fmt(r.subtotal)}</td>
+                        <td className="py-3 px-5 text-right text-gray-700 tabular-nums">{fmt(r.vat)}</td>
+                        <td className="py-3 px-5 text-right font-bold text-gray-900 tabular-nums">{fmt(r.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className="bg-blue-600 text-white">
+                    <td className="py-3 px-5 font-bold">TOTAL</td>
+                    <td className="py-3 px-5 text-right font-bold tabular-nums">{data.summary.total_transactions}</td>
+                    <td className="py-3 px-5 text-right font-bold tabular-nums">{fmt(data.summary.total_subtotal)}</td>
+                    <td className="py-3 px-5 text-right font-bold tabular-nums">{fmt(data.summary.total_vat)}</td>
+                    <td className="py-3 px-5 text-right font-bold tabular-nums">{fmt(data.summary.total_revenue)}</td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {data.top_products.length > 0 && (
+            <section>
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">3. Top Selling Products</h2>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 border-b-2 border-gray-200">
+                    {["#","Barcode","Product","Category","Unit Price","Units Sold","Revenue"].map((h,i) => (
+                      <th key={h} className={`py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide ${i<=3?"text-left":"text-right"}`}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.top_products.map((r,i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="py-3 px-4 text-center font-bold text-gray-400">{i+1}</td>
+                        <td className="py-3 px-4"><span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{r.barcode}</span></td>
+                        <td className="py-3 px-4 font-semibold text-gray-900">{r.product_name}</td>
+                        <td className="py-3 px-4"><span className="text-xs bg-slate-100 text-gray-600 px-2 py-0.5 rounded-full">{r.category}</span></td>
+                        <td className="py-3 px-4 text-right text-gray-700 tabular-nums">{fmt(r.unit_price)}</td>
+                        <td className="py-3 px-4 text-right font-bold text-gray-900 tabular-nums">{r.units_sold}</td>
+                        <td className="py-3 px-4 text-right font-bold text-emerald-700 tabular-nums">{fmt(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {data.by_cashier.length > 0 && (
+            <section>
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">4. Sales by Cashier</h2>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 border-b-2 border-gray-200">
+                    <th className="text-left py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Cashier</th>
+                    <th className="text-right py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Transactions</th>
+                    <th className="text-right py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Revenue</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.by_cashier.map((r) => (
+                      <tr key={r.cashier} className="hover:bg-gray-50">
+                        <td className="py-3 px-5 font-semibold text-gray-900">{r.cashier}</td>
+                        <td className="py-3 px-5 text-right text-gray-700 tabular-nums">{r.transactions}</td>
+                        <td className="py-3 px-5 text-right font-bold text-emerald-700 tabular-nums">{fmt(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          <section>
+            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">5. Reorder / Low Stock Report</h2>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {data.low_stock.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-emerald-600 font-semibold">✓ All products are sufficiently stocked</p>
+                  <p className="text-xs text-gray-400 mt-1">No products are at or below their reorder level</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 border-b-2 border-gray-200">
+                    {["Barcode","Product","Category","Stock","Reorder","Need to Buy","Status"].map((h,i) => (
+                      <th key={h} className={`py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide ${i<3?"text-left":"text-center"}`}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.low_stock.map((r,i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="py-3 px-4 font-mono text-xs text-gray-600">{r.barcode}</td>
+                        <td className="py-3 px-4 font-semibold text-gray-900">{r.product_name}</td>
+                        <td className="py-3 px-4"><span className="text-xs bg-slate-100 text-gray-600 px-2 py-0.5 rounded-full">{r.category}</span></td>
+                        <td className={`py-3 px-4 text-center font-bold tabular-nums ${urgencyColor(r.stock_status)}`}>{r.quantity}</td>
+                        <td className="py-3 px-4 text-center text-gray-500 tabular-nums">{r.reorder_level}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs tabular-nums">
+                            +{Math.max(0, r.reorder_level - r.quantity)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">{urgencyBadge(r.stock_status)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

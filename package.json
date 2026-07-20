@@ -54,6 +54,7 @@
     "jsbarcode": "^3.12.3",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.453.0",
     "mysql2": "^3.23.0",
     "nanoid": "^5.1.5",

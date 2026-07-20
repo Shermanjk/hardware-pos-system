@@ -20,6 +20,7 @@ function requireAdmin(req: Request, res: Response): boolean {
 const PRODUCT_COLS = `
   p.id,
   p.barcode,
+  p.barcode_source,
   p.supplier_barcode,
   p.product_name,
   p.description,
@@ -45,6 +46,7 @@ const PRODUCT_COLS = `
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 const productSchema = z.object({
   barcode:          z.string().min(1, "Barcode is required"),
+  barcode_source:   z.enum(["manufacturer", "store"]),
   supplier_barcode: z.string().optional().nullable(),
   product_name:     z.string().min(1, "Product name is required"),
   description:      z.string().optional().nullable(),
@@ -61,16 +63,16 @@ const productSchema = z.object({
 const updateProductSchema = productSchema.partial();
 
 // ─── Barcode auto-generation ──────────────────────────────────────────────────
+const STORE_BARCODE_START = 1;
+const STORE_BARCODE_PAD   = 4;
+
 async function generateBarcode(conn: PoolConnection): Promise<string> {
   const [rows] = await conn.execute<any[]>(
-    `SELECT barcode FROM products WHERE barcode LIKE 'HW-%' ORDER BY id DESC LIMIT 1`
+    `SELECT barcode FROM products WHERE barcode_source = 'store' ORDER BY CAST(barcode AS UNSIGNED) DESC LIMIT 1`
   );
-  if ((rows as any[]).length === 0) return "HW-001";
-  const last = (rows as any[])[0].barcode as string;
-  const match = last.match(/HW-(\d+)$/);
-  if (!match) return "HW-001";
-  const next = parseInt(match[1], 10) + 1;
-  return `HW-${String(next).padStart(3, "0")}`;
+  if ((rows as any[]).length === 0) return String(STORE_BARCODE_START).padStart(STORE_BARCODE_PAD, "0");
+  const last = parseInt((rows as any[])[0].barcode as string, 10);
+  return String(isNaN(last) ? STORE_BARCODE_START : last + 1).padStart(STORE_BARCODE_PAD, "0");
 }
 
 // ─── GET /api/products ────────────────────────────────────────────────────────
@@ -214,7 +216,7 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   const {
-    barcode, supplier_barcode, product_name, description,
+    barcode, barcode_source, supplier_barcode, product_name, description,
     category_id, supplier_id, unit_id,
     cost_price, selling_price, reorder_level,
     is_returnable, status,
@@ -228,19 +230,19 @@ router.post("/", async (req: Request, res: Response) => {
       [barcode]
     );
     if ((existing as any[]).length > 0) {
-      res.status(409).json({ message: "A product with this barcode already exists." });
+      res.status(409).json({ message: "Barcode already exists. Please scan or enter another barcode." });
       return;
     }
 
     const [result] = await conn.execute<any>(
       `INSERT INTO products
-         (barcode, supplier_barcode, product_name, description,
+         (barcode, barcode_source, supplier_barcode, product_name, description,
           category_id, supplier_id, unit_id,
           cost_price, selling_price, quantity, reorder_level,
           is_returnable, damaged_stock, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`,
       [
-        barcode, supplier_barcode ?? null, product_name, description ?? null,
+        barcode, barcode_source, supplier_barcode ?? null, product_name, description ?? null,
         category_id, supplier_id ?? null, unit_id,
         cost_price, selling_price, reorder_level,
         is_returnable ? 1 : 0, status,
@@ -312,6 +314,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     const fieldMap: Record<string, any> = {
       barcode:          data.barcode,
+      barcode_source:   data.barcode_source,
       supplier_barcode: data.supplier_barcode,
       product_name:     data.product_name,
       description:      data.description,

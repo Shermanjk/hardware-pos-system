@@ -19,15 +19,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-  PaginationEllipsis,
-} from "@/components/ui/pagination";
-import {
   Search,
   ScanLine,
   Eye,
@@ -45,14 +36,14 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { mockProducts, mockCategories, mockSuppliers } from "@/modules/clerk/mockData";
-import type { Product } from "@/modules/clerk/types";
+import { getProducts, getCategories, getSuppliers, lookupProduct, deriveStatus, type ProductRecord } from "@/shared/api/productsApi";
 
 const PAGE_SIZE = 10;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function statusBadge(status: Product["status"]) {
+function statusBadge(quantity: number, reorder_level: number) {
+  const status = deriveStatus(quantity, reorder_level);
   switch (status) {
     case "In Stock":
       return (
@@ -84,10 +75,10 @@ function statusBadge(status: Product["status"]) {
 // ─── Product Detail Modal ─────────────────────────────────────────────────────
 
 interface ProductDetailModalProps {
-  product: Product | null;
+  product: ProductRecord | null;
   open: boolean;
   onClose: () => void;
-  onPrintBarcode: (product: Product) => void;
+  onPrintBarcode: (product: ProductRecord) => void;
 }
 
 function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductDetailModalProps) {
@@ -119,12 +110,12 @@ function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductD
           {/* Detail grid */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: Boxes,  label: "Product Name",    value: product.name,     span: true  },
+              { icon: Boxes,  label: "Product Name",    value: product.product_name, span: true  },
               { icon: Tag,    label: "Category",         value: product.category, span: false },
               { icon: Truck,  label: "Supplier",         value: product.supplier, span: false },
-              { icon: Layers, label: "Unit",             value: product.unit,     span: false },
+              { icon: Layers, label: "Unit",             value: product.unit, span: false },
               { icon: Hash,   label: "Current Quantity", value: product.quantity, span: false },
-              { icon: AlertTriangle, label: "Reorder Level", value: product.reorderLevel, span: false },
+              { icon: AlertTriangle, label: "Reorder Level", value: product.reorder_level, span: false },
             ].map(({ icon: Icon, label, value, span }) => (
               <div
                 key={label}
@@ -141,7 +132,7 @@ function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductD
             {/* Status */}
             <div className="p-3 bg-gray-50 rounded-lg">
               <span className="text-xs text-gray-500 font-medium block mb-1.5">Status</span>
-              {statusBadge(product.status)}
+              {statusBadge(product.quantity, product.reorder_level)}
             </div>
           </div>
         </div>
@@ -166,7 +157,7 @@ function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductD
 // ─── Barcode Print Modal (inline shortcut) ────────────────────────────────────
 
 interface BarcodePrintModalProps {
-  product: Product | null;
+  product: ProductRecord | null;
   open: boolean;
   onClose: () => void;
 }
@@ -176,7 +167,7 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
 
   const handlePrint = () => {
     window.print();
-    toast.success(`Printed ${labelCount} label(s) for "${product?.name}"`);
+    toast.success(`Printed ${labelCount} label(s) for "${product?.product_name}"`);
     onClose();
   };
 
@@ -198,7 +189,7 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
         <div className="space-y-4">
           {/* Barcode display */}
           <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg text-center print:border-solid">
-            <p className="text-xs text-gray-500 mb-2">{product.name}</p>
+            <p className="text-xs text-gray-500 mb-2">{product.product_name}</p>
             {/* Visual barcode bars */}
             <div className="flex items-end justify-center gap-px h-12 mb-2">
               {product.barcode.split("").map((char, i) => (
@@ -249,35 +240,52 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
 
 export default function ClerkInventory() {
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [categories, setCategories] = useState<string[]>(["all"]);
+  const [suppliers, setSuppliers] = useState<string[]>(["all"]);
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
-  const [printProduct, setPrintProduct] = useState<Product | null>(null);
+  const [detailProduct, setDetailProduct] = useState<ProductRecord | null>(null);
+  const [printProduct, setPrintProduct] = useState<ProductRecord | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Simulate loading
+  // Load real data
   useEffect(() => {
-    const t = setTimeout(() => {
-      setProducts(mockProducts);
-      setLoading(false);
-    }, 700);
-    return () => clearTimeout(t);
-  }, []);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [inventoryData, categoriesData, suppliersData] = await Promise.all([
+          getProducts(),
+          getCategories(),
+          getSuppliers(),
+        ]);
+        setProducts(inventoryData);
+        setCategories(["all", ...categoriesData.map(c => c.category_name)]);
+        setSuppliers(["all", ...suppliersData.map(s => s.supplier_name)]);
+      } catch (err) {
+        console.error("Failed to fetch inventory:", err);
+        toast.error("Failed to load inventory");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [refreshKey]);
 
-  // ── Filtering ──────────────────────────────────────────────────────────────
+  // ─── Filtering ───────────────────────────────────────────────────────────────
 
   const filtered = products.filter((p) => {
     const matchSearch =
       search === "" ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.product_name.toLowerCase().includes(search.toLowerCase()) ||
       p.barcode.toLowerCase().includes(search.toLowerCase());
     const matchCategory = categoryFilter === "all" || p.category === categoryFilter;
     const matchSupplier = supplierFilter === "all" || p.supplier === supplierFilter;
@@ -290,22 +298,29 @@ export default function ClerkInventory() {
   // Reset to page 1 on filter change
   useEffect(() => { setPage(1); }, [search, categoryFilter, supplierFilter]);
 
-  // ── Barcode scan handler ───────────────────────────────────────────────────
+  // ─── Barcode scan handler ───────────────────────────────────────────────────
 
-  const handleBarcodeScan = useCallback(() => {
+  const handleBarcodeScan = useCallback(async () => {
     const val = barcodeInput.trim();
     if (!val) return;
-    const found = products.find(
-      (p) => p.barcode.toLowerCase() === val.toLowerCase()
-    );
-    if (found) {
-      setDetailProduct(found);
-      setDetailOpen(true);
-      setBarcodeInput("");
-    } else {
-      toast.error("Product not registered. Please contact the Administrator.", {
-        duration: 4000,
-      });
+    try {
+      const results = await lookupProduct(val);
+      if (results.length > 0) {
+        const found = products.find(p => p.id === results[0].id);
+        if (found) {
+          setDetailProduct(found);
+          setDetailOpen(true);
+          setBarcodeInput("");
+        } else {
+          toast.error("Product not found in inventory");
+        }
+      } else {
+        toast.error("Product not registered. Please contact the Administrator.", {
+          duration: 4000,
+        });
+      }
+    } catch {
+      toast.error("Failed to search for product");
     }
   }, [barcodeInput, products]);
 
@@ -316,13 +331,11 @@ export default function ClerkInventory() {
     }
   };
 
-  // ── Summary stats ──────────────────────────────────────────────────────────
+  // ─── Summary stats ──────────────────────────────────────────────────────────
 
-  const inStockCount   = products.filter((p) => p.status === "In Stock").length;
-  const lowStockCount  = products.filter((p) => p.status === "Low Stock").length;
-  const criticalCount  = products.filter((p) => p.status === "Critical" || p.status === "Out of Stock").length;
-
-  // ── Pagination helper ──────────────────────────────────────────────────────
+  const inStockCount   = products.filter((p) => deriveStatus(p.quantity, p.reorder_level) === "In Stock").length;
+  const lowStockCount  = products.filter((p) => deriveStatus(p.quantity, p.reorder_level) === "Low Stock").length;
+  const criticalCount  = products.filter((p) => ["Critical", "Out of Stock"].includes(deriveStatus(p.quantity, p.reorder_level))).length;
 
   const pageNumbers = () => {
     const pages: (number | "ellipsis")[] = [];
@@ -354,7 +367,7 @@ export default function ClerkInventory() {
           variant="outline"
           size="sm"
           className="gap-2 flex-shrink-0"
-          onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 500); }}
+          onClick={() => setRefreshKey(k => k + 1)}
         >
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </Button>
@@ -429,9 +442,8 @@ export default function ClerkInventory() {
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {mockCategories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c === "all" ? "All Categories" : c}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -442,9 +454,8 @@ export default function ClerkInventory() {
               <SelectValue placeholder="All Suppliers" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Suppliers</SelectItem>
-              {mockSuppliers.map((s) => (
-                <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+              {suppliers.map((s) => (
+                <SelectItem key={s} value={s}>{s === "all" ? "All Suppliers" : s}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -534,7 +545,7 @@ export default function ClerkInventory() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-medium text-gray-900 max-w-[180px]">
-                      <span className="truncate block">{product.name}</span>
+                      <span className="truncate block">{product.product_name}</span>
                     </td>
                     <td className="py-3.5 px-4 text-gray-600 text-xs">{product.category}</td>
                     <td className="py-3.5 px-4 text-gray-600 text-xs max-w-[140px]">
@@ -543,12 +554,12 @@ export default function ClerkInventory() {
                     <td className="py-3.5 px-4 text-gray-600 text-xs">{product.unit}</td>
                     <td className="py-3.5 px-4">
                       <span
-                        className={`font-bold text-base ${
+                        className={`font-bold text-lg ${
                           product.quantity === 0
                             ? "text-gray-400"
-                            : product.quantity <= product.reorderLevel * 0.5
+                            : product.quantity <= product.reorder_level * 0.5
                             ? "text-red-600"
-                            : product.quantity <= product.reorderLevel
+                            : product.quantity <= product.reorder_level
                             ? "text-amber-600"
                             : "text-gray-900"
                         }`}
@@ -556,8 +567,8 @@ export default function ClerkInventory() {
                         {product.quantity}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-gray-500 text-sm">{product.reorderLevel}</td>
-                    <td className="py-3.5 px-4">{statusBadge(product.status)}</td>
+                    <td className="py-3.5 px-4 text-gray-500 text-sm">{product.reorder_level}</td>
+                    <td className="py-3.5 px-4">{statusBadge(product.quantity, product.reorder_level)}</td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-1">
                         <Button
@@ -590,44 +601,39 @@ export default function ClerkInventory() {
         {/* Pagination */}
         {!loading && totalPages > 1 && (
           <div className="px-6 py-4 border-t border-gray-100">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p - 1)); }}
-                    className={page === 1 ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-
-                {pageNumbers().map((p, i) =>
-                  p === "ellipsis" ? (
-                    <PaginationItem key={`ell-${i}`}>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  ) : (
-                    <PaginationItem key={p}>
-                      <PaginationLink
-                        href="#"
-                        isActive={p === page}
-                        onClick={(e) => { e.preventDefault(); setPage(p as number); }}
-                        className="cursor-pointer"
-                      >
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  )
-                )}
-
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(totalPages, p + 1)); }}
-                    className={page === totalPages ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <div className="flex items-center justify-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              {pageNumbers().map((p, i) =>
+                p === "ellipsis" ? (
+                  <span key={`ell-${i}`} className="px-2 text-gray-400">…</span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={p === page ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setPage(p)}
+                    className="h-8 w-8 p-0"
+                  >
+                    {p}
+                  </Button>
+                )
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
       </Card>

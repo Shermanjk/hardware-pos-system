@@ -12,15 +12,16 @@ import {
   XCircle, Flame,
 } from "lucide-react";
 import { toast } from "sonner";
-import { liveProducts } from "./ClerkStockIn";
-import { mockCategories } from "@/modules/clerk/mockData";
-import type { Product } from "@/modules/clerk/types";
+import { getInventory, type InventoryItem } from "@/shared/api/inventoryApi";
+import { getCategories, deriveStatus } from "@/shared/api/productsApi";
+import type { Category } from "@/shared/api/productsApi";
 
-type SortField = "shortage" | "name" | "quantity" | "reorderLevel";
+type SortField = "shortage" | "productName" | "quantity" | "reorderLevel";
 type SortDir   = "asc" | "desc";
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: Product["status"] }) {
+function StatusBadge({ quantity, reorderLevel }: { quantity: number; reorderLevel: number }) {
+  const status = deriveStatus(quantity, reorderLevel);
   switch (status) {
     case "Critical":
       return (
@@ -71,28 +72,43 @@ function SortHeader({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClerkLowStock() {
-  const [loading, setLoading]         = useState(true);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [search, setSearch]           = useState("");
+  const [loading, setLoading] = useState(true);
+  const [allProducts, setAllProducts] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<string[]>(["all"]);
+  const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [sortField, setSortField]     = useState<SortField>("shortage");
-  const [sortDir, setSortDir]         = useState<SortDir>("desc");
-  const [stockInOpen, setStockInOpen] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("shortage");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => { setAllProducts([...liveProducts]); setLoading(false); }, 600);
-    return () => clearTimeout(t);
-  }, []);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [inventoryData, categoriesData] = await Promise.all([
+          getInventory(),
+          getCategories(),
+        ]);
+        setAllProducts(inventoryData);
+        setCategories(["all", ...categoriesData.map(c => c.category_name)]);
+      } catch (err) {
+        console.error("Failed to fetch inventory:", err);
+        toast.error("Failed to load inventory");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [refreshKey]);
 
   const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => { setAllProducts([...liveProducts]); setLoading(false); }, 400);
+    setRefreshKey(k => k + 1);
     toast.info("Low stock list refreshed");
   };
 
   // ── Filter: only products at or below reorder level ────────────────────────
   const lowStockProducts = useMemo(
-    () => allProducts.filter((p) => p.quantity <= p.reorderLevel),
+    () => allProducts.filter((p) => p.quantity <= p.reorder_level),
     [allProducts]
   );
 
@@ -101,7 +117,7 @@ export default function ClerkLowStock() {
     lowStockProducts.filter((p) => {
       const matchSearch =
         search === "" ||
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.product_name.toLowerCase().includes(search.toLowerCase()) ||
         p.barcode.toLowerCase().includes(search.toLowerCase());
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter;
       return matchSearch && matchCategory;
@@ -116,10 +132,22 @@ export default function ClerkLowStock() {
       let aVal: number | string;
       let bVal: number | string;
       switch (sortField) {
-        case "shortage":      aVal = a.reorderLevel - a.quantity; bVal = b.reorderLevel - b.quantity; break;
-        case "name":          aVal = a.name;        bVal = b.name;        break;
-        case "quantity":      aVal = a.quantity;    bVal = b.quantity;    break;
-        case "reorderLevel":  aVal = a.reorderLevel; bVal = b.reorderLevel; break;
+        case "shortage":
+          aVal = a.reorder_level - a.quantity;
+          bVal = b.reorder_level - b.quantity;
+          break;
+        case "productName":
+          aVal = a.product_name;
+          bVal = b.product_name;
+          break;
+        case "quantity":
+          aVal = a.quantity;
+          bVal = b.quantity;
+          break;
+        case "reorderLevel":
+          aVal = a.reorder_level;
+          bVal = b.reorder_level;
+          break;
       }
       if (typeof aVal === "string") return sortDir === "asc" ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
       return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
@@ -133,9 +161,15 @@ export default function ClerkLowStock() {
   };
 
   // ── Summary stats ──────────────────────────────────────────────────────────
-  const criticalCount  = lowStockProducts.filter((p) => p.status === "Critical" || p.status === "Out of Stock").length;
-  const lowCount       = lowStockProducts.filter((p) => p.status === "Low Stock").length;
-  const totalShortage  = lowStockProducts.reduce((s, p) => s + Math.max(0, p.reorderLevel - p.quantity), 0);
+  const criticalCount = lowStockProducts.filter((p) =>
+    ["Critical", "Out of Stock"].includes(deriveStatus(p.quantity, p.reorder_level))
+  ).length;
+  const lowCount = lowStockProducts.filter((p) =>
+    deriveStatus(p.quantity, p.reorder_level) === "Low Stock"
+  ).length;
+  const totalShortage = lowStockProducts.reduce((s, p) =>
+    s + Math.max(0, p.reorder_level - p.quantity), 0
+  );
 
   return (
     <div className="space-y-6">
@@ -153,7 +187,7 @@ export default function ClerkLowStock() {
           </Button>
           <Button
             className="gap-2 bg-blue-600 hover:bg-blue-700"
-            onClick={() => setStockInOpen(true)}
+            onClick={() => window.location.href = "/clerk/stock-in"}
           >
             <PackagePlus className="h-4 w-4" /> New Stock In
           </Button>
@@ -225,9 +259,8 @@ export default function ClerkLowStock() {
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {mockCategories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c === "all" ? "All Categories" : c}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -248,12 +281,12 @@ export default function ClerkLowStock() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Barcode</th>
-                <SortHeader label="Product Name"   field="name"         current={sortField} dir={sortDir} onClick={handleSort} />
+                <SortHeader label="Product Name" field="productName" current={sortField} dir={sortDir} onClick={handleSort} />
                 <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Category</th>
                 <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Supplier</th>
-                <SortHeader label="Current Qty"    field="quantity"     current={sortField} dir={sortDir} onClick={handleSort} />
-                <SortHeader label="Reorder Level"  field="reorderLevel" current={sortField} dir={sortDir} onClick={handleSort} />
-                <SortHeader label="Shortage"       field="shortage"     current={sortField} dir={sortDir} onClick={handleSort} />
+                <SortHeader label="Current Qty" field="quantity" current={sortField} dir={sortDir} onClick={handleSort} />
+                <SortHeader label="Reorder Level" field="reorderLevel" current={sortField} dir={sortDir} onClick={handleSort} />
+                <SortHeader label="Shortage" field="shortage" current={sortField} dir={sortDir} onClick={handleSort} />
                 <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
                 <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Action</th>
               </tr>
@@ -269,9 +302,9 @@ export default function ClerkLowStock() {
                 ))
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={9} className="py-14 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-400">
-                      <AlertTriangle className="h-12 w-12 opacity-30" />
+                      <AlertTriangle className="h-10 w-10 opacity-30" />
                       {search || categoryFilter !== "all" ? (
                         <>
                           <p className="font-medium text-gray-600">No products match your filters</p>
@@ -290,8 +323,9 @@ export default function ClerkLowStock() {
                 </tr>
               ) : (
                 sorted.map((product, idx) => {
-                  const shortage = Math.max(0, product.reorderLevel - product.quantity);
-                  const isCritical = product.status === "Critical" || product.status === "Out of Stock";
+                  const shortage = Math.max(0, product.reorder_level - product.quantity);
+                  const status = deriveStatus(product.quantity, product.reorder_level);
+                  const isCritical = ["Critical", "Out of Stock"].includes(status);
                   const urgencyColor = isCritical ? "bg-red-50/40" : "bg-amber-50/20";
 
                   return (
@@ -307,7 +341,7 @@ export default function ClerkLowStock() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 font-medium text-gray-900 max-w-[180px]">
-                        <span className="truncate block">{product.name}</span>
+                        <span className="truncate block">{product.product_name}</span>
                       </td>
                       <td className="py-3.5 px-4 text-gray-500 text-xs">{product.category}</td>
                       <td className="py-3.5 px-4 text-gray-500 text-xs max-w-[140px]">
@@ -322,7 +356,7 @@ export default function ClerkLowStock() {
                         </span>
                         <span className="text-xs text-gray-400 ml-1">{product.unit}</span>
                       </td>
-                      <td className="py-3.5 px-4 text-gray-600 text-sm font-medium">{product.reorderLevel}</td>
+                      <td className="py-3.5 px-4 text-gray-600 text-sm font-medium">{product.reorder_level}</td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
                           <span className={`font-bold text-sm ${isCritical ? "text-red-600" : "text-amber-600"}`}>
@@ -332,19 +366,19 @@ export default function ClerkLowStock() {
                           <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${isCritical ? "bg-red-500" : "bg-amber-400"}`}
-                              style={{ width: `${Math.min(100, (shortage / product.reorderLevel) * 100)}%` }}
+                              style={{ width: `${Math.min(100, (shortage / product.reorder_level) * 100)}%` }}
                             />
                           </div>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <StatusBadge status={product.status} />
+                        <StatusBadge quantity={product.quantity} reorderLevel={product.reorder_level} />
                       </td>
                       <td className="py-3.5 px-4">
                         <Button
                           size="sm"
                           className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
-                          onClick={() => setStockInOpen(true)}
+                          onClick={() => window.location.href = "/clerk/stock-in"}
                         >
                           <PackagePlus className="h-3.5 w-3.5" /> Stock In
                         </Button>
@@ -368,15 +402,15 @@ export default function ClerkLowStock() {
             <div>
               <p className="text-sm font-semibold text-blue-900">Recommended Action</p>
               <p className="text-xs text-blue-700 mt-1">
-                {sorted.length} product{sorted.length !== 1 ? "s" : ""} need restocking.{" "}
-                Total units short: <strong>{totalShortage}</strong>.{" "}
-                Contact your suppliers to arrange deliveries, then use{" "}
-                <strong>New Stock In</strong> to record received goods.
+                {sorted.length} product{sorted.length !== 1 ? "s" : ""} need restocking.
+                Total units short: <strong>{totalShortage}</strong>.
+                Contact your suppliers to arrange deliveries, then use
+                <strong> New Stock In</strong> to record received goods.
               </p>
               <Button
                 size="sm"
                 className="mt-3 gap-2 bg-blue-600 hover:bg-blue-700 h-8 text-xs"
-                onClick={() => setStockInOpen(true)}
+                onClick={() => window.location.href = "/clerk/stock-in"}
               >
                 <PackagePlus className="h-3.5 w-3.5" /> Open Stock In
               </Button>
@@ -384,55 +418,6 @@ export default function ClerkLowStock() {
           </div>
         </Card>
       )}
-
-      {/* Stock In modal — triggered from this page */}
-      {stockInOpen && (
-        <StockInPortal open={stockInOpen} onClose={() => setStockInOpen(false)} />
-      )}
-    </div>
-  );
-}
-
-// ─── Thin portal to open StockIn modal from another page ─────────────────────
-// Imports the modal directly rather than navigating away.
-function StockInPortal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  // We lazy-import the modal from ClerkStockIn by rendering a hidden instance
-  // of that page and immediately triggering its modal open state. The cleanest
-  // approach without prop-drilling is to expose the StockInModal from that file.
-  // Since it's not yet exported, we surface the Stock In page in a Dialog.
-  const [, setForce] = useState(0);
-
-  useEffect(() => {
-    if (open) {
-      // Delegate — navigate to stock-in page via wouter, or show inline
-      // For now we show a lightweight redirect nudge
-      setForce((f) => f + 1);
-    }
-  }, [open]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
-        <div className="p-3 bg-blue-50 rounded-xl w-fit mx-auto mb-4">
-          <PackagePlus className="h-8 w-8 text-blue-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-900">Start Stock In</h3>
-        <p className="text-sm text-gray-500 mt-2 mb-5">
-          Navigate to the Stock In page to record a delivery for this product.
-        </p>
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-          <Button
-            className="flex-1 bg-blue-600 hover:bg-blue-700"
-            onClick={() => { onClose(); window.location.href = "/clerk/stock-in"; }}
-          >
-            Go to Stock In
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

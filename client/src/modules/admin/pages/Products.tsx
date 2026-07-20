@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Barcode, Search, Edit2, Trash2, Eye, RefreshCw, AlertCircle, X, Package } from "lucide-react";
+import { Plus, Barcode, Search, Edit2, Trash2, Eye, RefreshCw, AlertCircle, X, Package, ScanLine, Wand2, Printer } from "lucide-react";
 import {
   getProducts, getNextBarcode, createProduct, updateProduct, deleteProduct,
   getCategories, getSuppliers, getUnits, deriveStatus,
@@ -69,8 +69,12 @@ function generateBarcodeSVG(code: string): string {
 /** Build the HTML for a single barcode label — bars + code only */
 function buildLabelHTML(product: ProductRecord): string {
   const svg = generateBarcodeSVG(product.barcode);
+  const header = product.barcode_source === "store"
+    ? `<div class="store-name">Isra Hardware</div>`
+    : "";
   return `
     <div class="label">
+      ${header}
       ${svg}
       <div class="code">${product.barcode}</div>
     </div>`;
@@ -81,6 +85,8 @@ const LABEL_STYLES = `
   .label { display: inline-block; padding: 6px 10px; margin: 4px;
            text-align: center; vertical-align: top; }
   .label svg { display: block; margin: 0 auto; }
+  .store-name { font-family: sans-serif; font-size: 11px; font-weight: 700;
+                letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }
   .code { font-size: 11px; margin-top: 2px; letter-spacing: 1px; }
   @media print { body { padding: 0; margin: 0; } }
 `;
@@ -114,6 +120,7 @@ function printBarcodeList(products: ProductRecord[]) {
 function emptyForm() {
   return {
     barcode:          "",
+    barcode_source:   "manufacturer" as "manufacturer" | "store",
     supplier_barcode: "",
     product_name:     "",
     description:      "",
@@ -132,6 +139,7 @@ type ProductForm = ReturnType<typeof emptyForm>;
 function formFromRecord(p: ProductRecord): ProductForm {
   return {
     barcode:          p.barcode,
+    barcode_source:   p.barcode_source ?? "manufacturer",
     supplier_barcode: p.supplier_barcode ?? "",
     product_name:     p.product_name,
     description:      p.description ?? "",
@@ -161,6 +169,37 @@ function validateForm(form: ProductForm): Record<string, string> {
   return e;
 }
 
+// ─── Print Barcode Label Dialog ───────────────────────────────────────────────
+
+function PrintLabelDialog({ product, onClose }: { product: ProductRecord | null; onClose: () => void }) {
+  if (!product) return null;
+  return (
+    <AlertDialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Printer className="h-5 w-5 text-blue-600" /> Print Barcode Label
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-semibold text-gray-900">{product.product_name}</span> was saved successfully.
+            <br />
+            Barcode: <span className="font-mono font-bold text-gray-900">{product.barcode}</span>
+            {" "}({product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"})
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose}>Skip</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => { printBarcode(product); onClose(); }}>
+            <Printer className="h-4 w-4 mr-2" /> Print Label
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 // ─── ProductFormModal ─────────────────────────────────────────────────────────
 
 interface ProductFormModalProps {
@@ -178,7 +217,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
   const [form,           setForm]           = useState<ProductForm>(emptyForm());
   const [errors,         setErrors]         = useState<Record<string, string>>({});
   const [isLoading,      setIsLoading]      = useState(false);
-  const [loadingBarcode, setLoadingBarcode] = useState(false);
+  const [generatingBC,   setGeneratingBC]   = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -186,17 +226,34 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
       setForm(formFromRecord(initial));
     } else {
       setForm(emptyForm());
-      setLoadingBarcode(true);
-      getNextBarcode()
-        .then((bc) => setForm((prev) => ({ ...prev, barcode: bc })))
-        .catch(() => {})
-        .finally(() => setLoadingBarcode(false));
     }
     setErrors({});
   }, [open, mode, initial]);
 
   const set = (key: keyof ProductForm, value: unknown) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const handleSourceChange = (source: "manufacturer" | "store") => {
+    setForm((prev) => ({ ...prev, barcode_source: source, barcode: "" }));
+    setErrors((prev) => ({ ...prev, barcode: "" }));
+  };
+
+  const handleGenerateBarcode = async () => {
+    setGeneratingBC(true);
+    try {
+      const bc = await getNextBarcode();
+      setForm((prev) => ({ ...prev, barcode: bc }));
+    } catch {
+      setErrors((prev) => ({ ...prev, barcode: "Failed to generate barcode. Try again." }));
+    } finally {
+      setGeneratingBC(false);
+    }
+  };
+
+  const handleScanClick = () => {
+    barcodeInputRef.current?.focus();
+    barcodeInputRef.current?.select();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,6 +264,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
     try {
       const payload: CreateProductPayload = {
         barcode:          form.barcode.trim(),
+        barcode_source:   form.barcode_source,
         supplier_barcode: form.supplier_barcode?.trim() || null,
         product_name:     form.product_name.trim(),
         description:      form.description?.trim() || null,
@@ -231,6 +289,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
     }
   };
 
+  const isStore = form.barcode_source === "store";
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -245,33 +305,75 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             </div>
           )}
 
-          {/* Barcode + Product Name */}
+          {/* Barcode Source */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Barcode Source <span className="text-red-500">*</span></Label>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+              {(["manufacturer", "store"] as const).map((src, i) => (
+                <label key={src}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium cursor-pointer select-none transition-colors ${
+                    i === 0 ? "" : "border-l border-gray-200"
+                  } ${
+                    form.barcode_source === src
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  } ${isLoading ? "pointer-events-none opacity-60" : ""}`}>
+                  <input type="radio" name="barcode_source" value={src}
+                    checked={form.barcode_source === src}
+                    onChange={() => handleSourceChange(src)}
+                    className="sr-only" disabled={isLoading} />
+                  {src === "manufacturer" ? "Manufacturer Barcode" : "Store Barcode (Auto-Generate)"}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Barcode Field */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Barcode <span className="text-red-500">*</span></Label>
+            {isStore ? (
+              <div className="flex gap-2">
+                <Input value={form.barcode} readOnly placeholder="Click Generate Barcode to assign"
+                  className={`bg-gray-50 ${errors.barcode ? "border-red-400" : ""}`} />
+                <Button type="button" variant="outline" onClick={handleGenerateBarcode}
+                  disabled={isLoading || generatingBC} className="shrink-0 gap-2">
+                  {generatingBC ? <Spinner className="text-gray-500" /> : <Wand2 className="h-4 w-4" />}
+                  Generate Barcode
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input ref={barcodeInputRef} value={form.barcode}
+                  onChange={(e) => set("barcode", e.target.value)}
+                  placeholder="Scan or enter barcode (e.g. 6920130600854)"
+                  disabled={isLoading}
+                  className={errors.barcode ? "border-red-400" : ""} />
+                <Button type="button" variant="outline" onClick={handleScanClick}
+                  disabled={isLoading} className="shrink-0 gap-2" title="Click then scan with USB scanner">
+                  <ScanLine className="h-4 w-4" /> Scan
+                </Button>
+              </div>
+            )}
+            {errors.barcode && <p className="mt-1 text-xs text-red-600">{errors.barcode}</p>}
+            {!isStore && (
+              <p className="mt-1 text-xs text-gray-400">Scan with USB barcode scanner or type manually.</p>
+            )}
+          </div>
+
+          {/* Product Name + Supplier Barcode */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="mb-1.5 block font-semibold">Barcode <span className="text-red-500">*</span></Label>
-              <div className="relative">
-                <Input value={form.barcode} onChange={(e) => set("barcode", e.target.value)}
-                  placeholder={loadingBarcode ? "Generating…" : "e.g. HW-021"}
-                  disabled={isLoading || loadingBarcode}
-                  className={errors.barcode ? "border-red-400" : ""} />
-                {loadingBarcode && <Spinner className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />}
-              </div>
-              {errors.barcode && <p className="mt-1 text-xs text-red-600">{errors.barcode}</p>}
+              <Label className="mb-1.5 block font-semibold">Product Name <span className="text-red-500">*</span></Label>
+              <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
+                placeholder="e.g. Claw Hammer 16oz" disabled={isLoading}
+                className={errors.product_name ? "border-red-400" : ""} />
+              {errors.product_name && <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>}
             </div>
             <div>
               <Label className="mb-1.5 block font-semibold">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
               <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
                 placeholder="Supplier's barcode" disabled={isLoading} />
             </div>
-          </div>
-
-          {/* Product Name */}
-          <div>
-            <Label className="mb-1.5 block font-semibold">Product Name <span className="text-red-500">*</span></Label>
-            <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
-              placeholder="e.g. Claw Hammer 16oz" disabled={isLoading}
-              className={errors.product_name ? "border-red-400" : ""} />
-            {errors.product_name && <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>}
           </div>
 
           {/* Category + Supplier */}
@@ -413,7 +515,16 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-lg font-bold text-gray-900">{product.barcode}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-lg font-bold text-gray-900">{product.barcode}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                product.barcode_source === "store"
+                  ? "bg-purple-100 text-purple-700"
+                  : "bg-blue-100 text-blue-700"
+              }`}>
+                {product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"}
+              </span>
+            </div>
             {statusBadge(status)}
           </div>
           <p className="text-lg font-semibold text-gray-900">{product.product_name}</p>
@@ -530,6 +641,7 @@ export default function Products() {
   const [editTarget,   setEditTarget]   = useState<ProductRecord | null>(null);
   const [viewTarget,   setViewTarget]   = useState<ProductRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
+  const [printTarget,  setPrintTarget]  = useState<ProductRecord | null>(null);
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "info" } | null>(null);
   const showToast = (msg: string, type: "success" | "info" = "success") => {
@@ -580,6 +692,7 @@ export default function Products() {
       return exists ? prev.map((p) => p.id === product.id ? product : p) : [product, ...prev];
     });
     showToast(`${product.product_name} saved successfully.`);
+    setPrintTarget(product);
   };
 
   const handleDeleted = (id: number, soft: boolean) => {
@@ -832,6 +945,7 @@ export default function Products() {
         suppliers={suppliers} units={units} onClose={() => setEditTarget(null)} onSaved={handleSaved} />
       <ViewProductModal product={viewTarget} onClose={() => setViewTarget(null)} onEdit={(p) => setEditTarget(p)} />
       <DeleteDialog product={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />
+      <PrintLabelDialog product={printTarget} onClose={() => setPrintTarget(null)} />
     </div>
   );
 }

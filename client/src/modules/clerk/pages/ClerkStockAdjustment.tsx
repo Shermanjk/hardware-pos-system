@@ -1,11 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -19,129 +16,139 @@ import {
   CheckCircle2, Flame, PackageX, Clock4, RotateCcw, X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { liveProducts } from "./ClerkStockIn";
-import { mockActivityLogs } from "@/modules/clerk/mockData";
-import type { Product, AdjustmentType } from "@/modules/clerk/types";
-import { nanoid } from "nanoid";
-
-// ─── In-memory adjustment history ────────────────────────────────────────────
-interface AdjRecord {
-  id: string;
-  productName: string;
-  barcode: string;
-  type: AdjustmentType;
-  qty: number;
-  prevQty: number;
-  newQty: number;
-  reason: string;
-  date: string;
-}
-export const adjustmentHistory: AdjRecord[] = [
-  { id: "ADJ-001", productName: "Common Nails 2\"",    barcode: "HW-002", type: "Damaged",    qty: 10, prevQty: 15,  newQty: 5,   reason: "Wet storage damage",          date: "Jan 15, 2025 09:15 AM" },
-  { id: "ADJ-002", productName: "Wood Glue 500ml",     barcode: "HW-004", type: "Expired",    qty: 2,  prevQty: 5,   newQty: 3,   reason: "Past expiry date",            date: "Jan 15, 2025 11:20 AM" },
-  { id: "ADJ-003", productName: "Angle Grinder Disc 4\"", barcode: "HW-015", type: "Lost",  qty: 5,  prevQty: 40,  newQty: 35,  reason: "Missing after inventory check", date: "Jan 13, 2025 11:30 AM" },
-];
+import {
+  getProducts, getSuppliers, lookupProduct, type ProductRecord,
+} from "@/shared/api/productsApi";
+import { submitStockAdjustment, getInventoryLogs } from "@/shared/api/inventoryApi";
 
 // ─── Adjustment type config ───────────────────────────────────────────────────
-const ADJUSTMENT_TYPES: { value: AdjustmentType; label: string; icon: React.ElementType; color: string; bg: string; description: string }[] = [
-  { value: "Damaged",    label: "Damaged",    icon: Flame,      color: "text-red-600",    bg: "bg-red-50",    description: "Items physically damaged, subtract from stock" },
-  { value: "Lost",       label: "Lost",       icon: PackageX,   color: "text-orange-600", bg: "bg-orange-50", description: "Items that cannot be located, subtract from stock" },
-  { value: "Expired",    label: "Expired",    icon: Clock4,     color: "text-amber-600",  bg: "bg-amber-50",  description: "Items past expiry date, subtract from stock" },
-  { value: "Correction", label: "Correction", icon: RotateCcw,  color: "text-blue-600",   bg: "bg-blue-50",   description: "Manual correction — sets the absolute quantity" },
+const ADJUSTMENT_TYPES = [
+  { value: "DAMAGED", label: "Damaged", icon: Flame, color: "text-red-600", bg: "bg-red-50", description: "Items physically damaged, subtract from stock" },
+  { value: "LOST", label: "Lost", icon: PackageX, color: "text-orange-600", bg: "bg-orange-50", description: "Items that cannot be located, subtract from stock" },
+  { value: "EXPIRED", label: "Expired", icon: Clock4, color: "text-amber-600", bg: "bg-amber-50", description: "Items past expiry date, subtract from stock" },
+  { value: "CORRECTION", label: "Correction", icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50", description: "Manual correction — sets the absolute quantity" },
 ];
 
-// ─── Adjustment Modal ─────────────────────────────────────────────────────────
-interface AdjModalProps {
+// ─── Type badge helper ──────────────────────────────────────────────────────────
+function TypeBadge({ type }: { type: string }) {
+  const cfg = ADJUSTMENT_TYPES.find((t) => t.value === type) || ADJUSTMENT_TYPES[3];
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color}`}>
+      <Icon className="h-3 w-3" />{cfg.label}
+    </span>
+  );
+}
+
+// ─── Adjustment Modal ────────────────────────────────────────────────────────────
+interface AdjustmentModalProps {
   open: boolean;
   onClose: () => void;
-  prefillProduct?: Product | null;
+  prefillProduct?: ProductRecord | null;
   onSaved: () => void;
 }
 
-function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalProps) {
+function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentModalProps) {
   const [searchInput, setSearchInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(prefillProduct ?? null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(prefillProduct || null);
   const [lookupError, setLookupError] = useState("");
-  const [adjType, setAdjType] = useState<AdjustmentType | "">("");
+  const [adjType, setAdjType] = useState<string>("");
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<ProductRecord[]>([]);
 
-  // Sync prefill when modal re-opens with a product
-  const handleOpen = (isOpen: boolean) => {
-    if (!isOpen) {
-      setSearchInput(""); setBarcodeInput(""); setLookupError("");
-      setSelectedProduct(prefillProduct ?? null);
-      setAdjType(""); setQty(""); setReason(""); setErrors({});
+  // Sync prefill when modal opens/closes
+  useEffect(() => {
+    if (open) {
+      setSelectedProduct(prefillProduct || null);
+      setAdjType("");
+      setQty("");
+      setReason("");
+      setErrors({});
+      setLookupError("");
+      // Load products
+      const fetchProducts = async () => {
+        try {
+          const data = await getProducts();
+          setProducts(data);
+        } catch (err) {
+          console.error(err);
+          toast.error("Failed to load products");
+        }
+      };
+      fetchProducts();
     }
-  };
+  }, [open, prefillProduct]);
 
-  const lookupProduct = useCallback((val: string) => {
+  const lookupProductFn = useCallback(async (val: string) => {
     setLookupError("");
-    const found = liveProducts.find(
-      (p) => p.barcode.toLowerCase() === val.trim().toLowerCase() ||
-             p.name.toLowerCase().includes(val.trim().toLowerCase())
-    );
-    if (found) { setSelectedProduct(found); setLookupError(""); }
-    else { setSelectedProduct(null); setLookupError("Product not registered. Please contact the Administrator."); }
-  }, []);
+    try {
+      const results = await lookupProduct(val);
+      if (results.length > 0) {
+        const found = products.find(p => p.id === results[0].id);
+        if (found) {
+          setSelectedProduct(found);
+          setLookupError("");
+        } else {
+          setLookupError("Product not found in inventory");
+        }
+      } else {
+        setLookupError("Product not registered. Please contact the Administrator.");
+      }
+    } catch {
+      setLookupError("Failed to search for product");
+    }
+  }, [products]);
 
   // Derived new quantity preview
   const qtyNum = parseInt(qty, 10) || 0;
-  const currentQty = selectedProduct?.quantity ?? 0;
-  const previewQty = adjType === "Correction"
+  const currentQty = selectedProduct?.quantity || 0;
+  const previewQty = adjType === "CORRECTION"
     ? qtyNum
     : Math.max(0, currentQty - qtyNum);
 
   const validate = () => {
     const e: Record<string, string> = {};
     if (!selectedProduct) e.product = "Select a product first";
-    if (!adjType)         e.type    = "Select an adjustment type";
-    if (!qty || qtyNum < 1) e.qty  = "Enter a valid quantity (min 1)";
-    if (adjType !== "Correction" && qtyNum > currentQty)
+    if (!adjType) e.type = "Select an adjustment type";
+    if (!qty || qtyNum < 1) e.qty = "Enter a valid quantity (min 1)";
+    if (adjType !== "CORRECTION" && qtyNum > currentQty) {
       e.qty = `Cannot deduct more than current stock (${currentQty})`;
-    if (!reason.trim())   e.reason  = "Reason is required";
+    }
+    if (!reason.trim()) e.reason = "Reason is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
-    const p = liveProducts.find((p) => p.id === selectedProduct!.id);
-    if (!p) return;
-    const prevQty = p.quantity;
-    p.quantity = previewQty;
-    if (p.quantity === 0)                            p.status = "Out of Stock";
-    else if (p.quantity <= p.reorderLevel * 0.5)     p.status = "Critical";
-    else if (p.quantity <= p.reorderLevel)            p.status = "Low Stock";
-    else                                              p.status = "In Stock";
-
-    const id = `ADJ-${String(Date.now()).slice(-3)}`;
-    adjustmentHistory.unshift({
-      id, productName: p.name, barcode: p.barcode,
-      type: adjType as AdjustmentType, qty: qtyNum,
-      prevQty, newQty: previewQty, reason,
-      date: new Date().toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-    });
-    mockActivityLogs.unshift({
-      id: nanoid(6), action: "Stock Adjustment",
-      product: p.name,
-      qtyChange: adjType === "Correction" ? `→${previewQty}` : `-${qtyNum}`,
-      performedBy: "Maria Santos",
-      timestamp: new Date().toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-    });
-    toast.success(`Adjustment saved — ${p.name} updated to ${previewQty} ${p.unit}`);
-    handleOpen(false);
-    onClose();
-    onSaved();
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await submitStockAdjustment({
+        product_id: selectedProduct!.id,
+        type: adjType as "Damaged" | "Lost" | "Expired" | "Correction",
+        quantity: qtyNum,
+        reason,
+      });
+      toast.success(`Adjustment saved — ${selectedProduct!.product_name} updated to ${previewQty} ${selectedProduct!.unit}`);
+      onClose();
+      onSaved();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save adjustment");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const typeConfig = ADJUSTMENT_TYPES.find((t) => t.value === adjType);
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(v) => { if (!v) { handleOpen(false); onClose(); } }}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -158,8 +165,8 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
             {!selectedProduct ? (
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-gray-700">
-                  Find Product <span className="text-red-500">*</span>
-                </label>
+                Find Product <span className="text-red-500">*</span>
+              </label>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="relative">
                     <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
@@ -167,7 +174,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
                       placeholder="Scan barcode (Enter)…"
                       value={barcodeInput}
                       onChange={(e) => { setBarcodeInput(e.target.value); setLookupError(""); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProduct(barcodeInput); }}}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProductFn(barcodeInput); } }}
                       className="pl-9 h-10 font-mono"
                     />
                   </div>
@@ -178,12 +185,12 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
                         placeholder="Search by name or barcode…"
                         value={searchInput}
                         onChange={(e) => { setSearchInput(e.target.value); setLookupError(""); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProduct(searchInput); }}}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProductFn(searchInput); } }}
                         className="pl-9 h-10"
                       />
                     </div>
                     <Button variant="outline" size="sm" className="h-10 px-4"
-                      onClick={() => lookupProduct(searchInput)}>
+                      onClick={() => lookupProductFn(searchInput)}>
                       Search
                     </Button>
                   </div>
@@ -200,7 +207,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-blue-100 rounded-lg"><Package className="h-4 w-4 text-blue-700" /></div>
                   <div>
-                    <p className="font-semibold text-gray-900 text-sm">{selectedProduct.name}</p>
+                    <p className="font-semibold text-gray-900 text-sm">{selectedProduct.product_name}</p>
                     <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
                     <p className="text-xs text-gray-600 mt-1">
                       Current stock: <strong className="text-gray-900">{selectedProduct.quantity}</strong>
@@ -244,12 +251,12 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
             {/* Quantity */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {adjType === "Correction" ? "Set New Quantity" : "Quantity to Deduct"}
+                {adjType === "CORRECTION" ? "Set New Quantity" : "Quantity to Deduct"}
                 <span className="text-red-500"> *</span>
               </label>
               <Input
                 type="number" min={1}
-                placeholder={adjType === "Correction" ? "Enter exact new quantity" : "How many units?"}
+                placeholder={adjType === "CORRECTION" ? "Enter exact new quantity" : "How many units?"}
                 value={qty}
                 onChange={(e) => { setQty(e.target.value); setErrors((er) => ({ ...er, qty: "" })); }}
                 className="h-10"
@@ -261,8 +268,8 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
             {selectedProduct && adjType && qty && qtyNum >= 1 && (
               <div className={`flex items-center justify-between p-3 rounded-lg border ${
                 previewQty === 0 ? "bg-red-50 border-red-200" :
-                previewQty <= (selectedProduct.reorderLevel * 0.5) ? "bg-red-50 border-red-200" :
-                previewQty <= selectedProduct.reorderLevel ? "bg-amber-50 border-amber-200" :
+                previewQty <= (selectedProduct.reorder_level * 0.5) ? "bg-red-50 border-red-200" :
+                previewQty <= selectedProduct.reorder_level ? "bg-amber-50 border-amber-200" :
                 "bg-green-50 border-green-200"
               }`}>
                 <span className="text-sm text-gray-700 font-medium">New quantity will be:</span>
@@ -270,7 +277,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
                   <span className="text-gray-400 line-through text-sm">{currentQty}</span>
                   <span className={`text-xl font-bold ${
                     previewQty === 0 ? "text-gray-500" :
-                    previewQty <= selectedProduct.reorderLevel ? "text-amber-700" : "text-green-700"
+                    previewQty <= selectedProduct.reorder_level ? "text-amber-700" : "text-green-700"
                   }`}>{previewQty}</span>
                   <span className="text-gray-500 text-sm">{selectedProduct.unit}</span>
                 </div>
@@ -293,10 +300,11 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
           </div>
 
           <div className="flex justify-between gap-3 pt-2 border-t border-gray-100">
-            <Button variant="outline" onClick={() => { handleOpen(false); onClose(); }}>Cancel</Button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button
               className="gap-2 bg-amber-600 hover:bg-amber-700"
               onClick={() => { if (validate()) setConfirmOpen(true); }}
+              disabled={loading}
             >
               <CheckCircle2 className="h-4 w-4" /> Save Adjustment
             </Button>
@@ -309,9 +317,9 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Stock Adjustment</AlertDialogTitle>
             <AlertDialogDescription>
-              {adjType === "Correction"
-                ? `This will set "${selectedProduct?.name}" quantity to ${previewQty} ${selectedProduct?.unit}.`
-                : `This will deduct ${qtyNum} ${selectedProduct?.unit} from "${selectedProduct?.name}" (${currentQty} → ${previewQty}).`
+              {adjType === "CORRECTION"
+                ? `This will set "${selectedProduct?.product_name}" quantity to ${previewQty} ${selectedProduct?.unit}.`
+                : `This will deduct ${qtyNum} ${selectedProduct?.unit} from "${selectedProduct?.product_name}" (${currentQty} → ${previewQty}).`
               } This action is logged and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -321,7 +329,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
               className="bg-amber-600 hover:bg-amber-700"
               onClick={() => { setConfirmOpen(false); handleSave(); }}
             >
-              Confirm Adjustment
+              {loading ? "Saving..." : "Confirm Adjustment"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -330,37 +338,47 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjModalPro
   );
 }
 
-// ─── Type badge helper ────────────────────────────────────────────────────────
-function TypeBadge({ type }: { type: AdjustmentType }) {
-  const cfg = ADJUSTMENT_TYPES.find((t) => t.value === type)!;
-  const Icon = cfg.icon;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color}`}>
-      <Icon className="h-3 w-3" />{type}
-    </span>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClerkStockAdjustment() {
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [historySearch, setHistorySearch] = useState("");
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [logs, setLogs] = useState<any[]>([]);
 
   const handleSaved = () => { setModalOpen(false); setRefreshKey((k) => k + 1); };
 
-  const filteredHistory = adjustmentHistory.filter((r) =>
-    historySearch === "" ||
-    r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
-    r.barcode.toLowerCase().includes(historySearch.toLowerCase()) ||
-    r.type.toLowerCase().includes(historySearch.toLowerCase())
-  );
+  // Load adjustment history
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setLoadingLogs(true);
+      try {
+        const data = await getInventoryLogs();
+        const adjustmentLogs = data.filter(log => log.action === "Stock Adjustment" || log.transaction_type === "Adjustment");
+        setLogs(adjustmentLogs);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load logs");
+      } finally {
+        setLoadingLogs(false);
+      }
+    };
+    fetchLogs();
+  }, [refreshKey]);
 
-  // Stats
-  const totalAdjusted = adjustmentHistory.length + refreshKey * 0; // trigger re-render
-  const damagedCount  = adjustmentHistory.filter((r) => r.type === "Damaged").length;
-  const lostCount     = adjustmentHistory.filter((r) => r.type === "Lost").length;
-  const expiredCount  = adjustmentHistory.filter((r) => r.type === "Expired").length;
+  // Calculate stats
+  const totalAdjustments = logs.length;
+  const damagedCount = logs.filter(l => l.adjustment_type === 'DAMAGED').length;
+  const lostCount = logs.filter(l => l.adjustment_type === 'LOST').length;
+  const expiredCount = logs.filter(l => l.adjustment_type === 'EXPIRED').length;
+
+  // Filtered history
+  const filteredHistory = logs.filter((r) =>
+    historySearch === "" ||
+    (r.product_name || "").toLowerCase().includes(historySearch.toLowerCase()) ||
+    (r.barcode || "").toLowerCase().includes(historySearch.toLowerCase()) ||
+    (r.adjustment_type || "").toLowerCase().includes(historySearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -372,8 +390,7 @@ export default function ClerkStockAdjustment() {
         </div>
         <Button
           onClick={() => setModalOpen(true)}
-          className="gap-2 bg-amber-600 hover:bg-amber-700 flex-shrink-0"
-        >
+          className="gap-2 bg-amber-600 hover:bg-amber-700 flex-shrink-0">
           <SlidersHorizontal className="h-4 w-4" /> New Adjustment
         </Button>
       </div>
@@ -381,10 +398,10 @@ export default function ClerkStockAdjustment() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Adjustments", value: totalAdjusted, color: "text-gray-900", bg: "bg-gray-50",    border: "" },
-          { label: "Damaged",           value: damagedCount,  color: "text-red-600",  bg: "bg-red-50",     border: "border-red-100" },
-          { label: "Lost",              value: lostCount,     color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
-          { label: "Expired",           value: expiredCount,  color: "text-amber-600", bg: "bg-amber-50",  border: "border-amber-100" },
+          { label: "Total Adjustments", value: totalAdjustments, color: "text-gray-900", bg: "bg-gray-50", border: "" },
+          { label: "Damaged", value: damagedCount, color: "text-red-600", bg: "bg-red-50", border: "border-red-100" },
+          { label: "Lost", value: lostCount, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
+          { label: "Expired", value: expiredCount, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
         ].map((s) => (
           <Card key={s.label} className={`p-4 text-center ${s.bg} ${s.border}`}>
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -415,13 +432,21 @@ export default function ClerkStockAdjustment() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {["ID", "Product", "Type", "Deducted / Set", "Prev Qty", "New Qty", "Reason", "Date"].map((h) => (
+                {["ID", "Product", "Type", "Deducted/Set", "Previous Qty", "New Qty", "Reason", "Date"].map((h) => (
                   <th key={h} className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredHistory.length === 0 ? (
+              {loadingLogs ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-gray-100">
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <td key={j} className="py-3 px-4"><Skeleton className="h-4 w-full" /></td>
+                    ))}
+                  </tr>
+                ))
+              ) : filteredHistory.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-14 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-400">
@@ -430,23 +455,25 @@ export default function ClerkStockAdjustment() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredHistory.map((r, idx) => (
-                <tr key={r.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
+              ) : filteredHistory.map((r) => (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs font-semibold text-amber-700">{r.id}</td>
                   <td className="py-3 px-4">
-                    <p className="font-medium text-gray-900 text-xs">{r.productName}</p>
+                    <p className="font-medium text-gray-900 text-xs">{r.product_name}</p>
                     <p className="text-xs text-gray-400 font-mono">{r.barcode}</p>
                   </td>
-                  <td className="py-3 px-4"><TypeBadge type={r.type} /></td>
+                  <td className="py-3 px-4"><TypeBadge type={r.adjustment_type} /></td>
                   <td className="py-3 px-4 font-bold text-red-600 text-sm">
-                    {r.type === "Correction" ? `→${r.qty}` : `-${r.qty}`}
+                    {r.adjustment_type === 'CORRECTION' ? `→${r.quantity_change}` : `-${r.quantity_change}`}
                   </td>
-                  <td className="py-3 px-4 text-gray-500 text-sm">{r.prevQty}</td>
-                  <td className="py-3 px-4 font-bold text-gray-900 text-sm">{r.newQty}</td>
+                  <td className="py-3 px-4 text-gray-500 text-sm">{r.previous_quantity}</td>
+                  <td className="py-3 px-4 font-bold text-gray-900 text-sm">{r.new_quantity}</td>
                   <td className="py-3 px-4 text-gray-600 text-xs max-w-[180px]">
                     <span className="truncate block">{r.reason}</span>
                   </td>
-                  <td className="py-3 px-4 text-gray-400 text-xs whitespace-nowrap">{r.date}</td>
+                  <td className="py-3 px-4 text-gray-500 text-xs whitespace-nowrap">
+                    {new Date(r.created_at).toLocaleString()}
+                  </td>
                 </tr>
               ))}
             </tbody>

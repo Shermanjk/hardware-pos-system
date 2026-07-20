@@ -53,29 +53,28 @@ export default function ClerkSidebar({ isOpen, onToggle }: ClerkSidebarProps) {
           const Icon = item.icon;
           const isActive = location === item.href;
           return (
-            <Link key={item.href} href={item.href}>
-              <a
-                title={!isOpen ? item.label : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group
-                  ${isActive
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
-                    : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                  }`}
-              >
-                <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-                {isOpen && (
-                  <span className="text-sm font-medium truncate">{item.label}</span>
-                )}
-                {/* Low stock badge */}
-                {isOpen && item.href === "/clerk/low-stock" && (
-                  <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                    !
-                  </span>
-                )}
-                {isActive && isOpen && item.href !== "/clerk/low-stock" && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
-                )}
-              </a>
+            <Link
+              key={item.href}
+              href={item.href}
+              title={!isOpen ? item.label : undefined}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group
+                ${isActive
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                  : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
+                }`}
+            >
+              <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
+              {isOpen && (
+                <span className="text-sm font-medium truncate">{item.label}</span>
+              )}
+              {isOpen && item.href === "/clerk/low-stock" && (
+                <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  !
+                </span>
+              )}
+              {isActive && isOpen && item.href !== "/clerk/low-stock" && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
+              )}
             </Link>
           );
         })}

@@ -12,9 +12,7 @@ import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { liveProducts } from "./ClerkStockIn";
-import { mockActivityLogs } from "@/modules/clerk/mockData";
-import { nanoid } from "nanoid";
+import { getInventory, submitStockAdjustment } from "@/shared/api/inventoryApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CountRow {
@@ -66,24 +64,31 @@ export default function ClerkStockCount() {
     new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
   );
 
-  // Initialise rows from liveProducts
+  // Initialise rows from real API
   useEffect(() => {
-    const t = setTimeout(() => {
-      setRows(
-        liveProducts.map((p) => ({
-          productId: p.id,
-          barcode: p.barcode,
-          productName: p.name,
-          category: p.category,
-          unit: p.unit,
-          systemQty: p.quantity,
-          physicalCount: "",
-          remarks: "",
-        }))
-      );
-      setLoading(false);
-    }, 700);
-    return () => clearTimeout(t);
+    const fetchData = async () => {
+      try {
+        const data = await getInventory();
+        setRows(
+          data.map((p) => ({
+            productId: p.id,
+            barcode: p.barcode,
+            productName: p.product_name,
+            category: p.category,
+            unit: p.unit,
+            systemQty: p.quantity,
+            physicalCount: "",
+            remarks: "",
+          }))
+        );
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load products");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   // Reset count sheet
@@ -121,49 +126,38 @@ export default function ClerkStockCount() {
 
   const canComplete = countedRows.length > 0;
 
-  // Save stock count — update liveProducts for rows with a difference
-  const handleSave = () => {
-    let updatedCount = 0;
-    countedRows.forEach((row) => {
-      const physical = parseInt(row.physicalCount, 10);
-      if (physical !== row.systemQty) {
-        const p = liveProducts.find((p) => p.id === row.productId);
-        if (p) {
-          p.quantity = physical;
-          if (p.quantity === 0)                          p.status = "Out of Stock";
-          else if (p.quantity <= p.reorderLevel * 0.5)  p.status = "Critical";
-          else if (p.quantity <= p.reorderLevel)         p.status = "Low Stock";
-          else                                           p.status = "In Stock";
-          updatedCount++;
-        }
-      }
-    });
-
-    // Log activity
-    mockActivityLogs.unshift({
-      id: nanoid(6),
-      action: "Completed Stock Count",
-      product: `${countedRows.length} product(s) counted`,
-      qtyChange: `${updatedCount} adjusted`,
-      performedBy: "Maria Santos",
-      timestamp: new Date().toLocaleString("en-US", {
-        year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-      }),
-    });
-
-    toast.success(
-      `Stock count completed — ${countedRows.length} counted, ${updatedCount} quantity update(s) applied`
+  // Save stock count — submit corrections via API
+  const handleSave = async () => {
+    const rowsWithDiff = countedRows.filter(
+      (r) => parseInt(r.physicalCount, 10) !== r.systemQty
     );
-    setCountComplete(true);
-    // Update systemQty in rows to reflect new values
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.physicalCount !== "") {
-          return { ...r, systemQty: parseInt(r.physicalCount, 10), physicalCount: "", remarks: "" };
-        }
-        return r;
-      })
-    );
+    try {
+      await Promise.all(
+        rowsWithDiff.map((row) =>
+          submitStockAdjustment({
+            product_id: row.productId,
+            type: "Correction",
+            quantity: parseInt(row.physicalCount, 10),
+            reason: row.remarks || "Stock count correction",
+          })
+        )
+      );
+      toast.success(
+        `Stock count completed — ${countedRows.length} counted, ${rowsWithDiff.length} quantity update(s) applied`
+      );
+      setCountComplete(true);
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.physicalCount !== "") {
+            return { ...r, systemQty: parseInt(r.physicalCount, 10), physicalCount: "", remarks: "" };
+          }
+          return r;
+        })
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save stock count");
+    }
   };
 
   return (

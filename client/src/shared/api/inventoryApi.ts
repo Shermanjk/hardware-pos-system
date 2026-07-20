@@ -92,3 +92,39 @@ export async function getInventoryLogs(options: {
   });
   return res.data;
 }
+
+export interface StockInItem {
+  product_id: number;
+  quantity_received: number;
+  unit_cost?: number;
+}
+
+export type StockInSource =
+  | "Supplier Delivery"
+  | "Direct Purchase";
+
+export interface StockInPayload {
+  source: StockInSource;
+  supplier_id?: number;
+  invoice_number?: string;
+  delivery_date: string;
+  remarks?: string;
+  items: StockInItem[];
+}
+
+export async function submitStockIn(payload: StockInPayload): Promise<{ message: string; stock_in_id: string; reference: string }> {
+  const res = await axios.post("/api/inventory/stock-in", payload, { headers: authHeaders() });
+  return res.data;
+}
+
+export interface StockAdjustmentPayload {
+  product_id: number;
+  type: "Damaged" | "Lost" | "Expired" | "Correction";
+  quantity: number;
+  reason: string;
+}
+
+export async function submitStockAdjustment(payload: StockAdjustmentPayload): Promise<{ message: string; product_id: number; type: string; new_quantity: number }> {
+  const res = await axios.post("/api/inventory/stock-adjustment", payload, { headers: authHeaders() });
+  return res.data;
+}

@@ -90,44 +90,40 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           const isAlert  = item.href === "/reorder-alerts";
 
           return (
-            <Link key={item.href} href={item.href}>
-              <a
-                title={!isOpen ? item.label : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
-                  ${isActive
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
-                    : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                  }`}
-              >
-                {/* Icon — with pulsing red dot overlay when alerts exist */}
-                <span className="relative shrink-0">
-                  <Icon className={`h-5 w-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-                  {isAlert && hasAlerts && (
-                    <>
-                      {/* Outer ping ring */}
-                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-ping opacity-75" />
-                      {/* Solid dot on top */}
-                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 ring-2 ring-[#0f172a]" />
-                    </>
-                  )}
+            <Link
+              key={item.href}
+              href={item.href}
+              title={!isOpen ? item.label : undefined}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
+                ${isActive
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                  : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
+                }`}
+            >
+              {/* Icon — with pulsing red dot overlay when alerts exist */}
+              <span className="relative shrink-0">
+                <Icon className={`h-5 w-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
+                {isAlert && hasAlerts && (
+                  <>
+                    <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-ping opacity-75" />
+                    <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 ring-2 ring-[#0f172a]" />
+                  </>
+                )}
+              </span>
+
+              {isOpen && (
+                <span className="text-sm font-medium truncate flex-1">{item.label}</span>
+              )}
+
+              {isOpen && isAlert && hasAlerts && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
+                  {alertCount > 99 ? "99+" : alertCount}
                 </span>
+              )}
 
-                {isOpen && (
-                  <span className="text-sm font-medium truncate flex-1">{item.label}</span>
-                )}
-
-                {/* Alert count badge (expanded sidebar only) */}
-                {isOpen && isAlert && hasAlerts && (
-                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
-                    {alertCount > 99 ? "99+" : alertCount}
-                  </span>
-                )}
-
-                {/* Active dot for non-alert items */}
-                {isActive && isOpen && !isAlert && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
-                )}
-              </a>
+              {isActive && isOpen && !isAlert && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
+              )}
             </Link>
           );
         })}

@@ -11,13 +11,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   Barcode, Search, Printer, ScanLine, Package,
-  Tag, Layers, X, CheckCircle2,
+  Tag, Layers, X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { liveProducts } from "./ClerkStockIn";
-import { mockActivityLogs } from "@/modules/clerk/mockData";
-import type { Product } from "@/modules/clerk/types";
-import { nanoid } from "nanoid";
+import { getProducts, type ProductRecord } from "@/shared/api/productsApi";
 
 // ─── Label size options ───────────────────────────────────────────────────────
 const LABEL_SIZES = [
@@ -27,10 +24,9 @@ const LABEL_SIZES = [
 ];
 
 // ─── CSS-only barcode renderer ────────────────────────────────────────────────
-// Converts each character of the barcode string into alternating-width bars.
 function VisualBarcode({ code, height = 48 }: { code: string; height?: number }) {
   const bars = code.split("").flatMap((char) => {
-    const w = (char.charCodeAt(0) % 3) + 1; // 1–3 px wide bar
+    const w = (char.charCodeAt(0) % 3) + 1;
     const gap = 1;
     return [
       { type: "bar", width: w },
@@ -63,7 +59,7 @@ function LabelPreview({
   product,
   size,
 }: {
-  product: Product;
+  product: ProductRecord;
   size: typeof LABEL_SIZES[number];
 }) {
   const isLarge = size.value === "large";
@@ -76,12 +72,12 @@ function LabelPreview({
     >
       {isLarge && (
         <p className="text-center font-bold leading-tight" style={{ fontSize: "7px", maxWidth: "100%" }}>
-          {product.name.length > 28 ? product.name.slice(0, 28) + "…" : product.name}
+          {product.product_name.length > 28 ? product.product_name.slice(0, 28) + "…" : product.product_name}
         </p>
       )}
       {isMedium && (
         <p className="text-center font-bold leading-tight" style={{ fontSize: "6px", maxWidth: "100%" }}>
-          {product.name.length > 20 ? product.name.slice(0, 20) + "…" : product.name}
+          {product.product_name.length > 20 ? product.product_name.slice(0, 20) + "…" : product.product_name}
         </p>
       )}
       <VisualBarcode code={product.barcode} height={isLarge ? 56 : isMedium ? 36 : 28} />
@@ -97,7 +93,7 @@ function LabelPreview({
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────
 interface PrintModalProps {
-  product: Product | null;
+  product: ProductRecord | null;
   open: boolean;
   onClose: () => void;
 }
@@ -110,7 +106,6 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
 
   const handlePrint = () => {
     if (!product) return;
-    // Inject print styles targeting the print-area div
     const style = document.createElement("style");
     style.id = "__barcode_print_style__";
     style.innerHTML = `
@@ -124,18 +119,7 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
     setTimeout(() => {
       document.getElementById("__barcode_print_style__")?.remove();
     }, 1000);
-
-    mockActivityLogs.unshift({
-      id: nanoid(6),
-      action: "Printed Barcode",
-      product: product.name,
-      qtyChange: "—",
-      performedBy: "Maria Santos",
-      timestamp: new Date().toLocaleString("en-US", {
-        year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-      }),
-    });
-    toast.success(`Printing ${labelCount} label(s) for "${product.name}"`);
+    toast.success(`Printing ${labelCount} label(s) for "${product.product_name}"`);
     onClose();
   };
 
@@ -145,7 +129,7 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
 
   return (
     <>
-      {/* Hidden print area — shown only during print via injected CSS */}
+      {/* Hidden print area */}
       <div
         id="barcode-print-area"
         className="hidden"
@@ -175,7 +159,7 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
                 <Package className="h-4 w-4 text-blue-700" />
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-gray-900 text-sm truncate">{product.name}</p>
+                <p className="font-semibold text-gray-900 text-sm truncate">{product.product_name}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{product.category} · {product.unit}</p>
               </div>
             </div>
@@ -267,23 +251,32 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClerkBarcodePrinting() {
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductRecord[]>([]);
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [lookupError, setLookupError] = useState("");
 
   useEffect(() => {
-    const t = setTimeout(() => { setProducts(liveProducts); setLoading(false); }, 600);
-    return () => clearTimeout(t);
+    const fetchData = async () => {
+      try {
+        const data = await getProducts();
+        setProducts(data);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load products");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  // Filter results
   const filtered = useMemo(() =>
     products.filter((p) =>
       search === "" ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.product_name.toLowerCase().includes(search.toLowerCase()) ||
       p.barcode.toLowerCase().includes(search.toLowerCase()) ||
       p.category.toLowerCase().includes(search.toLowerCase())
     ),
@@ -304,7 +297,7 @@ export default function ClerkBarcodePrinting() {
     }
   };
 
-  const openModal = (product: Product) => {
+  const openModal = (product: ProductRecord) => {
     setSelectedProduct(product);
     setModalOpen(true);
     setLookupError("");
@@ -332,7 +325,6 @@ export default function ClerkBarcodePrinting() {
       {/* Search bar */}
       <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Name/category search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <Input
@@ -343,7 +335,6 @@ export default function ClerkBarcodePrinting() {
             />
           </div>
 
-          {/* Barcode scan / direct lookup */}
           <div className="flex gap-2">
             <div className="relative flex-1">
               <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
@@ -396,7 +387,6 @@ export default function ClerkBarcodePrinting() {
                 className="p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
                 onClick={() => openModal(product)}
               >
-                {/* Barcode visual */}
                 <div className="flex justify-center mb-3 p-2 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors">
                   <VisualBarcode code={product.barcode} height={36} />
                 </div>
@@ -407,7 +397,7 @@ export default function ClerkBarcodePrinting() {
 
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
-                    {product.name}
+                    {product.product_name}
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
                     <Tag className="h-3 w-3" />
@@ -442,36 +432,17 @@ export default function ClerkBarcodePrinting() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {["Product", "Performed By", "Time"].map((h) => (
+                {["Product", "Time"].map((h) => (
                   <th key={h} className="text-left py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {mockActivityLogs
-                .filter((l) => l.action === "Printed Barcode")
-                .slice(0, 8)
-                .map((log, idx) => (
-                  <tr key={log.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
-                    <td className="py-3 px-5">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-blue-50 rounded-lg">
-                          <Printer className="h-3.5 w-3.5 text-blue-600" />
-                        </div>
-                        <span className="font-medium text-gray-800 text-sm">{log.product}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-5 text-gray-500 text-sm">{log.performedBy}</td>
-                    <td className="py-3 px-5 text-gray-400 text-xs whitespace-nowrap">{log.timestamp}</td>
-                  </tr>
-                ))}
-              {mockActivityLogs.filter((l) => l.action === "Printed Barcode").length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-8 text-center text-gray-400 text-sm">
-                    No barcode labels printed yet this session
-                  </td>
-                </tr>
-              )}
+              <tr>
+                <td colSpan={2} className="py-8 text-center text-gray-400 text-sm">
+                  No barcode labels printed yet this session
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
