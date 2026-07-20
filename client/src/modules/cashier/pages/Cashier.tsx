@@ -17,6 +17,7 @@ import { createSale, type CreateSalePayload, getSaleByInvoice, type Sale } from 
 import { createReturn, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
 import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
+import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -95,6 +96,7 @@ interface SaleReceiptParams {
   cashCents: number;
   changeCents: number | null;
   cashierName: string;
+  settings: StoreSettings;
 }
 
 // ─── Text helpers for monospace receipt layout ───────────────────────────────
@@ -122,8 +124,19 @@ function buildReceiptText(params: SaleReceiptParams): string {
   const {
     invoiceNumber, cartItems, customerInfo,
     subtotalCents, taxCents, totalCents,
-    cashCents, changeCents, cashierName,
+    cashCents, changeCents, cashierName, settings,
   } = params;
+
+  const storeName     = settings.store_name     || "ISRA HARDWARE";
+  const storeFb       = settings.store_fb       || "Rexjie Saludo";
+  const storePhone    = settings.store_phone    || "09093250717";
+  const storeAddress  = settings.store_address  || "Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur";
+  const storeTIN      = settings.business_license || "765-490-574-00000";
+  const taxRate       = settings.tax_rate > 0   ? settings.tax_rate : 12;
+  const currSym       = settings.currency === "PHP" ? "P" : settings.currency;
+  const taxDivisor    = 100 + taxRate;
+  const dynTaxCents   = Math.round(totalCents * taxRate / taxDivisor);
+  const dynSubCents   = totalCents - dynTaxCents;
 
   const now     = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -133,11 +146,11 @@ function buildReceiptText(params: SaleReceiptParams): string {
   const ln = (s = "") => lines.push(s);
 
   ln(rule("="));
-  ln(center("ISRA HARDWARE"));
-  ln(center("Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur"));
+  ln(center(storeName));
+  ln(center(storeAddress));
   ln(center("Philippines"));
-  ln(center("TIN: 765-490-574-00000 (VAT-Registered)"));
-  ln(center("Fb: Rexjie Saludo   |   Tel No: 09093250717"));
+  ln(center(`TIN: ${storeTIN} (VAT-Registered)`));
+  ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
   ln(center("SALES INVOICE"));
   ln();
@@ -158,31 +171,31 @@ function buildReceiptText(params: SaleReceiptParams): string {
     const qty  = String(item.quantity).padEnd(5);
     const unit = (item.unit || "").padEnd(8);
     const desc = item.name.length > 28 ? item.name.slice(0, 27) + "…" : item.name.padEnd(28);
-    const up   = `P ${fmtCents(toCentavos(item.unitPrice))}`.padStart(14);
-    const amt  = `P ${fmtCents(toCentavos(item.subtotal))}`.padStart(12);
+    const up   = `${currSym} ${fmtCents(toCentavos(item.unitPrice))}`.padStart(14);
+    const amt  = `${currSym} ${fmtCents(toCentavos(item.subtotal))}`.padStart(12);
     ln(`${qty} ${unit} ${desc} ${up} ${amt}`);
   }
 
   ln(rule("-"));
-  ln(lr(`ITEMS TOTAL: ${totalItems}`, `TOTAL:    P ${fmtCents(totalCents)}`));
+  ln(lr(`ITEMS TOTAL: ${totalItems}`, `TOTAL:    ${currSym} ${fmtCents(totalCents)}`));
   ln(rule("-"));
   ln(center("BREAKDOWN:"));
 
   const bw = 42; // breakdown block width
   const bline = (label: string, cents: number) => {
-    const val = `P ${fmtCents(cents)}`;
+    const val = `${currSym} ${fmtCents(cents)}`;
     const row = `${label}${val.padStart(bw - label.length)}`;
     ln(" ".repeat(Math.floor((W - bw) / 2)) + row);
   };
-  bline("VATable Sales:", subtotalCents);
-  bline("12% VAT:",       taxCents);
-  bline("Zero-Rated:",    0);
-  bline("VAT Exempt:",    0);
+  bline("VATable Sales:",   dynSubCents);
+  bline(`${taxRate}% VAT:`, dynTaxCents);
+  bline("Zero-Rated:",      0);
+  bline("VAT Exempt:",      0);
   ln(" ".repeat(Math.floor((W - bw) / 2)) + "-".repeat(bw));
-  bline("TOTAL DUE:",     totalCents);
+  bline("TOTAL DUE:",       totalCents);
   ln();
-  ln(`Cash Tendered:  P ${fmtCents(cashCents)}`);
-  ln(`Change:         P ${fmtCents(changeCents ?? 0)}`);
+  ln(`Cash Tendered:  ${currSym} ${fmtCents(cashCents)}`);
+  ln(`Change:         ${currSym} ${fmtCents(changeCents ?? 0)}`);
   ln(rule("-"));
   ln(`PROCESSED BY: ${cashierName}`);
   ln(rule("-"));
@@ -238,6 +251,15 @@ function LiveClock() {
 export default function Cashier() {
   const { logout, user } = useAuth();
 
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>({
+    store_name: "", store_fb: "", store_phone: "", store_address: "",
+    currency: "PHP", tax_rate: 0, business_license: "",
+  });
+
+  useEffect(() => {
+    getSettings().then(setStoreSettings).catch(() => {/* use defaults */});
+  }, []);
+
   // ── Cart — starts empty, filled by scanning/searching products ───────────
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
@@ -289,7 +311,8 @@ export default function Cashier() {
 
   // Sum item subtotals in centavos (prices are VAT-inclusive)
   const totalCents     = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
-  const taxCents       = Math.round(totalCents * 12 / 112);
+  const taxRate        = storeSettings.tax_rate > 0 ? storeSettings.tax_rate : 12;
+  const taxCents       = Math.round(totalCents * taxRate / (100 + taxRate));
   const subtotalCents  = totalCents - taxCents;
 
   const cashCents      = parseCashInput(cashTendered);
@@ -584,6 +607,12 @@ export default function Cashier() {
           unit_price: i.unit_price,
         })),
         resolved_at: resolved.resolved_at ?? undefined,
+        store_name:    storeSettings.store_name,
+        store_fb:      storeSettings.store_fb,
+        store_phone:   storeSettings.store_phone,
+        store_address: storeSettings.store_address,
+        store_tin:     storeSettings.business_license,
+        currency:      storeSettings.currency,
       });
       toast.success(
         resolution === "refund"
@@ -636,6 +665,7 @@ export default function Cashier() {
         cashCents,
         changeCents,
         cashierName: user?.full_name ?? "—",
+        settings: storeSettings,
       });
 
       clearCart();
@@ -934,7 +964,7 @@ export default function Cashier() {
             </div>
 
             <div className="flex justify-between text-sm text-gray-600">
-              <span>VAT (12%)</span>
+              <span>VAT ({storeSettings.tax_rate > 0 ? storeSettings.tax_rate : 12}%)</span>
               <span className="font-medium tabular-nums">₱{fmtCents(taxCents)}</span>
             </div>
 
@@ -1099,7 +1129,7 @@ export default function Cashier() {
           ) : (
             heldOrders.map((hold) => {
               const holdTotalCents = hold.cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
-              const holdTax   = Math.round(holdTotalCents * 12 / 112);
+              const holdTax   = Math.round(holdTotalCents * taxRate / (100 + taxRate));
               const holdTotal = holdTotalCents;
               const heldTime  = hold.heldAt.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 

@@ -16,6 +16,7 @@ import inventoryRoutes from "./routes/inventory.js";
 import reorderAlertsRoutes from "./routes/reorderAlerts.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import reportsRoutes from "./routes/reports.js";
+import settingsRoutes from "./routes/settings.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,7 @@ async function startServer() {
   app.use("/api/reorder-alerts", reorderAlertsRoutes);
   app.use("/api/dashboard", dashboardRoutes);
   app.use("/api/reports",   reportsRoutes);
+  app.use("/api/settings",  settingsRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   if (process.env.NODE_ENV === "production") {

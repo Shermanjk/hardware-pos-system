@@ -14,9 +14,22 @@ export interface ReturnReceiptData {
   refund_amount: number | null;
   items: ReturnReceiptItem[];
   resolved_at?: string;
+  store_name?: string;
+  store_fb?: string;
+  store_phone?: string;
+  store_address?: string;
+  store_tin?: string;
+  currency?: string;
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
+  const storeName    = data.store_name    || "ISRA HARDWARE";
+  const storeFb      = data.store_fb      || "Rexjie Saludo";
+  const storePhone   = data.store_phone   || "09093250717";
+  const storeAddress = data.store_address || "Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur";
+  const storeTIN     = data.store_tin     || "765-490-574-00000";
+  const currSym      = data.currency === "PHP" || !data.currency ? "&#8369;" : data.currency;
+
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
@@ -30,15 +43,15 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
         `<tr>
           <td style="padding:3px 4px;border-bottom:1px solid #eee;">${item.product_name}</td>
           <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:center;">${item.quantity_returned}</td>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">&#8369;${fmtPeso(item.unit_price)}</td>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">&#8369;${fmtPeso(item.unit_price * item.quantity_returned)}</td>
+          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">${currSym}${fmtPeso(item.unit_price)}</td>
+          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">${currSym}${fmtPeso(item.unit_price * item.quantity_returned)}</td>
         </tr>`
     )
     .join("");
 
   const resolutionLabel =
     data.resolution === "refund"
-      ? `<div class="r tr" style="font-size:13px;"><span>Total Refund</span><span>&#8369;${fmtPeso(data.refund_amount ?? 0)}</span></div>`
+      ? `<div class="r tr" style="font-size:13px;"><span>Total Refund</span><span>${currSym}${fmtPeso(data.refund_amount ?? 0)}</span></div>`
       : `<div style="text-align:center;font-weight:bold;margin:6px 0;font-size:13px;letter-spacing:1px;">REPLACEMENT</div>`;
 
   const conditionLabel =
@@ -66,10 +79,12 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   .badge{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:2px 8px;font-size:11px;display:inline-block;margin-top:4px;}
   @media print{body{padding:0}}
 </style></head><body>
-<div class="c">
-  <div class="b" style="font-size:15px">ISRA HARDWARE</div>
-  <div>Point of Sale &amp; Inventory System</div>
-  <div style="font-size:11px;color:#555;margin-top:3px">Return Receipt</div>
+  <div class="c">
+  <div class="b" style="font-size:15px">${storeName}</div>
+  <div>${storeAddress}</div>
+  <div style="font-size:11px;color:#555;margin-top:3px">TIN: ${storeTIN} (VAT-Registered)</div>
+  <div style="font-size:11px;color:#555;">Return Receipt</div>
+  <div style="font-size:11px;color:#555;">Fb: ${storeFb} | Tel: ${storePhone}</div>
 </div>
 <hr/>
 ${barcodeDisplay}

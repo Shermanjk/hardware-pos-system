@@ -344,7 +344,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             ) : (
               <div className="flex gap-2">
                 <Input ref={barcodeInputRef} value={form.barcode}
-                  onChange={(e) => set("barcode", e.target.value)}
+                  onChange={(e) => set("barcode", e.target.value.replace(/\s/g, ""))}
+                  onKeyDown={(e) => e.key === " " && e.preventDefault()}
                   placeholder="Scan or enter barcode (e.g. 6920130600854)"
                   disabled={isLoading}
                   className={errors.barcode ? "border-red-400" : ""} />
@@ -692,7 +693,7 @@ export default function Products() {
       return exists ? prev.map((p) => p.id === product.id ? product : p) : [product, ...prev];
     });
     showToast(`${product.product_name} saved successfully.`);
-    setPrintTarget(product);
+    if (product.barcode_source === "store") setPrintTarget(product);
   };
 
   const handleDeleted = (id: number, soft: boolean) => {

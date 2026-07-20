@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from "react";
+﻿import { useState, useCallback, useEffect } from "react";
 import { FileText, Download, RefreshCw, AlertCircle, Calendar, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
+import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,8 @@ function urgencyBadge(s: string) {
 
 // ─── Excel Generator ──────────────────────────────────────────────────────────
 
-function generateExcel(data: ReportData) {
+function generateExcel(data: ReportData, store: StoreSettings) {
+  const storeName = store.store_name || "Isra Hardware";
   const wb = XLSX.utils.book_new();
   const add = (name: string, headers: string[], rows: (string | number)[][]) => {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -79,6 +81,7 @@ function generateExcel(data: ReportData) {
     XLSX.utils.book_append_sheet(wb, ws, name);
   };
   add("Summary", ["Metric","Value"], [
+    ["Store", storeName],
     ["Report Period", `${data.period.date_from} to ${data.period.date_to}`],
     ["Generated", new Date(data.generated_at).toLocaleString("en-PH")], [""],
     ["Total Transactions", data.summary.total_transactions],
@@ -103,12 +106,13 @@ function generateExcel(data: ReportData) {
     data.low_stock.length > 0
       ? data.low_stock.map((r) => [r.barcode, r.product_name, r.category, r.quantity, r.reorder_level, Math.max(0, r.reorder_level - r.quantity), r.stock_status])
       : [["All products are sufficiently stocked"]]);
-  XLSX.writeFile(wb, `Isra_Hardware_Report_${data.period.date_from}_to_${data.period.date_to}.xlsx`);
+  XLSX.writeFile(wb, `${storeName.replace(/\s+/g, "_")}_Report_${data.period.date_from}_to_${data.period.date_to}.xlsx`);
 }
 
 // ─── PDF Generator ────────────────────────────────────────────────────────────
 
-function generatePDF(data: ReportData) {
+function generatePDF(data: ReportData, store: StoreSettings) {
+  const storeName = store.store_name || "ISRA HARDWARE";
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const PW = doc.internal.pageSize.getWidth(), M = 14;
   let y = 14;
@@ -127,7 +131,7 @@ function generatePDF(data: ReportData) {
   };
   doc.setFillColor(37, 99, 235); doc.rect(0, 0, PW, 20, "F");
   doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont("helvetica", "bold");
-  doc.text("ISRA HARDWARE — BUSINESS PERFORMANCE REPORT", M, 13);
+  doc.text(`${storeName} — BUSINESS PERFORMANCE REPORT`, M, 13);
   doc.setTextColor(0, 0, 0); y = 26; doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(90, 90, 90);
   doc.text(`Period: ${fmtDate(data.period.date_from)} to ${fmtDate(data.period.date_to)}`, M, y);
   doc.text(`Generated: ${new Date(data.generated_at).toLocaleString("en-PH")}`, M, y + 4);
@@ -183,15 +187,16 @@ function generatePDF(data: ReportData) {
   const pages = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150, 150, 150);
-    doc.text("Isra Hardware POS — Confidential", M, doc.internal.pageSize.getHeight() - 6);
+    doc.text(`${storeName} POS — Confidential`, M, doc.internal.pageSize.getHeight() - 6);
     doc.text(`Page ${i} of ${pages}`, PW - M, doc.internal.pageSize.getHeight() - 6, { align: "right" });
   }
-  doc.save(`Isra_Hardware_Report_${data.period.date_from}_to_${data.period.date_to}.pdf`);
+  doc.save(`${storeName.replace(/\s+/g, "_")}_Report_${data.period.date_from}_to_${data.period.date_to}.pdf`);
 }
 
 // ─── Print Helper ─────────────────────────────────────────────────────────────
 
-function printReport(data: ReportData) {
+function printReport(data: ReportData, store: StoreSettings) {
+  const storeName = store.store_name || "ISRA HARDWARE";
   const css = `body{font-family:Arial,sans-serif;font-size:11px;color:#111;margin:20px}h1{font-size:15px;margin:0 0 2px}h2{font-size:11px;background:#1e3a8a;color:#fff;padding:4px 8px;margin:16px 0 6px}p.m{font-size:10px;color:#555;margin:0 0 14px}table{width:100%;border-collapse:collapse;margin-bottom:4px}th{background:#2563eb;color:#fff;font-size:9px;font-weight:bold;padding:4px 6px;text-align:left}td{padding:3px 6px;font-size:9px;border-bottom:1px solid #e5e7eb}tr:nth-child(even) td{background:#f8fafc}tfoot td{background:#1e3a8a;color:#fff;font-weight:bold}.r{text-align:right}.c{text-align:center}.red{color:#dc2626}.ora{color:#ea580c}.amb{color:#d97706}.grn{color:#16a34a}@media print{@page{margin:15mm}}`;
   const tr = (cells: string[], cls: string[] = []) => `<tr>${cells.map((c, i) => `<td class="${cls[i]??""}">${c}</td>`).join("")}</tr>`;
   const th = (cols: string[]) => `<thead><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead>`;
@@ -199,7 +204,7 @@ function printReport(data: ReportData) {
   const w = window.open("","_blank","width=900,height=700");
   if (!w) return;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Report</title><style>${css}</style></head><body>
-    <h1>ISRA HARDWARE — BUSINESS PERFORMANCE REPORT</h1>
+    <h1>${storeName} — BUSINESS PERFORMANCE REPORT</h1>
     <p class="m">Period: ${fmtDate(data.period.date_from)} – ${fmtDate(data.period.date_to)} | Generated: ${new Date(data.generated_at).toLocaleString("en-PH")}</p>
     <h2>1. REVENUE SUMMARY</h2><table>${th(["Metric","Value"])}<tbody>
     ${[["Total Transactions",String(data.summary.total_transactions)],["Total Revenue",fmt(data.summary.total_revenue)],["Total VAT (12%)",fmt(data.summary.total_vat)],["Net Subtotal",fmt(data.summary.total_subtotal)],["Avg Order Value",fmt(data.summary.avg_order_value)],["Largest Sale",fmt(data.summary.largest_sale)],["Smallest Sale",fmt(data.summary.smallest_sale)]].map((r)=>tr(r,["","r"])).join("")}</tbody></table>
@@ -226,6 +231,14 @@ export default function Reports() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"pdf"|"excel"|"print"|null>(null);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>({
+    store_name: "", store_fb: "", store_phone: "", store_address: "",
+    currency: "PHP", tax_rate: 0, business_license: "",
+  });
+
+  useEffect(() => {
+    getSettings().then(setStoreSettings).catch(() => {/* use defaults */});
+  }, []);
 
   const load = useCallback(async () => {
     setIsLoading(true); setLoadError(null);
@@ -241,9 +254,9 @@ export default function Reports() {
     if (!data) return;
     setExporting(type);
     try {
-      if (type === "pdf")   generatePDF(data);
-      if (type === "excel") generateExcel(data);
-      if (type === "print") printReport(data);
+      if (type === "pdf")   generatePDF(data, storeSettings);
+      if (type === "excel") generateExcel(data, storeSettings);
+      if (type === "print") printReport(data, storeSettings);
     } finally { setExporting(null); }
   };
 

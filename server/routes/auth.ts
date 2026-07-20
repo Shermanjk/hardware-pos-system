@@ -91,7 +91,7 @@ router.post("/login", async (req: Request, res: Response) => {
     }
 
     // 8. Normal login — full-access token
-    const expiresIn = rememberMe ? "30d" : "8h";
+    const expiresIn = rememberMe ? "30d" : "12h";
     const token = jwt.sign(basePayload, secret, { expiresIn });
 
     // 9. Respond — never include password_hash

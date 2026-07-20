@@ -60,6 +60,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  // Periodically check if token has expired and auto-logout
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const stored = loadToken();
+      if (stored && !isTokenValid(stored)) {
+        clearToken();
+        setToken(null);
+        setUser(null);
+        setLocation("/login");
+      }
+    }, 60_000); // check every 60 seconds
+    return () => clearInterval(interval);
+  }, [setLocation]);
+
   const login = useCallback(
     async (
       username: string,
