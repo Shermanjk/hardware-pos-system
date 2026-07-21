@@ -170,6 +170,7 @@ export default function Login() {
                 checked={rememberMe}
                 onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                 disabled={isLoading}
+                className="border-gray-400"
               />
               <label htmlFor="remember" className="text-sm text-gray-700 cursor-pointer">
                 Remember me{" "}

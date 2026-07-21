@@ -3,8 +3,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 import { getSettings, updateSettings } from "@/shared/api/settingsApi";
 import { changePassword } from "@/shared/api/usersApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
@@ -29,216 +30,242 @@ function extractErrors(err: unknown): Record<string, string> {
   return { general: "An unexpected error occurred. Please try again." };
 }
 
-// ─── General Tab ──────────────────────────────────────────────────────────────
+// ─── Inline editable field ────────────────────────────────────────────────────
 
-function GeneralTab({ initial }: { initial: StoreSettings | null }) {
-  const [form, setForm] = useState({ store_name: "", store_fb: "", store_phone: "", store_address: "" });
-  const [errors, setErrors]     = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess]   = useState(false);
+interface EditableFieldProps {
+  label: string;
+  fieldKey: string;
+  savedValue: string;
+  placeholder?: string;
+  onSave: (key: string, value: string) => Promise<void>;
+}
 
-  useEffect(() => {
-    if (initial) setForm({
-      store_name:    initial.store_name,
-      store_fb:      initial.store_fb,
-      store_phone:   initial.store_phone,
-      store_address: initial.store_address,
-    });
-  }, [initial]);
+function EditableField({ label, fieldKey, savedValue, placeholder, onSave }: EditableFieldProps) {
+  const [editing,  setEditing]  = useState(false);
+  const [draft,    setDraft]    = useState(savedValue);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [saved,    setSaved]    = useState(false);
 
-  const set = (key: keyof typeof form, value: string) =>
-    setForm((p) => ({ ...p, [key]: value }));
+  // Keep draft in sync when parent reloads saved value
+  useEffect(() => { if (!editing) setDraft(savedValue); }, [savedValue, editing]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-    setSuccess(false);
-    setIsLoading(true);
+  const handleEdit = () => { setDraft(savedValue); setError(null); setEditing(true); };
+
+  const handleCancel = () => { setDraft(savedValue); setError(null); setEditing(false); };
+
+  const handleSave = async () => {
+    const trimmed = draft.trim();
+    setLoading(true);
+    setError(null);
     try {
-      await updateSettings({
-        store_name:    form.store_name.trim(),
-        store_fb:      form.store_fb.trim(),
-        store_phone:   form.store_phone.trim(),
-        store_address: form.store_address.trim(),
-      });
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      await onSave(fieldKey, trimmed);
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setErrors(extractErrors(err));
+      const errs = extractErrors(err);
+      setError(errs[fieldKey] ?? errs.general ?? "Failed to save.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
+    <div>
+      <Label className="mb-1.5 block font-semibold text-sm">{label}</Label>
+      {editing ? (
+        <div className="flex gap-2 items-center">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") handleCancel(); }}
+            placeholder={placeholder}
+            disabled={loading}
+            autoFocus
+            className={`h-9 text-sm flex-1 ${error ? "border-red-400" : ""}`}
+          />
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="w-8 h-8 flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 shrink-0"
+          >
+            {loading
+              ? <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              : <Check className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={loading}
+            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 text-gray-600 disabled:opacity-50 shrink-0"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 group">
+          <div className="flex-1 h-9 px-3 flex items-center rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-800 truncate">
+            {savedValue || <span className="text-gray-400 italic">{placeholder ?? "Not set"}</span>}
+          </div>
+          <button
+            onClick={handleEdit}
+            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-gray-400 hover:text-blue-600 transition-colors shrink-0"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          {saved && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+        </div>
+      )}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+// ─── General Tab ──────────────────────────────────────────────────────────────
+
+function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
+  const [saved, setSaved] = useState<Record<string, string>>({
+    store_name: "", store_fb: "", store_phone: "", store_address: "",
+  });
+
+  useEffect(() => {
+    if (initial) setSaved({
+      store_name:    initial.store_name    ?? "",
+      store_fb:      initial.store_fb      ?? "",
+      store_phone:   initial.store_phone   ?? "",
+      store_address: initial.store_address ?? "",
+    });
+  }, [initial]);
+
+  const handleSave = async (key: string, value: string) => {
+    const updated = await updateSettings({ [key]: value });
+    setSaved((p) => ({ ...p, [key]: value }));
+    onSettingsChange(updated);
+  };
+
+  const fields: { key: string; label: string; placeholder: string }[] = [
+    { key: "store_name",    label: "Store Name",    placeholder: "e.g. Isra Hardware" },
+    { key: "store_fb",      label: "Facebook Page", placeholder: "e.g. Isra Hardware Page" },
+    { key: "store_phone",   label: "Store Phone",   placeholder: "+63 912 345 6789" },
+    { key: "store_address", label: "Store Address", placeholder: "123 Main Street, City" },
+  ];
+
+  return (
     <Card className="p-6">
       <h2 className="text-lg font-display font-bold text-gray-900 mb-6">General Settings</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {errors.general && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{errors.general}</p>
-          </div>
-        )}
-        {success && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-            <p className="text-sm text-green-700 font-medium">General settings saved.</p>
-          </div>
-        )}
-
-        <div>
-          <Label className="mb-1.5 block font-semibold">Store Name</Label>
-          <Input value={form.store_name} onChange={(e) => set("store_name", e.target.value)}
-            placeholder="Isra Hardware" disabled={isLoading}
-            className={errors.store_name ? "border-red-400" : ""} />
-          {errors.store_name && <p className="mt-1 text-xs text-red-600">{errors.store_name}</p>}
-        </div>
-
-        <div>
-          <Label className="mb-1.5 block font-semibold">Facebook Page</Label>
-          <Input value={form.store_fb} onChange={(e) => set("store_fb", e.target.value)}
-            placeholder="e.g. Rexjie Saludo" disabled={isLoading}
-            className={errors.store_fb ? "border-red-400" : ""} />
-          {errors.store_fb && <p className="mt-1 text-xs text-red-600">{errors.store_fb}</p>}
-        </div>
-
-        <div>
-          <Label className="mb-1.5 block font-semibold">Store Phone</Label>
-          <Input value={form.store_phone} onChange={(e) => set("store_phone", e.target.value)}
-            placeholder="+63 912 345 6789" disabled={isLoading}
-            className={errors.store_phone ? "border-red-400" : ""} />
-          {errors.store_phone && <p className="mt-1 text-xs text-red-600">{errors.store_phone}</p>}
-        </div>
-
-        <div>
-          <Label className="mb-1.5 block font-semibold">Store Address</Label>
-          <Input value={form.store_address} onChange={(e) => set("store_address", e.target.value)}
-            placeholder="123 Main Street, City" disabled={isLoading}
-            className={errors.store_address ? "border-red-400" : ""} />
-          {errors.store_address && <p className="mt-1 text-xs text-red-600">{errors.store_address}</p>}
-        </div>
-
-        <Button type="submit" disabled={isLoading} className="mt-2">
-          {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
-          {isLoading ? "Saving…" : "Save Changes"}
-        </Button>
-      </form>
+      <div className="space-y-4">
+        {fields.map((f) => (
+          <EditableField
+            key={f.key}
+            label={f.label}
+            fieldKey={f.key}
+            savedValue={saved[f.key] ?? ""}
+            placeholder={f.placeholder}
+            onSave={handleSave}
+          />
+        ))}
+      </div>
     </Card>
   );
 }
 
 // ─── Business Tab ─────────────────────────────────────────────────────────────
 
-function BusinessTab({ initial }: { initial: StoreSettings | null }) {
-  const [form, setForm] = useState({ business_license: "", pos_min: "", pos_serial: "" });
-  const [errors, setErrors]     = useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess]   = useState(false);
+function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
+  const [saved, setSaved] = useState<Record<string, string>>({
+    business_license: "", pos_min: "", pos_serial: "",
+  });
+  const [vatRegistered, setVatRegistered] = useState(false);
+  const [vatSaving, setVatSaving] = useState(false);
 
   useEffect(() => {
-    if (initial) setForm({
-      business_license: initial.business_license,
-      pos_min:          initial.pos_min,
-      pos_serial:       initial.pos_serial,
-    });
+    if (initial) {
+      setSaved({
+        business_license: initial.business_license ?? "",
+        pos_min:          initial.pos_min           ?? "",
+        pos_serial:       initial.pos_serial        ?? "",
+      });
+      setVatRegistered(initial.vat_registered ?? false);
+    }
   }, [initial]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-    setSuccess(false);
+  const handleSave = async (key: string, value: string) => {
+    const updated = await updateSettings({ [key]: value });
+    setSaved((p) => ({ ...p, [key]: value }));
+    onSettingsChange(updated);
+  };
 
-    setIsLoading(true);
+  const handleVatToggle = async (checked: boolean) => {
+    setVatSaving(true);
     try {
-      await updateSettings({
-        business_license: form.business_license.trim(),
-        pos_min:          form.pos_min.trim(),
-        pos_serial:       form.pos_serial.trim(),
-      });
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      setErrors(extractErrors(err));
+      const updated = await updateSettings({ vat_registered: checked });
+      setVatRegistered(checked);
+      onSettingsChange(updated);
     } finally {
-      setIsLoading(false);
+      setVatSaving(false);
     }
   };
 
   return (
     <Card className="p-6">
       <h2 className="text-lg font-display font-bold text-gray-900 mb-6">Business Settings</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {errors.general && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{errors.general}</p>
-          </div>
-        )}
-        {success && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-            <p className="text-sm text-green-700 font-medium">Business settings saved.</p>
-          </div>
-        )}
-
+      <div className="space-y-4">
         <div>
-          <Label className="mb-1.5 block font-semibold">Currency</Label>
-          <div className="w-40 h-9 flex items-center px-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-500 select-none">
+          <Label className="mb-1.5 block font-semibold text-sm">Currency</Label>
+          <div className="h-9 px-3 flex items-center rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-500 w-40 select-none">
             PHP (₱ — fixed)
           </div>
         </div>
 
         <div>
-          <Label className="mb-1.5 block font-semibold">Tax Rate (%)</Label>
-          <div className="w-40 h-9 flex items-center px-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-500 select-none">
-            12% (VAT — fixed)
+          <Label className="mb-1.5 block font-semibold text-sm">VAT Registered</Label>
+          <div className="flex items-center gap-3 h-9">
+            <Switch
+              checked={vatRegistered}
+              onCheckedChange={handleVatToggle}
+              disabled={vatSaving}
+            />
+            <span className="text-sm text-gray-600">
+              {vatRegistered ? "Yes — (VAT-Registered) printed on receipts" : "No — VAT label hidden on receipts"}
+            </span>
           </div>
         </div>
 
         <div>
-          <Label className="mb-1.5 block font-semibold">
-            Business License <span className="text-gray-400 font-normal">(optional)</span>
-          </Label>
-          <Input value={form.business_license}
-            onChange={(e) => setForm((p) => ({ ...p, business_license: e.target.value }))}
-            placeholder="License Number" disabled={isLoading}
-            className={errors.business_license ? "border-red-400" : ""} />
-          {errors.business_license && <p className="mt-1 text-xs text-red-600">{errors.business_license}</p>}
+          <div className="h-9 px-3 flex items-center rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-500 w-40 select-none">
+            12% (VAT — fixed)
+          </div>
         </div>
+
+        <EditableField
+          label="Business License (TIN)"
+          fieldKey="business_license"
+          savedValue={saved.business_license}
+          placeholder="e.g. 765-490-574-00000"
+          onSave={handleSave}
+        />
 
         <div className="border-t border-gray-100 pt-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">BIR POS Machine Registration</p>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block font-semibold">
-                MIN <span className="text-gray-400 font-normal">(Machine Identification No.)</span>
-              </Label>
-              <Input value={form.pos_min}
-                onChange={(e) => setForm((p) => ({ ...p, pos_min: e.target.value }))}
-                placeholder="e.g. 000-123456789" disabled={isLoading}
-                className={errors.pos_min ? "border-red-400" : ""} />
-              {errors.pos_min && <p className="mt-1 text-xs text-red-600">{errors.pos_min}</p>}
-            </div>
-            <div>
-              <Label className="mb-1.5 block font-semibold">
-                S/N <span className="text-gray-400 font-normal">(POS Serial Number)</span>
-              </Label>
-              <Input value={form.pos_serial}
-                onChange={(e) => setForm((p) => ({ ...p, pos_serial: e.target.value }))}
-                placeholder="e.g. SN-20250001" disabled={isLoading}
-                className={errors.pos_serial ? "border-red-400" : ""} />
-              {errors.pos_serial && <p className="mt-1 text-xs text-red-600">{errors.pos_serial}</p>}
-            </div>
+            <EditableField
+              label="MIN (Machine Identification No.)"
+              fieldKey="pos_min"
+              savedValue={saved.pos_min}
+              placeholder="e.g. 000-123456789"
+              onSave={handleSave}
+            />
+            <EditableField
+              label="S/N (POS Serial Number)"
+              fieldKey="pos_serial"
+              savedValue={saved.pos_serial}
+              placeholder="e.g. SN-20250001"
+              onSave={handleSave}
+            />
           </div>
           <p className="mt-2 text-xs text-gray-400">These will be printed on every Sales Invoice receipt.</p>
         </div>
-
-        <Button type="submit" disabled={isLoading} className="mt-2">
-          {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
-          {isLoading ? "Saving…" : "Save Changes"}
-        </Button>
-      </form>
+      </div>
     </Card>
   );
 }
@@ -398,8 +425,8 @@ export default function Settings() {
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} /></TabsContent>
-        <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} /></TabsContent>
+        <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
+        <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
         <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
       </Tabs>
     </div>

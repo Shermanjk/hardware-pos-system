@@ -109,7 +109,7 @@ router.post("/", async (req: Request, res: Response) => {
          (full_name, username, password_hash, role, employee_id, status,
           must_change_password, password_changed_at)
        VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL)`,
-      [full_name, username, passwordHash, role, employee_id ?? null, status]
+      [full_name, username, passwordHash, role, employee_id || null, status]
     );
 
     const newUserId: number = result.insertId;

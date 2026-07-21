@@ -24,14 +24,16 @@ const settingsSchema = z.object({
   business_license: z.string().max(100).optional(),
   pos_min:          z.string().max(30).optional(),
   pos_serial:       z.string().max(30).optional(),
+  vat_registered:   z.boolean().optional(),
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  if (!requireAdmin(req, res)) return;
   try {
     const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
-    res.status(200).json(rows[0] ?? {});
+    const row = rows[0] ?? {};
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ ...row, vat_registered: Boolean(row.vat_registered) });
   } catch (err) {
     console.error("[settings/GET] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
@@ -68,6 +70,7 @@ router.put("/", async (req: Request, res: Response) => {
       currency: "currency", tax_rate: "tax_rate",
       business_license: "business_license",
       pos_min: "pos_min", pos_serial: "pos_serial",
+      vat_registered: "vat_registered",
     };
 
     for (const [key, col] of Object.entries(fieldMap)) {
@@ -81,7 +84,8 @@ router.put("/", async (req: Request, res: Response) => {
     await pool.execute(`UPDATE store_settings SET ${setClauses.join(", ")} WHERE id = ?`, values as any[]);
 
     const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
-    res.status(200).json(rows[0]);
+    const row = rows[0] ?? {};
+    res.status(200).json({ ...row, vat_registered: Boolean(row.vat_registered) });
   } catch (err) {
     console.error("[settings/PUT] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });

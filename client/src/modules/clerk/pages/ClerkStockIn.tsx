@@ -122,91 +122,104 @@ function Step1({ state, setState, suppliers, errors, onNext }: Step1Props) {
     setState({ ...state, [k]: v });
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+    <div className="space-y-4">
 
-        {/* Source — REQUIRED */}
-        <div className="sm:col-span-2">
-          <Label className="mb-1.5 block font-semibold text-sm">
-            Source <span className="text-red-500">*</span>
-          </Label>
-          <Select value={state.source} onValueChange={(v) => set("source", v)}>
-            <SelectTrigger className={`h-10 ${errors.source ? "border-red-400" : ""}`}>
-              <SelectValue placeholder="Select source…" />
-            </SelectTrigger>
-            <SelectContent>
-              {SOURCES.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {errors.source && <p className="mt-1 text-xs text-red-600">{errors.source}</p>}
+      {/* Delivery Info section */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 bg-blue-600 flex items-center gap-2">
+          <Truck className="h-4 w-4 text-white" />
+          <p className="text-sm font-bold text-white">Delivery Information</p>
         </div>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-        {/* Supplier — optional */}
-        <div>
-          <Label className="mb-1.5 block font-semibold text-sm">
-            Supplier <span className="text-gray-400 font-normal text-xs">(optional)</span>
-          </Label>
-          <Select value={state.supplierId || "none"} onValueChange={(v) => set("supplierId", v === "none" ? "" : v)}>
-            <SelectTrigger className="h-10">
-              <SelectValue placeholder="Select supplier…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">— No supplier —</SelectItem>
-              {suppliers.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Invoice / DR No. — optional */}
-        <div>
-          <Label className="mb-1.5 block font-semibold text-sm">
-            Invoice / DR No. <span className="text-gray-400 font-normal text-xs">(optional)</span>
-          </Label>
-          <Input
-            placeholder="e.g. INV-2025-0420"
-            value={state.invoiceNumber}
-            onChange={(e) => set("invoiceNumber", e.target.value)}
-            className="h-10"
-          />
-        </div>
-
-        {/* Delivery Date — REQUIRED */}
-        <div>
-          <Label className="mb-1.5 block font-semibold text-sm">
-            Delivery Date <span className="text-red-500">*</span>
-          </Label>
-          <div className="relative">
-            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <Input
-              type="date"
-              value={state.deliveryDate}
-              onChange={(e) => set("deliveryDate", e.target.value)}
-              className={`h-10 pl-8 ${errors.deliveryDate ? "border-red-400" : ""}`}
-            />
+          {/* Source */}
+          <div className="sm:col-span-2">
+            <Label className="mb-1.5 block font-semibold text-sm text-gray-700">
+              Source <span className="text-red-500">*</span>
+            </Label>
+            <Select value={state.source} onValueChange={(v) => set("source", v)}>
+              <SelectTrigger className={`h-10 bg-white border-gray-300 ${errors.source ? "border-red-400" : ""}`}>
+                <SelectValue placeholder="Select source…" />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.source && <p className="mt-1 text-xs text-red-600">{errors.source}</p>}
           </div>
-          {errors.deliveryDate && <p className="mt-1 text-xs text-red-600">{errors.deliveryDate}</p>}
-        </div>
 
-        {/* Remarks — optional */}
-        <div className="sm:col-span-2">
-          <Label className="mb-1.5 block font-semibold text-sm">
-            Remarks <span className="text-gray-400 font-normal text-xs">(optional)</span>
-          </Label>
-          <textarea
-            rows={3}
-            placeholder="Any delivery remarks or notes…"
-            value={state.remarks}
-            onChange={(e) => set("remarks", e.target.value)}
-            className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          {/* Supplier */}
+          <div>
+            <Label className="mb-1.5 block font-semibold text-sm text-gray-700">
+              Supplier <span className="text-gray-400 font-normal text-xs">(optional)</span>
+            </Label>
+            <Select value={state.supplierId || "none"} onValueChange={(v) => set("supplierId", v === "none" ? "" : v)}>
+              <SelectTrigger className="h-10 bg-white border-gray-300">
+                <SelectValue placeholder="Select supplier…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— No supplier —</SelectItem>
+                {suppliers.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Delivery Date */}
+          <div>
+            <Label className="mb-1.5 block font-semibold text-sm text-gray-700">
+              Delivery Date <span className="text-red-500">*</span>
+            </Label>
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+              <Input
+                type="date"
+                value={state.deliveryDate}
+                onChange={(e) => set("deliveryDate", e.target.value)}
+                className={`h-10 pl-8 bg-white border-gray-300 ${errors.deliveryDate ? "border-red-400" : ""}`}
+              />
+            </div>
+            {errors.deliveryDate && <p className="mt-1 text-xs text-red-600">{errors.deliveryDate}</p>}
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-end pt-2">
+      {/* Reference section */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 bg-gray-700 flex items-center gap-2">
+          <FileText className="h-4 w-4 text-white" />
+          <p className="text-sm font-bold text-white">Reference & Notes</p>
+          <span className="ml-1 text-xs text-gray-300 font-normal">(optional)</span>
+        </div>
+        <div className="p-4 space-y-4">
+          <div>
+            <Label className="mb-1.5 block font-semibold text-sm text-gray-700">
+              Invoice / DR No.
+            </Label>
+            <Input
+              placeholder="e.g. INV-2025-0420"
+              value={state.invoiceNumber}
+              onChange={(e) => set("invoiceNumber", e.target.value)}
+              className="h-10 bg-white border-gray-300"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block font-semibold text-sm text-gray-700">Remarks</Label>
+            <textarea
+              rows={3}
+              placeholder="Any delivery remarks or notes…"
+              value={state.remarks}
+              onChange={(e) => set("remarks", e.target.value)}
+              className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-1">
         <Button onClick={onNext} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
           Next: Add Items <ChevronRight className="h-4 w-4" />
         </Button>
@@ -356,99 +369,107 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
     <div className="space-y-4">
 
       {/* Session summary strip */}
-      <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200 text-xs">
-        <span className="flex items-center gap-1 font-semibold text-blue-800">
+      <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-600 rounded-xl text-xs">
+        <span className="flex items-center gap-1 font-semibold text-white">
           <Package className="h-3.5 w-3.5" /> {session.source}
         </span>
         {supplierName && (
-          <span className="flex items-center gap-1 text-blue-700">
+          <span className="flex items-center gap-1 text-blue-100">
             <Truck className="h-3.5 w-3.5" /> {supplierName}
           </span>
         )}
         {session.invoiceNumber && (
-          <span className="flex items-center gap-1 text-blue-700">
+          <span className="flex items-center gap-1 text-blue-100">
             <FileText className="h-3.5 w-3.5" /> {session.invoiceNumber}
           </span>
         )}
-        <span className="flex items-center gap-1 text-blue-700">
+        <span className="flex items-center gap-1 text-blue-100">
           <Clock className="h-3.5 w-3.5" />
           {new Date(session.deliveryDate + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
         </span>
         {items.length > 0 && (
-          <span className="ml-auto bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">
+          <span className="ml-auto bg-white text-blue-700 px-2 py-0.5 rounded-full font-bold">
             {items.length} item{items.length !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
       {/* Search input with results dropdown */}
-      <div ref={wrapperRef} className="relative">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            {searching
-              ? <Spinner className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
-              : <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-            }
-            <Input
-              ref={barcodeRef}
-              placeholder="Scan barcode or type product name…"
-              value={barcodeInput}
-              onChange={(e) => handleInputChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (debounceRef.current) clearTimeout(debounceRef.current);
-                  lookup(barcodeInput);
+      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2">
+          <ScanLine className="h-4 w-4 text-white" />
+          <p className="text-sm font-bold text-white">Scan or Search Product</p>
+        </div>
+        <div className="p-4">
+          <div ref={wrapperRef} className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                {searching
+                  ? <Spinner className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
+                  : <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
                 }
-                if (e.key === "Escape") clearSearch();
-              }}
-              className="pl-9 pr-8 h-11 bg-white border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500 rounded-lg shadow-sm"
-              autoFocus
-            />
-            {barcodeInput && (
-              <button onClick={clearSearch}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="h-4 w-4" />
-              </button>
+                <Input
+                  ref={barcodeRef}
+                  placeholder="Scan barcode or type product name…"
+                  value={barcodeInput}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (debounceRef.current) clearTimeout(debounceRef.current);
+                      lookup(barcodeInput);
+                    }
+                    if (e.key === "Escape") clearSearch();
+                  }}
+                  className="pl-9 pr-8 h-11 bg-white border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500 rounded-lg shadow-sm"
+                  autoFocus
+                />
+                {barcodeInput && (
+                  <button onClick={clearSearch}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button size="sm"
+                className="h-11 px-5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
+                onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); lookup(barcodeInput); }}
+                disabled={searching || !barcodeInput.trim()}>
+                <Search className="h-4 w-4" /> Search
+              </Button>
+            </div>
+
+            {/* Results dropdown */}
+            {showDropdown && results.length > 0 && (
+              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500">{results.length} result{results.length !== 1 ? "s" : ""} found — select a product</p>
+                </div>
+                <ul className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                  {results.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left"
+                        onClick={() => selectResult(r)}>
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                          <Package className="h-4 w-4 text-gray-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">{r.product_name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            <span className="font-mono">{r.barcode}</span>
+                            {" · "}{r.unit}
+                            {" · "}Stock: <span className="font-medium text-gray-600">{r.quantity}</span>
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
-          <Button size="sm"
-            className="h-11 px-5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
-            onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); lookup(barcodeInput); }}
-            disabled={searching || !barcodeInput.trim()}>
-            <Search className="h-4 w-4" /> Search
-          </Button>
         </div>
-
-        {/* Results dropdown */}
-        {showDropdown && results.length > 0 && (
-          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-              <p className="text-xs font-semibold text-gray-500">{results.length} result{results.length !== 1 ? "s" : ""} found — select a product</p>
-            </div>
-            <ul className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-              {results.map((r) => (
-                <li key={r.id}>
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left"
-                    onClick={() => selectResult(r)}>
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                      <Package className="h-4 w-4 text-gray-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{r.product_name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        <span className="font-mono">{r.barcode}</span>
-                        {" · "}{r.unit}
-                        {" · "}Stock: <span className="font-medium text-gray-600">{r.quantity}</span>
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
 
       {/* Error */}
@@ -925,36 +946,41 @@ export default function ClerkStockIn() {
           <div className="py-10 text-center text-gray-400 text-sm">No stock-in history yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-gray-100 border-b-2 border-gray-300">
-                  <th className="text-left py-3 px-5 font-bold text-gray-700 text-xs uppercase tracking-wider">Date</th>
-                  <th className="text-left py-3 px-5 font-bold text-gray-700 text-xs uppercase tracking-wider">Product</th>
-                  <th className="text-center py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Qty Added</th>
-                  <th className="text-center py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">New Stock</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Reference</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">By</th>
+                <tr className="bg-gray-100 border-y border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Qty Added</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Stock</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[160px]">Reference</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">By</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-100">
                 {logs.map((log, idx) => (
                   <tr key={log.id}
-                    className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                    <td className="py-3 px-5 text-xs text-gray-500 whitespace-nowrap">{fmtDateTime(log.created_at)}</td>
-                    <td className="py-3 px-5">
-                      <p className="font-semibold text-gray-900 text-sm">{log.product_name}</p>
-                      <span className="font-mono text-xs text-gray-400">{log.barcode}</span>
+                    className={`transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <p className="text-xs font-medium text-gray-700">{new Date(log.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">
+                    <td className="py-3.5 px-4">
+                      <p className="font-semibold text-gray-900 text-sm leading-tight">{log.product_name}</p>
+                      <p className="font-mono text-xs text-gray-400 mt-0.5">{log.barcode}</p>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">
                         +{log.quantity_change ?? log.quantity ?? 0}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-center font-semibold text-gray-800 tabular-nums">
-                      {log.remaining_stock ?? "—"}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-sm font-bold text-gray-900 tabular-nums">{log.remaining_stock ?? "—"}</span>
                     </td>
-                    <td className="py-3 px-4 text-xs font-mono text-gray-600">{log.reference ?? "—"}</td>
-                    <td className="py-3 px-4 text-xs text-gray-600">{log.performed_by}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-mono text-gray-600 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">{log.reference ?? "—"}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-xs font-medium text-gray-700">{log.performed_by}</td>
                   </tr>
                 ))}
               </tbody>

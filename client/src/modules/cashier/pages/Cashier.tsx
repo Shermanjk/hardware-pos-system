@@ -128,11 +128,11 @@ function buildReceiptText(params: SaleReceiptParams): string {
     cashCents, changeCents, cashierName, settings,
   } = params;
 
-  const storeName     = settings.store_name     || "ISRA HARDWARE";
-  const storeFb       = settings.store_fb       || "Rexjie Saludo";
-  const storePhone    = settings.store_phone    || "09093250717";
-  const storeAddress  = settings.store_address  || "Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur";
-  const storeTIN      = settings.business_license || "765-490-574-00000";
+  const storeName     = settings.store_name     || "";
+  const storeFb       = settings.store_fb       || "";
+  const storePhone    = settings.store_phone    || "";
+  const storeAddress  = settings.store_address  || "";
+  const storeTIN      = settings.business_license || "";
   const taxRate       = settings.tax_rate > 0   ? settings.tax_rate : 12;
   const currSym       = settings.currency === "PHP" ? "P" : settings.currency;
   const taxDivisor    = 100 + taxRate;
@@ -149,7 +149,6 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(rule("="));
   ln(center(storeName));
   ln(center(storeAddress));
-  ln(center("Philippines"));
   ln(center(`TIN: ${storeTIN} (VAT-Registered)`));
   ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
@@ -247,6 +246,138 @@ function LiveClock() {
   return <span className="font-mono text-sm tabular-nums">{time}</span>;
 }
 
+// ─── Verify Product Field (barcode scan OR name search) ─────────────────────
+
+interface VerifyProductFieldProps {
+  itemId: number;
+  expectedBarcode: string;
+  productName: string;
+  sel: { scannedBarcode: string; barcodeConfirmed: boolean };
+  setSelectedItems: React.Dispatch<React.SetStateAction<Record<number, {
+    checked: boolean; quantity: number; reason: string;
+    scannedBarcode: string; barcodeConfirmed: boolean;
+  }>>>;
+}
+
+function VerifyProductField({ itemId, expectedBarcode, productName, sel, setSelectedItems }: VerifyProductFieldProps) {
+  const [nameResults, setNameResults] = useState<CashierProduct[]>([]);
+  const [showDrop, setShowDrop]       = useState(false);
+  const [searching, setSearching]     = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef  = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node))
+        setShowDrop(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleChange = (value: string) => {
+    setSelectedItems((prev) => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], scannedBarcode: value, barcodeConfirmed: false },
+    }));
+    setShowDrop(false);
+    setNameResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) return;
+    // If it looks like a barcode (no spaces, short) skip name search
+    const looksLikeBarcode = !/\s/.test(value) && value.length <= 20;
+    if (!looksLikeBarcode) {
+      setSearching(true);
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const results = await lookupProduct(value.trim());
+          setNameResults(results);
+          setShowDrop(results.length > 0);
+        } catch { /* silent */ } finally {
+          setSearching(false);
+        }
+      }, 300);
+    }
+  };
+
+  const confirm = (barcode: string) => {
+    if (barcode === expectedBarcode) {
+      setSelectedItems((prev) => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], scannedBarcode: barcode, barcodeConfirmed: true },
+      }));
+      setShowDrop(false);
+      setNameResults([]);
+    } else {
+      toast.error(`Barcode mismatch for "${productName}".`);
+    }
+  };
+
+  const selectFromDropdown = (product: CashierProduct) => {
+    setShowDrop(false);
+    setNameResults([]);
+    confirm(product.barcode);
+  };
+
+  return (
+    <div ref={wrapperRef}>
+      <label className="text-xs text-gray-500 mb-0.5 block">Scan Barcode or Search by Name to Verify</label>
+      <div className="flex gap-2 relative">
+        <div className="relative flex-1">
+          {searching
+            ? <Loader2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />
+            : <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          }
+          <Input
+            value={sel.scannedBarcode}
+            onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirm(sel.scannedBarcode); } }}
+            placeholder="Scan barcode or type product name…"
+            className={`h-8 text-sm pl-8 ${
+              sel.barcodeConfirmed ? "border-green-400 bg-green-50" : ""
+            }`}
+          />
+          {/* Name search dropdown */}
+          {showDrop && nameResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+              {nameResults.map((p) => (
+                <button
+                  key={p.id}
+                  onMouseDown={() => selectFromDropdown(p)}
+                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-blue-50 text-left text-xs border-b border-gray-50 last:border-0 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{p.product_name}</p>
+                    <p className="font-mono text-gray-400">{p.barcode}</p>
+                  </div>
+                  {p.barcode === expectedBarcode && (
+                    <span className="ml-2 shrink-0 text-green-600 font-bold">✓ Match</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs shrink-0"
+          onClick={() => confirm(sel.scannedBarcode)}
+          disabled={!sel.scannedBarcode.trim() || sel.barcodeConfirmed}
+        >
+          Confirm
+        </Button>
+      </div>
+      {sel.barcodeConfirmed && (
+        <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+          <span className="font-bold">✓</span> Product verified
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Cashier() {
@@ -255,6 +386,7 @@ export default function Cashier() {
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     store_name: "", store_fb: "", store_phone: "", store_address: "",
     currency: "PHP", tax_rate: 0, business_license: "",
+    pos_min: "", pos_serial: "",
   });
 
   useEffect(() => {
@@ -337,7 +469,7 @@ export default function Cashier() {
     if (qty <= 0) { removeItem(id); return; }
     setCartItems((prev) =>
       prev.map((item) => item.id === id
-        ? { ...item, quantity: qty, subtotal: Math.round(qty * toCentavos(item.unitPrice)) / 100 }
+        ? { ...item, quantity: qty, subtotal: Math.round(qty * toCentavos(Number(item.unitPrice))) / 100 }
         : item)
     );
   };
@@ -371,13 +503,14 @@ export default function Cashier() {
           : i
         );
       }
+      const price = Number(product.selling_price);
       return [...prev, {
         id:        product.id,
         name:      product.product_name,
         unit:      product.unit_abbreviation,
         quantity:  1,
-        unitPrice: product.selling_price,
-        subtotal:  product.selling_price,
+        unitPrice: price,
+        subtotal:  price,
       }];
     });
     setBarcodeInput("");
@@ -582,10 +715,13 @@ export default function Cashier() {
     setReturnSubmitError(null);
     try {
       const result = await createReturn({
-        sale_id: returnSale.id,
+        sale_id: Number(returnSale.id),
         return_reason: firstReason,
         items: itemsToReturn.map(({ sale_item_id, product_id, quantity_returned, unit_price }) => ({
-          sale_item_id, product_id, quantity_returned, unit_price,
+          sale_item_id: Number(sale_item_id),
+          product_id: Number(product_id),
+          quantity_returned: Number(quantity_returned),
+          unit_price: Number(unit_price),
         })),
       });
       setSubmittedReturn(result);
@@ -640,8 +776,9 @@ export default function Cashier() {
         store_fb:      storeSettings.store_fb,
         store_phone:   storeSettings.store_phone,
         store_address: storeSettings.store_address,
-        store_tin:     storeSettings.business_license,
-        currency:      storeSettings.currency,
+        store_tin:          storeSettings.business_license,
+        store_vat_registered: storeSettings.vat_registered,
+        currency:           storeSettings.currency,
       });
       toast.success(
         resolution === "refund"
@@ -677,8 +814,8 @@ export default function Cashier() {
         items: cartItems.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
-          unit_price: item.unitPrice,
-          subtotal: item.subtotal,
+          unit_price: Number(item.unitPrice),
+          subtotal: Number(item.subtotal),
         })),
       };
 
@@ -1460,39 +1597,15 @@ export default function Cashier() {
                                 </div>
                               </div>
 
-                              {/* Barcode verification */}
+                              {/* Barcode / name verification */}
                               {item.barcode ? (
-                                <div>
-                                  <label className="text-xs text-gray-500 mb-0.5 block">Scan Product Barcode to Verify</label>
-                                  <div className="flex gap-2">
-                                    <Input
-                                      value={sel.scannedBarcode}
-                                      onChange={(e) => setSelectedItems((prev) => ({
-                                        ...prev,
-                                        [item.id]: { ...prev[item.id], scannedBarcode: e.target.value, barcodeConfirmed: false },
-                                      }))}
-                                      placeholder="Scan or enter barcode"
-                                      className="h-8 text-sm flex-1"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 text-xs"
-                                      onClick={() => {
-                                        if (sel.scannedBarcode === item.barcode) {
-                                          setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], barcodeConfirmed: true } }));
-                                        } else {
-                                          toast.error(`Barcode mismatch for ${item.product_name}.`);
-                                        }
-                                      }}
-                                    >
-                                      Confirm
-                                    </Button>
-                                  </div>
-                                  {sel.barcodeConfirmed && (
-                                    <p className="text-xs text-green-600 mt-0.5">✓ Barcode verified</p>
-                                  )}
-                                </div>
+                                <VerifyProductField
+                                  itemId={item.id}
+                                  expectedBarcode={item.barcode}
+                                  productName={item.product_name}
+                                  sel={sel}
+                                  setSelectedItems={setSelectedItems}
+                                />
                               ) : (
                                 <p className="text-xs text-gray-500 italic">No barcode — verify item manually: {item.product_name}</p>
                               )}

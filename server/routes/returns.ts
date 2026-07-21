@@ -6,6 +6,7 @@ import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { generateReturnNumber } from "../utils/returnNumber.js";
 import { validateReturnItems, ReturnItemPayload } from "../utils/validateReturn.js";
+import { broadcastReturnRequest } from "../ws.js";
 
 const router = Router();
 
@@ -147,6 +148,25 @@ router.post(
       }
 
       await conn.commit();
+
+      // Fetch cashier name + invoice/customer for the broadcast
+      const [saleRows] = await conn.execute<any[]>(
+        `SELECT s.invoice_number, s.customer_name, u.full_name AS cashier_name
+         FROM sales s JOIN users u ON u.id = ?
+         WHERE s.id = ? LIMIT 1`,
+        [req.user!.id, sale_id]
+      );
+      const saleRow = saleRows[0];
+      broadcastReturnRequest({
+        type: "return_request",
+        id: return_id,
+        return_number,
+        cashier_name: saleRow?.cashier_name ?? "Cashier",
+        customer_name: saleRow?.customer_name ?? "",
+        invoice_number: saleRow?.invoice_number ?? "",
+        created_at: new Date().toISOString(),
+      });
+
       res.status(201).json({ return_number, id: return_id });
     } catch (err) {
       await conn.rollback();
@@ -463,8 +483,8 @@ router.patch(
           }
 
           await conn.execute(
-            `INSERT INTO inventory_logs (product_id, action, quantity_change, reference, user_id)
-             VALUES (?, 'return_refund', ?, ?, ?)`,
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Return', 'return_refund', ?, ?, ?)`,
             [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
           );
         }
@@ -516,8 +536,8 @@ router.patch(
           }
 
           await conn.execute(
-            `INSERT INTO inventory_logs (product_id, action, quantity_change, reference, user_id)
-             VALUES (?, 'return_replacement_in', ?, ?, ?)`,
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Return', 'return_replacement_in', ?, ?, ?)`,
             [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
           );
 
@@ -528,8 +548,8 @@ router.patch(
           );
 
           await conn.execute(
-            `INSERT INTO inventory_logs (product_id, action, quantity_change, reference, user_id)
-             VALUES (?, 'return_replacement_out', ?, ?, ?)`,
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Return', 'return_replacement_out', ?, ?, ?)`,
             [item.product_id, -item.quantity_returned, returnRow.return_number, req.user!.id]
           );
         }

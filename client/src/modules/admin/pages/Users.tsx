@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +13,9 @@ import axios from "axios";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatLastLogin(record: UserRecord): string {
-  if (record.password_changed_at) {
-    return new Date(record.password_changed_at).toLocaleDateString();
+  if (record.password_changed_at && record.password_changed_at !== "0") {
+    const d = new Date(record.password_changed_at);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString();
   }
   if (record.must_change_password) return "Never logged in";
   return "—";
@@ -573,86 +573,98 @@ export default function Users() {
       )}
 
       {/* Users Table */}
-      <Card className="overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Name</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Username</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Role</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Status</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Last Login</th>
-                <th className="text-left py-4 px-6 font-semibold text-gray-900">Actions</th>
+              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Name</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Username</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Role</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Last Login</th>
+                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-gray-500">
-                    <div className="flex items-center justify-center gap-2">
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="flex items-center justify-center gap-2 text-gray-400">
                       <span className="h-5 w-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                      Loading users…
+                      <span className="text-sm">Loading users…</span>
                     </div>
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-gray-500">
-                    No users found. Click "Add User" to create the first account.
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Plus className="h-7 w-7 text-gray-400" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-700">No users found</p>
+                        <p className="text-xs text-gray-400 mt-1">Click Add User to create the first account</p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                users.map((user, idx) => (
-                  <tr key={user.id}
-                    className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50`}>
-                    <td className="py-4 px-6 font-medium text-gray-900">
-                      {user.full_name}
+                users.map((user) => (
+                  <tr key={user.id} className="hover:bg-blue-50/40 transition-colors">
+                    <td className="py-3.5 px-5">
+                      <p className="font-semibold text-gray-900">{user.full_name}</p>
                       {user.must_change_password && (
-                        <span className="ml-2 inline-block px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">
+                        <span className="inline-block px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded mt-0.5">
                           Temp pwd
                         </span>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-gray-700 font-mono">{user.username}</td>
-                    <td className="py-4 px-6 text-gray-700">{user.role}</td>
-                    <td className="py-4 px-6">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    <td className="py-3.5 px-5">
+                      <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                        {user.username}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5">
+                      <span className="text-xs font-medium text-gray-600 bg-slate-100 px-2 py-1 rounded-full">
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
                         user.status === "Active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
+                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                          : "bg-gray-100 text-gray-500 border-gray-200"
                       }`}>
                         {user.status}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-gray-500 text-xs">{formatLastLogin(user)}</td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600"
+                    <td className="py-3.5 px-5 text-sm text-gray-500">{formatLastLogin(user)}</td>
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
                           title="Edit user"
                           onClick={() => setEditTarget(user)}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                         >
                           <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 text-gray-600 hover:text-amber-600"
+                        </button>
+                        <button
                           title="Reset password"
                           onClick={() => setResetTarget(user)}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                         >
                           <RotateCcw className="h-4 w-4" />
-                        </Button>
+                        </button>
                         {user.status === "Active" && (
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-8 w-8 p-0 text-gray-600 hover:text-red-600"
+                          <button
                             title="Deactivate account"
                             onClick={() => setDeactivateTarget(user)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                           >
                             <Lock className="h-4 w-4" />
-                          </Button>
+                          </button>
                         )}
                       </div>
                     </td>
@@ -662,7 +674,15 @@ export default function Users() {
             </tbody>
           </table>
         </div>
-      </Card>
+        {!isLoading && users.length > 0 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <p className="text-xs text-gray-500 font-medium">
+              {users.length} user{users.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-gray-400">Isra Hardware POS</p>
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
       <CreateUserModal

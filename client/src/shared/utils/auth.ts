@@ -24,11 +24,12 @@ function decodeJwt(token: string): (AuthUser & { exp?: number }) | null {
   }
 }
 
-// ─── Extract user from token ─────────────────────────────────────────────────
+// ─── Extract user from token (returns null if expired) ───────────────────────
 export function getUserFromToken(token: string | null): AuthUser | null {
   if (!token) return null;
   const decoded = decodeJwt(token);
   if (!decoded) return null;
+  if (decoded.exp && decoded.exp * 1000 < Date.now()) return null;
   return {
     id: decoded.id,
     full_name: decoded.full_name,

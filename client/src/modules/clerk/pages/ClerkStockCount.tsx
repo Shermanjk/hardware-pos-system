@@ -10,9 +10,10 @@ import {
 import {
   ClipboardList, Search, CheckCircle2, RotateCcw,
   TrendingUp, TrendingDown, Minus, AlertTriangle, RefreshCw,
+  PackagePlus, ShoppingCart, SlidersHorizontal, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getInventory, submitStockAdjustment } from "@/shared/api/inventoryApi";
+import { getInventory, getInventoryLogs, submitStockAdjustment } from "@/shared/api/inventoryApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CountRow {
@@ -29,27 +30,75 @@ interface CountRow {
 // ─── Difference badge ─────────────────────────────────────────────────────────
 function DiffCell({ system, physical }: { system: number; physical: string }) {
   if (physical === "") {
-    return <span className="text-gray-300 text-sm">—</span>;
+    return <span className="text-gray-300 text-sm font-mono">—</span>;
   }
   const diff = parseInt(physical, 10) - system;
-  if (diff === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 text-green-600 font-semibold text-sm">
-        <Minus className="h-3.5 w-3.5" /> 0
-      </span>
-    );
-  }
-  if (diff > 0) {
-    return (
-      <span className="inline-flex items-center gap-1 text-blue-600 font-semibold text-sm">
-        <TrendingUp className="h-3.5 w-3.5" /> +{diff}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-sm">
-      <TrendingDown className="h-3.5 w-3.5" /> {diff}
+  if (diff === 0) return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-bold text-xs">
+      <Minus className="h-3 w-3" /> Match
     </span>
+  );
+  if (diff > 0) return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
+      <TrendingUp className="h-3.5 w-3.5" /> +{diff} over
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-xs">
+      <TrendingDown className="h-3.5 w-3.5" /> {diff} short
+    </span>
+  );
+}
+
+// ─── System Qty cell with inline movement breakdown ──────────────────────────
+interface Breakdown { stockIn: number; sold: number; adjustments: number; }
+
+function SystemQtyCell({ productId, systemQty }: { productId: number; systemQty: number }) {
+  const [data, setData] = useState<Breakdown | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getInventoryLogs({ product_id: productId, limit: 500 })
+      .then((logs) => {
+        const stockIn     = logs.filter((l) => l.transaction_type === "Stock In")
+                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+        const sold        = logs.filter((l) => l.transaction_type === "Sale")
+                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+        const returned    = logs.filter((l) => l.transaction_type === "Return")
+                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+        const adjustments = logs.filter((l) => l.transaction_type === "Adjustment")
+                               .reduce((s, l) => s + (l.quantity_change ?? 0), 0);
+        setData({ stockIn, sold: sold - returned, adjustments });
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [productId]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="font-bold text-gray-900 text-lg leading-none">{systemQty}</span>
+      {loading ? (
+        <div className="flex items-center gap-1 text-gray-300">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span className="text-xs">loading…</span>
+        </div>
+      ) : data ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-semibold">
+            <PackagePlus className="h-3 w-3" />+{data.stockIn} received
+          </span>
+          <span className="inline-flex items-center gap-1 text-red-500 text-xs font-semibold">
+            <ShoppingCart className="h-3 w-3" />−{data.sold} sold
+          </span>
+          {data.adjustments !== 0 && (
+            <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-semibold">
+              <SlidersHorizontal className="h-3 w-3" />
+              {data.adjustments > 0 ? `+${data.adjustments}` : data.adjustments} adj
+            </span>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -138,7 +187,7 @@ export default function ClerkStockCount() {
             product_id: row.productId,
             type: "Correction",
             quantity: parseInt(row.physicalCount, 10),
-            reason: row.remarks || "Stock count correction",
+            reason: row.remarks.trim() || "Stock count correction",
           })
         )
       );
@@ -253,111 +302,139 @@ export default function ClerkStockCount() {
       </div>
 
       {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold text-gray-900">{countedRows.length}</span> of{" "}
-            <span className="font-semibold text-gray-900">{rows.length}</span> products counted
-          </p>
+      <Card className="overflow-hidden border border-gray-200 shadow-sm">
+        {/* Table toolbar */}
+        <div className="px-6 py-4 border-b border-gray-200 bg-white flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">
+              {countedRows.length > 0
+                ? <><span className="text-purple-600">{countedRows.length}</span> of {rows.length} products counted</>  
+                : <>{rows.length} products to count</>}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">Click a row's Physical Count field to begin counting</p>
+          </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <Input
               placeholder="Search products…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm"
+              className="pl-9 h-9 text-sm border-gray-300"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 border-b border-gray-200">
-                {["Barcode", "Product Name", "Category", "Unit", "System Qty", "Physical Count", "Difference", "Remarks"].map((h) => (
-                  <th key={h} className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide whitespace-nowrap">
-                    {h}
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-800 text-white">
+                {[
+                  { label: "#",              cls: "w-10 text-center" },
+                  { label: "Barcode",        cls: "" },
+                  { label: "Product Name",   cls: "min-w-[180px]" },
+                  { label: "Category",       cls: "" },
+                  { label: "Unit",           cls: "text-center" },
+                  { label: "System Qty",     cls: "text-center min-w-[130px]" },
+                  { label: "Physical Count", cls: "text-center" },
+                  { label: "Difference",     cls: "text-center" },
+                  { label: "Remarks",        cls: "min-w-[160px]" },
+                ].map(({ label, cls }) => (
+                  <th key={label} className={`py-3 px-4 text-xs font-bold uppercase tracking-wider whitespace-nowrap text-left ${cls}`}>
+                    {label}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                Array.from({ length: 10 }).map((_, i) => (
-                  <tr key={i} className="border-b border-gray-50">
-                    {Array.from({ length: 8 }).map((_, j) => (
-                      <td key={j} className="py-3 px-4"><Skeleton className="h-4 w-full" /></td>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b border-gray-100">
+                    {Array.from({ length: 9 }).map((_, j) => (
+                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full" /></td>
                     ))}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-14 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-400">
                       <ClipboardList className="h-10 w-10 opacity-30" />
-                      <p className="font-medium text-gray-600">No products match your search</p>
+                      <p className="font-medium text-gray-500">No products match your search</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filtered.map((row, idx) => {
-                  const hasDiff = row.physicalCount !== "" &&
-                    parseInt(row.physicalCount, 10) !== row.systemQty;
+                  const physNum  = parseInt(row.physicalCount, 10);
+                  const hasDiff  = row.physicalCount !== "" && physNum !== row.systemQty;
+                  const isOver   = hasDiff && physNum > row.systemQty;
+                  const isShort  = hasDiff && physNum < row.systemQty;
                   const isCounted = row.physicalCount !== "";
 
+                  const rowBg = isOver   ? "bg-blue-50 border-l-4 border-l-blue-400"
+                              : isShort  ? "bg-red-50 border-l-4 border-l-red-400"
+                              : isCounted ? "bg-green-50 border-l-4 border-l-green-400"
+                              : idx % 2 === 0 ? "bg-white" : "bg-gray-50";
+
                   return (
-                    <tr
-                      key={row.productId}
-                      className={`border-b border-gray-100 transition-colors ${
-                        hasDiff
-                          ? parseInt(row.physicalCount, 10) > row.systemQty
-                            ? "bg-blue-50/40"
-                            : "bg-red-50/30"
-                          : isCounted
-                          ? "bg-green-50/30"
-                          : idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"
-                      }`}
-                    >
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                    <tr key={row.productId} className={`border-b border-gray-200 hover:brightness-95 transition-all ${rowBg}`}>
+                      {/* Row number */}
+                      <td className="py-3.5 px-4 text-center text-xs text-gray-400 font-mono">{idx + 1}</td>
+
+                      {/* Barcode */}
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-1 rounded">
                           {row.barcode}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-medium text-gray-900 text-xs max-w-[160px]">
-                        <span className="truncate block">{row.productName}</span>
+
+                      {/* Product name */}
+                      <td className="py-3.5 px-4">
+                        <p className="font-semibold text-gray-900 text-sm leading-tight">{row.productName}</p>
                       </td>
-                      <td className="py-3 px-4 text-gray-500 text-xs">{row.category}</td>
-                      <td className="py-3 px-4 text-gray-500 text-xs">{row.unit}</td>
-                      <td className="py-3 px-4 font-bold text-gray-900 text-base text-center">
-                        {row.systemQty}
+
+                      {/* Category */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{row.category}</span>
                       </td>
-                      <td className="py-3 px-4">
+
+                      {/* Unit */}
+                      <td className="py-3.5 px-4 text-center text-sm font-medium text-gray-600">{row.unit}</td>
+
+                      {/* System Qty + breakdown */}
+                      <td className="py-3.5 px-4">
+                        <SystemQtyCell productId={row.productId} systemQty={row.systemQty} />
+                      </td>
+
+                      {/* Physical count input */}
+                      <td className="py-3.5 px-4 text-center">
                         <Input
                           type="number"
                           min={0}
                           placeholder="—"
                           value={row.physicalCount}
                           onChange={(e) => updateRow(row.productId, "physicalCount", e.target.value)}
-                          className={`h-9 w-24 text-center font-bold text-base ${
-                            hasDiff
-                              ? parseInt(row.physicalCount, 10) > row.systemQty
-                                ? "border-blue-400 bg-blue-50 text-blue-700"
-                                : "border-red-400 bg-red-50 text-red-700"
-                              : isCounted
-                              ? "border-green-400 bg-green-50 text-green-700"
-                              : ""
+                          className={`h-10 w-28 text-center font-bold text-base border-2 ${
+                            isOver    ? "border-blue-400 bg-blue-50 text-blue-700 focus:ring-blue-200"
+                            : isShort ? "border-red-400 bg-red-50 text-red-700 focus:ring-red-200"
+                            : isCounted ? "border-green-400 bg-green-50 text-green-700 focus:ring-green-200"
+                            : "border-gray-300 bg-white text-gray-900"
                           }`}
                         />
                       </td>
-                      <td className="py-3 px-4 text-center min-w-[80px]">
+
+                      {/* Difference */}
+                      <td className="py-3.5 px-4 text-center">
                         <DiffCell system={row.systemQty} physical={row.physicalCount} />
                       </td>
-                      <td className="py-3 px-4 min-w-[160px]">
+
+                      {/* Remarks */}
+                      <td className="py-3.5 px-4">
                         <Input
                           placeholder="Optional note…"
                           value={row.remarks}
                           onChange={(e) => updateRow(row.productId, "remarks", e.target.value)}
-                          className="h-8 text-xs"
+                          className="h-8 text-xs border-gray-300"
                         />
                       </td>
                     </tr>
@@ -368,18 +445,24 @@ export default function ClerkStockCount() {
           </table>
         </div>
 
-        {/* Footer action */}
+        {/* Footer */}
         {!loading && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              {canComplete
-                ? `Ready to complete — ${countedRows.length} product(s) counted, ${shortRows.length + overRows.length} with differences`
-                : "Enter at least one physical count to complete the stock count"}
-            </p>
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-green-400 inline-block" /> Matched
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" /> Over count
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Short count
+              </span>
+            </div>
             <Button
               disabled={!canComplete}
               onClick={() => setConfirmOpen(true)}
-              className="gap-2 bg-purple-600 hover:bg-purple-700"
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold"
             >
               <CheckCircle2 className="h-4 w-4" /> Complete Count
             </Button>

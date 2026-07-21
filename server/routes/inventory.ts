@@ -123,7 +123,9 @@ router.get("/logs", async (req: Request, res: Response) => {
   if (!requireAdminOrClerk(req, res)) return;
 
   try {
-    const { product_id, limit = "50", offset = "0" } = req.query;
+    const limit  = Math.max(1, parseInt((req.query.limit  as string) || "50",  10));
+    const offset = Math.max(0, parseInt((req.query.offset as string) || "0",   10));
+    const { product_id } = req.query;
 
     let where = "WHERE 1=1";
     const params: any[] = [];
@@ -132,8 +134,6 @@ router.get("/logs", async (req: Request, res: Response) => {
       where += " AND il.product_id = ?";
       params.push(parseInt(product_id as string, 10));
     }
-
-    params.push(parseInt(limit as string, 10), parseInt(offset as string, 10));
 
     const [rows] = await pool.execute<any[]>(`
       SELECT
@@ -154,7 +154,7 @@ router.get("/logs", async (req: Request, res: Response) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
 
     res.status(200).json(rows);
@@ -188,7 +188,7 @@ const stockInSchema = z.object({
 const stockAdjustmentSchema = z.object({
   product_id: z.number().int().positive(),
   type: z.enum(["Damaged", "Lost", "Expired", "Correction"]),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().min(0),
   reason: z.string().min(1, "Reason is required")
 });
 

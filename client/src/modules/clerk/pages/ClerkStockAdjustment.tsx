@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -17,16 +17,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getProducts, getSuppliers, lookupProduct, type ProductRecord,
+  getProducts, lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
 import { submitStockAdjustment, getInventoryLogs } from "@/shared/api/inventoryApi";
 
 // ─── Adjustment type config ───────────────────────────────────────────────────
 const ADJUSTMENT_TYPES = [
-  { value: "DAMAGED", label: "Damaged", icon: Flame, color: "text-red-600", bg: "bg-red-50", description: "Items physically damaged, subtract from stock" },
-  { value: "LOST", label: "Lost", icon: PackageX, color: "text-orange-600", bg: "bg-orange-50", description: "Items that cannot be located, subtract from stock" },
-  { value: "EXPIRED", label: "Expired", icon: Clock4, color: "text-amber-600", bg: "bg-amber-50", description: "Items past expiry date, subtract from stock" },
-  { value: "CORRECTION", label: "Correction", icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50", description: "Manual correction — sets the absolute quantity" },
+  { value: "Damaged", label: "Damaged", icon: Flame, color: "text-red-600", bg: "bg-red-50", description: "Items physically damaged, subtract from stock" },
+  { value: "Lost", label: "Lost", icon: PackageX, color: "text-orange-600", bg: "bg-orange-50", description: "Items that cannot be located, subtract from stock" },
+  { value: "Expired", label: "Expired", icon: Clock4, color: "text-amber-600", bg: "bg-amber-50", description: "Items past expiry date, subtract from stock" },
+  { value: "Correction", label: "Correction", icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50", description: "Manual correction — sets the absolute quantity" },
 ];
 
 // ─── Type badge helper ──────────────────────────────────────────────────────────
@@ -52,6 +52,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   const [searchInput, setSearchInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(prefillProduct || null);
+  const [searchResults, setSearchResults] = useState<ProductRecord[]>([]);
   const [lookupError, setLookupError] = useState("");
   const [adjType, setAdjType] = useState<string>("");
   const [qty, setQty] = useState("");
@@ -59,55 +60,58 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [allProducts, setAllProducts] = useState<ProductRecord[]>([]);
 
-  // Sync prefill when modal opens/closes
   useEffect(() => {
     if (open) {
       setSelectedProduct(prefillProduct || null);
-      setAdjType("");
-      setQty("");
-      setReason("");
-      setErrors({});
-      setLookupError("");
-      // Load products
-      const fetchProducts = async () => {
-        try {
-          const data = await getProducts();
-          setProducts(data);
-        } catch (err) {
-          console.error(err);
-          toast.error("Failed to load products");
-        }
-      };
-      fetchProducts();
+      setAdjType(""); setQty(""); setReason("");
+      setErrors({}); setLookupError("");
+      setSearchInput(""); setBarcodeInput(""); setSearchResults([]);
+      getProducts().then(setAllProducts).catch(() => toast.error("Failed to load products"));
     }
   }, [open, prefillProduct]);
 
-  const lookupProductFn = useCallback(async (val: string) => {
+  // Live name search — filter allProducts client-side as clerk types
+  useEffect(() => {
+    const q = searchInput.trim().toLowerCase();
+    if (!q) { setSearchResults([]); return; }
+    setSearchResults(
+      allProducts.filter((p) =>
+        p.product_name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q)
+      ).slice(0, 20)
+    );
+  }, [searchInput, allProducts]);
+
+  const selectProduct = (p: ProductRecord) => {
+    setSelectedProduct(p);
+    setSearchInput(""); setSearchResults([]);
+    setBarcodeInput(""); setLookupError("");
+    setErrors((e) => ({ ...e, product: "" }));
+  };
+
+  // Barcode scan — exact match only
+  const handleBarcodeScan = useCallback(async (val: string) => {
+    if (!val.trim()) return;
     setLookupError("");
     try {
-      const results = await lookupProduct(val);
-      if (results.length > 0) {
-        const found = products.find(p => p.id === results[0].id);
-        if (found) {
-          setSelectedProduct(found);
-          setLookupError("");
-        } else {
-          setLookupError("Product not found in inventory");
-        }
+      const results = await lookupProduct(val.trim());
+      const exact = results.find((r) => r.barcode === val.trim());
+      if (exact) {
+        const full = allProducts.find((p) => p.id === exact.id);
+        selectProduct(full ?? ({ ...exact, reorder_level: 0, cost_price: 0, category_id: null, category: "", supplier_id: null, supplier: "", unit_id: null, unit_abbreviation: exact.unit, description: null, image: null, status: "Active", barcode_source: "store", supplier_barcode: null, damaged_stock: 0, created_at: null, updated_at: null } as ProductRecord));
       } else {
-        setLookupError("Product not registered. Please contact the Administrator.");
+        setLookupError("Barcode not registered. Please contact the Administrator.");
       }
     } catch {
-      setLookupError("Failed to search for product");
+      setLookupError("Failed to scan barcode.");
     }
-  }, [products]);
+  }, [allProducts]);
 
   // Derived new quantity preview
   const qtyNum = parseInt(qty, 10) || 0;
   const currentQty = selectedProduct?.quantity || 0;
-  const previewQty = adjType === "CORRECTION"
+  const previewQty = adjType === "Correction"
     ? qtyNum
     : Math.max(0, currentQty - qtyNum);
 
@@ -116,7 +120,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
     if (!selectedProduct) e.product = "Select a product first";
     if (!adjType) e.type = "Select an adjustment type";
     if (!qty || qtyNum < 1) e.qty = "Enter a valid quantity (min 1)";
-    if (adjType !== "CORRECTION" && qtyNum > currentQty) {
+    if (adjType !== "Correction" && qtyNum > currentQty) {
       e.qty = `Cannot deduct more than current stock (${currentQty})`;
     }
     if (!reason.trim()) e.reason = "Reason is required";
@@ -149,83 +153,105 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <SlidersHorizontal className="h-5 w-5 text-amber-600" />
-              Stock Adjustment
-            </DialogTitle>
-            <DialogDescription>
-              Record damaged, lost, expired, or corrected stock. All adjustments are logged.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] flex flex-col">
 
-          <div className="space-y-4">
-            {/* Product lookup */}
-            {!selectedProduct ? (
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700">
-                Find Product <span className="text-red-500">*</span>
-              </label>
-                <div className="grid grid-cols-1 gap-2">
+          {/* Colored header */}
+          <div className="bg-amber-600 px-6 py-4 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-white/20 rounded-lg">
+                <SlidersHorizontal className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Stock Adjustment</h2>
+                <p className="text-xs text-amber-100 mt-0.5">Record damaged, lost, expired, or corrected stock</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-gray-50">
+
+            {/* ── Step 1: Product ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 1 — Select Product</p>
+
+              {!selectedProduct ? (
+                <div className="space-y-2">
                   <div className="relative">
                     <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
                     <Input
-                      placeholder="Scan barcode (Enter)…"
+                      placeholder="Scan barcode then press Enter…"
                       value={barcodeInput}
                       onChange={(e) => { setBarcodeInput(e.target.value); setLookupError(""); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProductFn(barcodeInput); } }}
-                      className="pl-9 h-10 font-mono"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeScan(barcodeInput); } }}
+                      className="pl-9 h-10 font-mono bg-blue-50 border-blue-200 focus:border-blue-400 placeholder:text-blue-400"
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      <Input
-                        placeholder="Search by name or barcode…"
-                        value={searchInput}
-                        onChange={(e) => { setSearchInput(e.target.value); setLookupError(""); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupProductFn(searchInput); } }}
-                        className="pl-9 h-10"
-                      />
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <div className="flex-1 h-px bg-gray-200" />
+                    <span>or search by name</span>
+                    <div className="flex-1 h-px bg-gray-200" />
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none z-10" />
+                    <Input
+                      placeholder="Type product name…"
+                      value={searchInput}
+                      onChange={(e) => { setSearchInput(e.target.value); setLookupError(""); }}
+                      className="pl-9 h-10 border-gray-300"
+                      autoComplete="off"
+                    />
+                    {searchResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-50 max-h-52 overflow-y-auto">
+                        {searchResults.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={() => selectProduct(p)}
+                            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-amber-50 text-left border-b border-gray-100 last:border-0 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{p.product_name}</p>
+                              <p className="text-xs text-gray-400 font-mono">{p.barcode}</p>
+                            </div>
+                            <span className="ml-3 text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">
+                              {p.quantity} {p.unit_abbreviation}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {lookupError && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />{lookupError}
                     </div>
-                    <Button variant="outline" size="sm" className="h-10 px-4"
-                      onClick={() => lookupProductFn(searchInput)}>
-                      Search
-                    </Button>
-                  </div>
+                  )}
+                  {errors.product && <p className="text-xs text-red-500">{errors.product}</p>}
                 </div>
-                {lookupError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />{lookupError}
+              ) : (
+                <div className="flex items-center justify-between gap-3 p-3 bg-blue-50 border border-blue-300 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-600 rounded-lg shrink-0"><Package className="h-4 w-4 text-white" /></div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-sm">{selectedProduct.product_name}</p>
+                      <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
+                      <p className="text-xs mt-1">
+                        Current stock: <strong className="text-blue-700 text-sm">{selectedProduct.quantity}</strong>
+                      </p>
+                    </div>
                   </div>
-                )}
-                {errors.product && <p className="text-xs text-red-500">{errors.product}</p>}
-              </div>
-            ) : (
-              <div className="flex items-start justify-between gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg"><Package className="h-4 w-4 text-blue-700" /></div>
-                  <div>
-                    <p className="font-semibold text-gray-900 text-sm">{selectedProduct.product_name}</p>
-                    <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Current stock: <strong className="text-gray-900">{selectedProduct.quantity}</strong>
-                    </p>
-                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50 shrink-0"
+                    onClick={() => { setSelectedProduct(null); setErrors({}); }}>
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-gray-700"
-                  onClick={() => { setSelectedProduct(null); setErrors({}); }}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Adjustment type */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Adjustment Type <span className="text-red-500">*</span>
-              </label>
+            {/* ── Step 2: Adjustment Type ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 2 — Adjustment Type <span className="text-red-500">*</span></p>
               <div className="grid grid-cols-2 gap-2">
                 {ADJUSTMENT_TYPES.map((t) => {
                   const Icon = t.icon;
@@ -233,76 +259,79 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                   return (
                     <button key={t.value} type="button"
                       onClick={() => { setAdjType(t.value); setErrors((e) => ({ ...e, type: "" })); }}
-                      className={`flex items-center gap-2 p-3 rounded-lg border-2 text-left transition-all ${
-                        active ? `border-current ${t.bg} ${t.color}` : "border-gray-200 hover:border-gray-300 text-gray-600"
+                      className={`flex items-center gap-2.5 p-3 rounded-lg border-2 text-left transition-all ${
+                        active
+                          ? `border-current ${t.bg} ${t.color} shadow-sm`
+                          : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white text-gray-600"
                       }`}>
                       <Icon className={`h-4 w-4 flex-shrink-0 ${active ? t.color : "text-gray-400"}`} />
-                      <span className="text-sm font-medium">{t.label}</span>
+                      <span className="text-sm font-semibold">{t.label}</span>
                     </button>
                   );
                 })}
               </div>
               {typeConfig && (
-                <p className="text-xs text-gray-500 mt-1.5 pl-1">{typeConfig.description}</p>
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">{typeConfig.description}</p>
               )}
-              {errors.type && <p className="text-xs text-red-500 mt-1">{errors.type}</p>}
+              {errors.type && <p className="text-xs text-red-500">{errors.type}</p>}
             </div>
 
-            {/* Quantity */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                {adjType === "CORRECTION" ? "Set New Quantity" : "Quantity to Deduct"}
-                <span className="text-red-500"> *</span>
-              </label>
-              <Input
-                type="number" min={1}
-                placeholder={adjType === "CORRECTION" ? "Enter exact new quantity" : "How many units?"}
-                value={qty}
-                onChange={(e) => { setQty(e.target.value); setErrors((er) => ({ ...er, qty: "" })); }}
-                className="h-10"
-              />
-              {errors.qty && <p className="text-xs text-red-500 mt-1">{errors.qty}</p>}
-            </div>
-
-            {/* New quantity preview */}
-            {selectedProduct && adjType && qty && qtyNum >= 1 && (
-              <div className={`flex items-center justify-between p-3 rounded-lg border ${
-                previewQty === 0 ? "bg-red-50 border-red-200" :
-                previewQty <= (selectedProduct.reorder_level * 0.5) ? "bg-red-50 border-red-200" :
-                previewQty <= selectedProduct.reorder_level ? "bg-amber-50 border-amber-200" :
-                "bg-green-50 border-green-200"
-              }`}>
-                <span className="text-sm text-gray-700 font-medium">New quantity will be:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 line-through text-sm">{currentQty}</span>
-                  <span className={`text-xl font-bold ${
-                    previewQty === 0 ? "text-gray-500" :
-                    previewQty <= selectedProduct.reorder_level ? "text-amber-700" : "text-green-700"
-                  }`}>{previewQty}</span>
-                  <span className="text-gray-500 text-sm">{selectedProduct.unit}</span>
-                </div>
+            {/* ── Step 3: Quantity + Preview ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 3 — Quantity <span className="text-red-500">*</span></p>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  {adjType === "Correction" ? "Set New Quantity" : "Quantity to Deduct"}
+                </label>
+                <Input
+                  type="number" min={1}
+                  placeholder={adjType === "Correction" ? "Enter exact new quantity" : "How many units?"}
+                  value={qty}
+                  onChange={(e) => { setQty(e.target.value); setErrors((er) => ({ ...er, qty: "" })); }}
+                  className="h-11 text-base border-gray-300 focus:border-amber-400"
+                />
+                {errors.qty && <p className="text-xs text-red-500 mt-1">{errors.qty}</p>}
               </div>
-            )}
 
-            {/* Reason */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Reason <span className="text-red-500">*</span>
-              </label>
+              {selectedProduct && adjType && qty && qtyNum >= 1 && (
+                <div className={`flex items-center justify-between px-4 py-3 rounded-lg border-2 ${
+                  previewQty === 0 ? "bg-red-50 border-red-300" :
+                  previewQty <= (selectedProduct.reorder_level * 0.5) ? "bg-red-50 border-red-300" :
+                  previewQty <= selectedProduct.reorder_level ? "bg-amber-50 border-amber-300" :
+                  "bg-green-50 border-green-300"
+                }`}>
+                  <span className="text-sm font-semibold text-gray-700">New quantity:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 line-through text-sm">{currentQty}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className={`text-2xl font-bold ${
+                      previewQty === 0 ? "text-red-600" :
+                      previewQty <= selectedProduct.reorder_level ? "text-amber-700" : "text-green-700"
+                    }`}>{previewQty}</span>
+                    <span className="text-gray-500 text-sm">{selectedProduct.unit}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Step 4: Reason ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-2">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 4 — Reason <span className="text-red-500">*</span></p>
               <Textarea
                 placeholder="Describe why this adjustment is needed…"
                 value={reason}
                 onChange={(e) => { setReason(e.target.value); setErrors((er) => ({ ...er, reason: "" })); }}
-                className="min-h-[80px] resize-none"
+                className="min-h-[80px] resize-none border-gray-300 focus:border-amber-400"
               />
-              {errors.reason && <p className="text-xs text-red-500 mt-1">{errors.reason}</p>}
+              {errors.reason && <p className="text-xs text-red-500">{errors.reason}</p>}
             </div>
           </div>
 
-          <div className="flex justify-between gap-3 pt-2 border-t border-gray-100">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {/* Footer */}
+          <div className="shrink-0 flex justify-between gap-3 px-6 py-4 bg-white border-t border-gray-200">
+            <Button variant="outline" className="border-gray-300 text-gray-700" onClick={onClose}>Cancel</Button>
             <Button
-              className="gap-2 bg-amber-600 hover:bg-amber-700"
+              className="gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
               onClick={() => { if (validate()) setConfirmOpen(true); }}
               disabled={loading}
             >
@@ -317,7 +346,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Stock Adjustment</AlertDialogTitle>
             <AlertDialogDescription>
-              {adjType === "CORRECTION"
+              {adjType === "Correction"
                 ? `This will set "${selectedProduct?.product_name}" quantity to ${previewQty} ${selectedProduct?.unit}.`
                 : `This will deduct ${qtyNum} ${selectedProduct?.unit} from "${selectedProduct?.product_name}" (${currentQty} → ${previewQty}).`
               } This action is logged and cannot be undone.
@@ -354,7 +383,7 @@ export default function ClerkStockAdjustment() {
       setLoadingLogs(true);
       try {
         const data = await getInventoryLogs();
-        const adjustmentLogs = data.filter(log => log.action === "Stock Adjustment" || log.transaction_type === "Adjustment");
+        const adjustmentLogs = data.filter(log => log.transaction_type === "Adjustment");
         setLogs(adjustmentLogs);
       } catch (err) {
         console.error(err);
@@ -368,16 +397,16 @@ export default function ClerkStockAdjustment() {
 
   // Calculate stats
   const totalAdjustments = logs.length;
-  const damagedCount = logs.filter(l => l.adjustment_type === 'DAMAGED').length;
-  const lostCount = logs.filter(l => l.adjustment_type === 'LOST').length;
-  const expiredCount = logs.filter(l => l.adjustment_type === 'EXPIRED').length;
+  const damagedCount = logs.filter(l => l.action === 'Damaged').length;
+  const lostCount = logs.filter(l => l.action === 'Lost').length;
+  const expiredCount = logs.filter(l => l.action === 'Expired').length;
 
   // Filtered history
   const filteredHistory = logs.filter((r) =>
     historySearch === "" ||
     (r.product_name || "").toLowerCase().includes(historySearch.toLowerCase()) ||
     (r.barcode || "").toLowerCase().includes(historySearch.toLowerCase()) ||
-    (r.adjustment_type || "").toLowerCase().includes(historySearch.toLowerCase())
+    (r.action || "").toLowerCase().includes(historySearch.toLowerCase())
   );
 
   return (
@@ -429,50 +458,73 @@ export default function ClerkStockAdjustment() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                {["ID", "Product", "Type", "Deducted/Set", "Previous Qty", "New Qty", "Reason", "Date"].map((h) => (
-                  <th key={h} className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
+              <tr className="bg-gray-100 border-y border-gray-200">
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide whitespace-nowrap w-16">ID</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Type</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Deducted / Set</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Prev. Qty</th>
+                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Qty</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[200px]">Reason</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {loadingLogs ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-gray-100">
+                  <tr key={i} className="bg-white">
                     {Array.from({ length: 8 }).map((_, j) => (
-                      <td key={j} className="py-3 px-4"><Skeleton className="h-4 w-full" /></td>
+                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-14 text-center">
-                    <div className="flex flex-col items-center gap-3 text-gray-400">
-                      <SlidersHorizontal className="h-10 w-10 opacity-30" />
-                      <p className="font-medium text-gray-600">No adjustments found</p>
+                  <td colSpan={8} className="py-16 text-center bg-white">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="p-4 bg-gray-100 rounded-full">
+                        <SlidersHorizontal className="h-8 w-8 text-gray-400" />
+                      </div>
+                      <p className="font-semibold text-gray-600">No adjustments found</p>
+                      <p className="text-xs text-gray-400">Try adjusting your search or create a new adjustment</p>
                     </div>
                   </td>
                 </tr>
-              ) : filteredHistory.map((r) => (
-                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4 font-mono text-xs font-semibold text-amber-700">{r.id}</td>
-                  <td className="py-3 px-4">
-                    <p className="font-medium text-gray-900 text-xs">{r.product_name}</p>
-                    <p className="text-xs text-gray-400 font-mono">{r.barcode}</p>
+              ) : filteredHistory.map((r, idx) => (
+                <tr key={r.id} className={`transition-colors hover:bg-amber-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                  <td className="py-3.5 px-4">
+                    <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                      #{r.id}
+                    </span>
                   </td>
-                  <td className="py-3 px-4"><TypeBadge type={r.adjustment_type} /></td>
-                  <td className="py-3 px-4 font-bold text-red-600 text-sm">
-                    {r.adjustment_type === 'CORRECTION' ? `→${r.quantity_change}` : `-${r.quantity_change}`}
+                  <td className="py-3.5 px-4">
+                    <p className="font-semibold text-gray-900 text-sm leading-tight">{r.product_name}</p>
+                    <p className="text-xs text-gray-400 font-mono mt-0.5">{r.barcode}</p>
                   </td>
-                  <td className="py-3 px-4 text-gray-500 text-sm">{r.previous_quantity}</td>
-                  <td className="py-3 px-4 font-bold text-gray-900 text-sm">{r.new_quantity}</td>
-                  <td className="py-3 px-4 text-gray-600 text-xs max-w-[180px]">
-                    <span className="truncate block">{r.reason}</span>
+                  <td className="py-3.5 px-4"><TypeBadge type={r.action} /></td>
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`inline-flex items-center justify-center font-bold text-sm px-2.5 py-1 rounded-lg ${
+                      r.action === 'Correction'
+                        ? 'text-blue-700 bg-blue-50 border border-blue-200'
+                        : 'text-red-700 bg-red-50 border border-red-200'
+                    }`}>
+                      {r.action === 'Correction' ? `→ ${r.quantity_change}` : `− ${r.quantity_change}`}
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(r.created_at).toLocaleString()}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="text-sm font-medium text-gray-500">{r.quantity}</span>
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="text-sm font-bold text-gray-900">{r.remaining_stock}</span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <p className="text-sm text-gray-700 line-clamp-2 max-w-[220px]">{r.reference}</p>
+                  </td>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <p className="text-xs font-medium text-gray-700">{new Date(r.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </td>
                 </tr>
               ))}

@@ -113,8 +113,8 @@ router.post(
 
         // Inventory log (negative quantity_change for a sale)
         await conn.execute(
-          `INSERT INTO inventory_logs (product_id, action, quantity_change, reference, user_id)
-           VALUES (?, 'sale', ?, ?, ?)`,
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+           VALUES (?, 'Sale', 'sale', ?, ?, ?)`,
           [item.product_id, -item.quantity, invoice_number, req.user!.id]
         );
       }

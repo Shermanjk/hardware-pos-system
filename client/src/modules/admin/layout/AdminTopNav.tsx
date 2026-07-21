@@ -1,11 +1,16 @@
 import { useState, useEffect } from "react";
-import { Menu, Bell, ChevronDown, LogOut, User } from "lucide-react";
+import { Menu, Bell, ChevronDown, LogOut, PackageX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import { useReturnNotifications } from "@/shared/hooks/useReturnNotifications";
+import { useLocation } from "wouter";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -13,8 +18,10 @@ interface TopNavProps {
 
 export default function AdminTopNav({ onMenuClick }: TopNavProps) {
   const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
+  const { notifications, unreadCount, clearAll } = useReturnNotifications();
 
   useEffect(() => {
     const tick = () => {
@@ -56,11 +63,93 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
           <span className="text-xs text-gray-400">{date}</span>
         </div>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative h-9 w-9 p-0 text-gray-500 hover:text-gray-900">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
-        </Button>
+        {/* Notifications bell */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="relative h-9 w-9 p-0 text-gray-500 hover:text-gray-900"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">Return Requests</span>
+              {unreadCount > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400 gap-2">
+                <PackageX className="h-8 w-8" />
+                <p className="text-sm">No pending return requests</p>
+              </div>
+            ) : (
+              <ul className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                {notifications.map((n) => (
+                  <li
+                    key={`${n.id}-${n.created_at}`}
+                    className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => {
+                      clearAll();
+                      setLocation("/returns");
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                        <PackageX className="h-4 w-4 text-orange-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {n.return_number}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {n.cashier_name} · Invoice {n.invoice_number}
+                        </p>
+                        {n.customer_name && (
+                          <p className="text-xs text-gray-400 truncate">{n.customer_name}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(n.created_at).toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {notifications.length > 0 && (
+              <div className="border-t border-gray-100 px-4 py-2.5">
+                <button
+                  className="w-full text-xs text-center text-blue-600 hover:text-blue-800 font-medium"
+                  onClick={() => {
+                    clearAll();
+                    setLocation("/returns");
+                  }}
+                >
+                  View all returns →
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
 
         {/* Divider */}
         <div className="w-px h-8 bg-gray-200 mx-1" />

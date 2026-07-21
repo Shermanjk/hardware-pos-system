@@ -9,8 +9,9 @@ export interface StoreSettings {
   currency:         string;
   tax_rate:         number;
   business_license: string;
-  pos_min:          string;
-  pos_serial:       string;
+  pos_min:          string | undefined;
+  pos_serial:       string | undefined;
+  vat_registered:   boolean;
 }
 
 function authHeaders() {
@@ -19,7 +20,10 @@ function authHeaders() {
 }
 
 export async function getSettings(): Promise<StoreSettings> {
-  const res = await axios.get<StoreSettings>("/api/settings", { headers: authHeaders() });
+  const res = await axios.get<StoreSettings>("/api/settings", {
+    headers: { ...authHeaders(), "Cache-Control": "no-cache" },
+    params: { _t: Date.now() },
+  });
   return res.data;
 }
 

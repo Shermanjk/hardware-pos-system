@@ -19,15 +19,17 @@ export interface ReturnReceiptData {
   store_phone?: string;
   store_address?: string;
   store_tin?: string;
+  store_vat_registered?: boolean;
   currency?: string;
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
-  const storeName    = data.store_name    || "ISRA HARDWARE";
-  const storeFb      = data.store_fb      || "Rexjie Saludo";
-  const storePhone   = data.store_phone   || "09093250717";
-  const storeAddress = data.store_address || "Purok Lapu-Lapu, Tikwas 7015 Dumalinao, Zamboanga del Sur";
-  const storeTIN     = data.store_tin     || "765-490-574-00000";
+  const storeName    = data.store_name    || "";
+  const storeFb      = data.store_fb      || "";
+  const storePhone   = data.store_phone   || "";
+  const storeAddress = data.store_address || "";
+  const storeTIN     = data.store_tin     || "";
+  const isVAT        = data.store_vat_registered ?? false;
   const currSym      = data.currency === "PHP" || !data.currency ? "&#8369;" : data.currency;
 
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
@@ -61,7 +63,10 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   const barcodeDisplay = `<div style="text-align:center;font-family:monospace;letter-spacing:4px;font-size:18px;margin:6px 0;">${data.return_number}</div>`;
 
   const w = window.open("", "_blank", "width=420,height=760");
-  if (!w) return;
+  if (!w) {
+    alert("Pop-up blocked. Please allow pop-ups for this site to print the return receipt.");
+    return;
+  }
 
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>Return Receipt ${data.return_number}</title>
@@ -82,7 +87,7 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   <div class="c">
   <div class="b" style="font-size:15px">${storeName}</div>
   <div>${storeAddress}</div>
-  <div style="font-size:11px;color:#555;margin-top:3px">TIN: ${storeTIN} (VAT-Registered)</div>
+  <div style="font-size:11px;color:#555;margin-top:3px">TIN: ${storeTIN}${isVAT ? " (VAT-Registered)" : ""}</div>
   <div style="font-size:11px;color:#555;">Return Receipt</div>
   <div style="font-size:11px;color:#555;">Fb: ${storeFb} | Tel: ${storePhone}</div>
 </div>
@@ -110,7 +115,7 @@ ${resolutionLabel}
   <p>Thank you for your business.</p>
   <p style="margin-top:3px;font-size:10px;">This serves as your official return receipt.</p>
 </div>
-<script>window.onload=function(){window.print();window.close();}<\/script>
 </body></html>`);
   w.document.close();
+  setTimeout(() => { w.print(); w.close(); }, 250);
 }
