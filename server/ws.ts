@@ -3,7 +3,7 @@ import { IncomingMessage, Server } from "http";
 import jwt from "jsonwebtoken";
 import type { AuthPayload } from "./middleware/authenticate.js";
 
-export interface ReturnNotification {
+export interface ReturnRequestNotification {
   type: "return_request";
   id: number;
   return_number: string;
@@ -13,22 +13,34 @@ export interface ReturnNotification {
   created_at: string;
 }
 
+export interface ReturnDecisionNotification {
+  type: "return_decision";
+  id: number;
+  return_number: string;
+  invoice_number: string;
+  customer_name: string;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  cashier_user_id: number;
+}
+
+// Keep the old name as an alias so existing callers don't break
+export type ReturnNotification = ReturnRequestNotification;
+
 // Track connected Admin sockets
 const adminClients = new Set<WebSocket>();
+// Track cashier sockets keyed by userId so we can route decisions back
+const cashierClients = new Map<number, Set<WebSocket>>();
 
 export function initWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    // Authenticate via ?token= query param
     const url = new URL(req.url ?? "", "http://localhost");
     const token = url.searchParams.get("token");
     const secret = process.env.JWT_SECRET;
 
-    if (!token || !secret) {
-      ws.close(1008, "Unauthorized");
-      return;
-    }
+    if (!token || !secret) { ws.close(1008, "Unauthorized"); return; }
 
     let payload: AuthPayload;
     try {
@@ -38,21 +50,35 @@ export function initWebSocket(server: Server): void {
       return;
     }
 
-    if (payload.role !== "Admin") {
+    if (payload.role === "Admin") {
+      adminClients.add(ws);
+      ws.on("close", () => adminClients.delete(ws));
+    } else if (payload.role === "Cashier") {
+      const uid = payload.id;
+      if (!cashierClients.has(uid)) cashierClients.set(uid, new Set());
+      cashierClients.get(uid)!.add(ws);
+      ws.on("close", () => {
+        cashierClients.get(uid)?.delete(ws);
+        if (cashierClients.get(uid)?.size === 0) cashierClients.delete(uid);
+      });
+    } else {
       ws.close(1008, "Forbidden");
-      return;
     }
-
-    adminClients.add(ws);
-    ws.on("close", () => adminClients.delete(ws));
   });
 }
 
-export function broadcastReturnRequest(notification: ReturnNotification): void {
+export function broadcastReturnRequest(notification: ReturnRequestNotification): void {
   const message = JSON.stringify(notification);
   for (const client of Array.from(adminClients)) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function sendReturnDecision(notification: ReturnDecisionNotification): void {
+  const sockets = cashierClients.get(notification.cashier_user_id);
+  if (!sockets) return;
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(sockets)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
   }
 }

@@ -3,6 +3,7 @@ import express from "express";
 import { createServer } from "http";
 import { initWebSocket } from "./ws.js";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import authRoutes from "./routes/auth.js";
 import usersRoutes from "./routes/users.js";
@@ -46,8 +47,8 @@ async function startServer() {
   app.use("/api/settings",  settingsRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
-  if (process.env.NODE_ENV === "production") {
-    const staticPath = path.resolve(__dirname, "public");
+  const staticPath = path.resolve(__dirname, "public");
+  if (fs.existsSync(staticPath)) {
     app.use(express.static(staticPath));
     app.get("*", (_req, res) => {
       res.sendFile(path.join(staticPath, "index.html"));

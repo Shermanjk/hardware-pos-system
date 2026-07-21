@@ -6,7 +6,7 @@ import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { generateReturnNumber } from "../utils/returnNumber.js";
 import { validateReturnItems, ReturnItemPayload } from "../utils/validateReturn.js";
-import { broadcastReturnRequest } from "../ws.js";
+import { broadcastReturnRequest, sendReturnDecision } from "../ws.js";
 
 const router = Router();
 
@@ -340,6 +340,19 @@ router.patch(
       );
 
       const updated = await fetchReturnSummary(conn, id);
+
+      // Notify the cashier who submitted this return
+      sendReturnDecision({
+        type: "return_decision",
+        id: updated.id,
+        return_number: updated.return_number,
+        invoice_number: updated.invoice_number,
+        customer_name: updated.customer_name,
+        decision: "approved",
+        admin_name: updated.admin_name ?? "Admin",
+        cashier_user_id: updated.processed_by,
+      });
+
       res.status(200).json(updated);
     } catch (err) {
       console.error("[PATCH /api/returns/:id/approve] Error:", err);
@@ -394,6 +407,19 @@ router.patch(
       );
 
       const updated = await fetchReturnSummary(conn, id);
+
+      // Notify the cashier who submitted this return
+      sendReturnDecision({
+        type: "return_decision",
+        id: updated.id,
+        return_number: updated.return_number,
+        invoice_number: updated.invoice_number,
+        customer_name: updated.customer_name,
+        decision: "rejected",
+        admin_name: updated.admin_name ?? "Admin",
+        cashier_user_id: updated.processed_by,
+      });
+
       res.status(200).json(updated);
     } catch (err) {
       console.error("[PATCH /api/returns/:id/reject] Error:", err);

@@ -228,7 +228,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
       setForm(emptyForm());
     }
     setErrors({});
-  }, [open, mode, initial]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial?.id]);
 
   const set = (key: keyof ProductForm, value: unknown) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -317,11 +318,11 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                     form.barcode_source === src
                       ? "bg-blue-600 text-white"
                       : "bg-white text-gray-600 hover:bg-gray-50"
-                  } ${isLoading ? "pointer-events-none opacity-60" : ""}`}>
+                  } ${isLoading || mode === "edit" ? "pointer-events-none opacity-60" : ""}`}>
                   <input type="radio" name="barcode_source" value={src}
                     checked={form.barcode_source === src}
                     onChange={() => handleSourceChange(src)}
-                    className="sr-only" disabled={isLoading} />
+                    className="sr-only" disabled={isLoading || mode === "edit"} />
                   {src === "manufacturer" ? "Manufacturer Barcode" : "Store Barcode (Auto-Generate)"}
                 </label>
               ))}

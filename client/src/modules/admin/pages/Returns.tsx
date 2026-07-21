@@ -19,6 +19,7 @@ import type { SaleSummary, Sale } from "@/shared/api/salesApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { toast } from "sonner";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import { useReturnNotifications } from "@/shared/hooks/useReturnNotifications";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -323,6 +324,12 @@ function ReturnsList({ tab }: ReturnsListProps) {
   }, [tab]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh pending list when a new return request arrives via WS
+  const { notifications } = useReturnNotifications();
+  useEffect(() => {
+    if (tab === "Pending" && notifications.length > 0) load();
+  }, [notifications.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset filters when tab changes
   useEffect(() => { setSearch(""); setFilterStatus("all"); }, [tab]);
