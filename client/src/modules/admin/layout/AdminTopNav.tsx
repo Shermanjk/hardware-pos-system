@@ -42,7 +42,7 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
         <div className="hidden sm:flex flex-col">
           <p className="text-sm font-semibold text-gray-900">
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"},{" "}
-            <span className="text-blue-600">{user?.full_name?.split(" ")[0] ?? "Admin"}</span>
+            <span className="text-blue-600">Admin</span>
           </p>
           <p className="text-xs text-gray-400">Welcome back to Isra Hardware</p>
         </div>

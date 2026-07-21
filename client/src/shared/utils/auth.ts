@@ -24,21 +24,11 @@ function decodeJwt(token: string): (AuthUser & { exp?: number }) | null {
   }
 }
 
-// ─── Check if a token is present and not expired ─────────────────────────────
-export function isTokenValid(token: string | null): boolean {
-  if (!token) return false;
-  const decoded = decodeJwt(token);
-  if (!decoded) return false;
-  if (decoded.exp === undefined) return true; // no expiry claim → treat as valid
-  return decoded.exp * 1000 > Date.now();
-}
-
-// ─── Extract user from token (returns null if invalid / expired) ──────────────
+// ─── Extract user from token ─────────────────────────────────────────────────
 export function getUserFromToken(token: string | null): AuthUser | null {
   if (!token) return null;
   const decoded = decodeJwt(token);
   if (!decoded) return null;
-  if (decoded.exp !== undefined && decoded.exp * 1000 <= Date.now()) return null;
   return {
     id: decoded.id,
     full_name: decoded.full_name,

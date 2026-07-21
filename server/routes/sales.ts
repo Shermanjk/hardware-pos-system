@@ -60,7 +60,7 @@ router.post(
       // ── 1. Check stock for each item (with row-level lock) ───────────────────
       for (const item of items) {
         const [rows] = await conn.execute<any[]>(
-          `SELECT quantity, name FROM products WHERE id = ? FOR UPDATE`,
+          `SELECT quantity, product_name AS name FROM products WHERE id = ? FOR UPDATE`,
           [item.product_id]
         );
         const product = rows[0];
@@ -166,7 +166,7 @@ router.get(
            si.id,
            si.sale_id,
            si.product_id,
-           p.name         AS product_name,
+           p.product_name AS product_name,
            p.barcode,
            p.is_returnable,
            si.quantity,
@@ -193,11 +193,11 @@ router.get(
   }
 );
 
-// ─── GET / — List / search sales (Admin only) ─────────────────────────────────
+// ─── GET / — List / search sales (Admin, Cashier) ───────────────────────────
 router.get(
   "/",
   authenticate,
-  requireRole("Admin"),
+  requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
     const { invoice_number, customer_name, date_from, date_to } = req.query as Record<string, string | undefined>;
 

@@ -43,7 +43,7 @@ export async function validateReturnItems(
   for (const item of items) {
     // Check sale_item belongs to this sale
     const [siRows] = await conn.execute<any[]>(
-      `SELECT si.id, si.quantity, p.name, p.is_returnable
+      `SELECT si.id, si.quantity, p.product_name AS name, p.is_returnable
        FROM sale_items si
        JOIN products p ON p.id = si.product_id
        WHERE si.id = ? AND si.sale_id = ?`,

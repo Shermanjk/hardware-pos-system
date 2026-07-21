@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { createSale, type CreateSalePayload, getSaleByInvoice, type Sale } from "@/shared/api/salesApi";
 import { createReturn, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
+import { searchSales, type SaleSummary } from "@/shared/api/salesApi";
 import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
@@ -281,7 +282,12 @@ export default function Cashier() {
 
   // ─── Returns state ────────────────────────────────────────────────────────────
   const [showReturns,          setShowReturns]          = useState(false);
+  const [searchMode,           setSearchMode]           = useState<"invoice" | "customer" | "date">("invoice");
   const [returnInvoice,        setReturnInvoice]        = useState("");
+  const [customerSearch,       setCustomerSearch]       = useState("");
+  const [dateFrom,             setDateFrom]             = useState("");
+  const [dateTo,               setDateTo]               = useState("");
+  const [saleSearchResults,    setSaleSearchResults]    = useState<SaleSummary[]>([]);
   const [returnSale,           setReturnSale]           = useState<Sale | null>(null);
   const [returnLookupError,    setReturnLookupError]    = useState<string | null>(null);
   const [returnLookupLoading,  setReturnLookupLoading]  = useState(false);
@@ -474,11 +480,34 @@ export default function Cashier() {
 
   const resetReturnPanel = () => {
     setReturnInvoice("");
+    setCustomerSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setSaleSearchResults([]);
     setReturnSale(null);
     setReturnLookupError(null);
     setReturnSubmitError(null);
     setSubmittedReturn(null);
     setSelectedItems({});
+  };
+
+  const handleSaleSearch = async () => {
+    setReturnLookupLoading(true);
+    setReturnLookupError(null);
+    setSaleSearchResults([]);
+    try {
+      const results = await searchSales(
+        searchMode === "customer"
+          ? { customer_name: customerSearch.trim() }
+          : { date_from: dateFrom || undefined, date_to: dateTo || undefined }
+      );
+      if (results.length === 0) setReturnLookupError("No transactions found.");
+      else setSaleSearchResults(results);
+    } catch {
+      setReturnLookupError("Search failed. Check your connection.");
+    } finally {
+      setReturnLookupLoading(false);
+    }
   };
 
   const handleReturnLookup = async () => {
@@ -1213,13 +1242,28 @@ export default function Cashier() {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-          {/* Invoice lookup */}
+          {/* Search panel */}
           {!returnSale && !submittedReturn && (
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                  Invoice Number
-                </label>
+              {/* Tabs */}
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+                {(["invoice", "customer", "date"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => { setSearchMode(mode); setReturnLookupError(null); setSaleSearchResults([]); }}
+                    className={`flex-1 py-2 transition-colors ${
+                      searchMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-500 hover:bg-gray-50"
+                    }`}
+                  >
+                    {mode === "invoice" ? "Invoice #" : mode === "customer" ? "Customer" : "Date"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Invoice search */}
+              {searchMode === "invoice" && (
                 <div className="flex gap-2">
                   <Input
                     value={returnInvoice}
@@ -1227,23 +1271,107 @@ export default function Cashier() {
                     onKeyDown={(e) => e.key === "Enter" && handleReturnLookup()}
                     placeholder="e.g. INV-20250120-0001"
                     className="h-9 text-sm flex-1"
+                    autoFocus
                   />
-                  <Button
-                    size="sm"
-                    onClick={handleReturnLookup}
-                    disabled={returnLookupLoading || !returnInvoice.trim()}
-                    className="h-9 px-4"
-                  >
+                  <Button size="sm" onClick={handleReturnLookup} disabled={returnLookupLoading || !returnInvoice.trim()} className="h-9 px-4">
                     {returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}
                   </Button>
                 </div>
-                {returnLookupError && (
-                  <p className="text-xs text-red-600 mt-1">{returnLookupError}</p>
-                )}
-              </div>
-              <p className="text-xs text-gray-400">
-                Ask the customer for their receipt and enter the invoice number above.
-              </p>
+              )}
+
+              {/* Customer search */}
+              {searchMode === "customer" && (
+                <div className="flex gap-2">
+                  <Input
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSaleSearch()}
+                    placeholder="Customer name…"
+                    className="h-9 text-sm flex-1"
+                    autoFocus
+                  />
+                  <Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || !customerSearch.trim()} className="h-9 px-4">
+                    {returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
+              )}
+
+              {/* Date search */}
+              {searchMode === "date" && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 mb-0.5 block">From</label>
+                      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 mb-0.5 block">To</label>
+                      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm" />
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || (!dateFrom && !dateTo)} className="h-9 w-full">
+                    {returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
+              )}
+
+              {returnLookupError && (
+                <p className="text-xs text-red-600">{returnLookupError}</p>
+              )}
+
+              {/* Sale search results list */}
+              {saleSearchResults.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 py-2 bg-gray-50 border-b border-gray-200">
+                    Select a transaction
+                  </p>
+                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
+                    {saleSearchResults.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSaleSearchResults([]);
+                          setReturnInvoice(s.invoice_number);
+                          setSearchMode("invoice");
+                          // auto-lookup
+                          setReturnLookupLoading(true);
+                          setReturnLookupError(null);
+                          setReturnSale(null);
+                          setSelectedItems({});
+                          setSubmittedReturn(null);
+                          getSaleByInvoice(s.invoice_number)
+                              .then((sale) => {
+                                setReturnSale(sale);
+                                const init: typeof selectedItems = {};
+                                sale.items.forEach((item) => {
+                                  const remaining = item.quantity - item.quantity_returned;
+                                  if (remaining > 0 && item.is_returnable) {
+                                    init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode };
+                                  }
+                                });
+                                setSelectedItems(init);
+                              })
+                              .catch((err: any) => {
+                                const status = err?.response?.status;
+                                setReturnLookupError(status === 404 ? "Invoice not found." : (err?.response?.data?.message ?? "Failed to look up invoice."));
+                              })
+                              .finally(() => setReturnLookupLoading(false));
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left transition-colors"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{s.invoice_number}</p>
+                          <p className="text-xs text-gray-500">{s.customer_name}</p>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <p className="text-xs font-semibold text-blue-600">₱{Number(s.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

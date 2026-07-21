@@ -14,7 +14,6 @@ import {
   loadToken,
   clearToken,
   getUserFromToken,
-  isTokenValid,
   getRedirectPath,
 } from "@/shared/utils/auth";
 
@@ -46,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On mount: rehydrate from localStorage
   useEffect(() => {
     const stored = loadToken();
-    if (stored && isTokenValid(stored)) {
+    if (stored) {
       const decoded = getUserFromToken(stored);
       if (decoded) {
         setToken(stored);
@@ -54,25 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         clearToken();
       }
-    } else {
-      clearToken();
     }
     setIsLoading(false);
   }, []);
 
-  // Periodically check if token has expired and auto-logout
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const stored = loadToken();
-      if (stored && !isTokenValid(stored)) {
-        clearToken();
-        setToken(null);
-        setUser(null);
-        setLocation("/login");
-      }
-    }, 60_000); // check every 60 seconds
-    return () => clearInterval(interval);
-  }, [setLocation]);
 
   const login = useCallback(
     async (

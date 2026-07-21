@@ -9,6 +9,8 @@ export interface StoreSettings {
   currency:         string;
   tax_rate:         number;
   business_license: string;
+  pos_min:          string;
+  pos_serial:       string;
 }
 
 function authHeaders() {

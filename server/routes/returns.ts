@@ -72,7 +72,7 @@ async function fetchReturnItems(conn: PoolConnection, returnId: number): Promise
        ri.return_id,
        ri.sale_item_id,
        ri.product_id,
-       p.name          AS product_name,
+       p.product_name   AS product_name,
        ri.quantity_returned,
        ri.unit_price
      FROM return_items ri
@@ -212,6 +212,44 @@ router.get(
     } catch (err) {
       console.error("[GET /api/returns] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    }
+  }
+);
+
+// ─── GET /search-approved — Cashier: search approved returns by customer name ─
+router.get(
+  "/search-approved",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const { customer_name } = req.query as Record<string, string | undefined>;
+    if (!customer_name?.trim()) {
+      res.status(400).json({ message: "customer_name is required." });
+      return;
+    }
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.return_reason,
+           r.status,
+           r.resolution,
+           r.created_at
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         WHERE r.status = 'approved'
+           AND r.resolution IS NULL
+           AND s.customer_name LIKE ?
+         ORDER BY r.created_at DESC`,
+        [`%${customer_name.trim()}%`]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/search-approved] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
     }
   }
 );
@@ -393,7 +431,7 @@ router.patch(
 
     // Fetch return items
     const [itemRows] = await pool.execute<any[]>(
-      `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.name AS product_name
+      `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
        FROM return_items ri
        JOIN products p ON p.id = ri.product_id
        WHERE ri.return_id = ?`,

@@ -56,6 +56,25 @@ export interface ResolveReturnPayload {
 
 // ─── API functions ────────────────────────────────────────────────────────────
 
+export interface ApprovedReturnSummary {
+  id: number;
+  return_number: string;
+  invoice_number: string;
+  customer_name: string;
+  return_reason: string;
+  status: string;
+  resolution: string | null;
+  created_at: string;
+}
+
+export async function searchApprovedReturns(customer_name: string): Promise<ApprovedReturnSummary[]> {
+  const response = await axios.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
+    headers: authHeaders(),
+    params: { customer_name },
+  });
+  return response.data;
+}
+
 export async function createReturn(
   payload: CreateReturnPayload
 ): Promise<{ return_number: string; id: number }> {

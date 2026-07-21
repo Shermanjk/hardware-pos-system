@@ -22,6 +22,8 @@ const settingsSchema = z.object({
   currency:         z.string().max(10).optional(),
   tax_rate:         z.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot exceed 100").optional(),
   business_license: z.string().max(100).optional(),
+  pos_min:          z.string().max(30).optional(),
+  pos_serial:       z.string().max(30).optional(),
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────
@@ -65,6 +67,7 @@ router.put("/", async (req: Request, res: Response) => {
       store_phone: "store_phone", store_address: "store_address",
       currency: "currency", tax_rate: "tax_rate",
       business_license: "business_license",
+      pos_min: "pos_min", pos_serial: "pos_serial",
     };
 
     for (const [key, col] of Object.entries(fieldMap)) {

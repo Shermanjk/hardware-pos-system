@@ -131,7 +131,7 @@ function GeneralTab({ initial }: { initial: StoreSettings | null }) {
 // ─── Business Tab ─────────────────────────────────────────────────────────────
 
 function BusinessTab({ initial }: { initial: StoreSettings | null }) {
-  const [form, setForm] = useState({ business_license: "" });
+  const [form, setForm] = useState({ business_license: "", pos_min: "", pos_serial: "" });
   const [errors, setErrors]     = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess]   = useState(false);
@@ -139,6 +139,8 @@ function BusinessTab({ initial }: { initial: StoreSettings | null }) {
   useEffect(() => {
     if (initial) setForm({
       business_license: initial.business_license,
+      pos_min:          initial.pos_min,
+      pos_serial:       initial.pos_serial,
     });
   }, [initial]);
 
@@ -151,6 +153,8 @@ function BusinessTab({ initial }: { initial: StoreSettings | null }) {
     try {
       await updateSettings({
         business_license: form.business_license.trim(),
+        pos_min:          form.pos_min.trim(),
+        pos_serial:       form.pos_serial.trim(),
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -201,6 +205,33 @@ function BusinessTab({ initial }: { initial: StoreSettings | null }) {
             placeholder="License Number" disabled={isLoading}
             className={errors.business_license ? "border-red-400" : ""} />
           {errors.business_license && <p className="mt-1 text-xs text-red-600">{errors.business_license}</p>}
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">BIR POS Machine Registration</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="mb-1.5 block font-semibold">
+                MIN <span className="text-gray-400 font-normal">(Machine Identification No.)</span>
+              </Label>
+              <Input value={form.pos_min}
+                onChange={(e) => setForm((p) => ({ ...p, pos_min: e.target.value }))}
+                placeholder="e.g. 000-123456789" disabled={isLoading}
+                className={errors.pos_min ? "border-red-400" : ""} />
+              {errors.pos_min && <p className="mt-1 text-xs text-red-600">{errors.pos_min}</p>}
+            </div>
+            <div>
+              <Label className="mb-1.5 block font-semibold">
+                S/N <span className="text-gray-400 font-normal">(POS Serial Number)</span>
+              </Label>
+              <Input value={form.pos_serial}
+                onChange={(e) => setForm((p) => ({ ...p, pos_serial: e.target.value }))}
+                placeholder="e.g. SN-20250001" disabled={isLoading}
+                className={errors.pos_serial ? "border-red-400" : ""} />
+              {errors.pos_serial && <p className="mt-1 text-xs text-red-600">{errors.pos_serial}</p>}
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">These will be printed on every Sales Invoice receipt.</p>
         </div>
 
         <Button type="submit" disabled={isLoading} className="mt-2">

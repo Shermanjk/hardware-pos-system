@@ -402,8 +402,10 @@ interface InitiateReturnDialogProps {
   onClose: () => void;
 }
 
+const RETURN_REASONS = ["Damaged", "Wrong Item", "Missing Items", "Defective / Not Working", "Change of Mind", "Other"];
+
 function InitiateReturnDialog({ sale, onClose }: InitiateReturnDialogProps) {
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(RETURN_REASONS[0]);
   const [qtys, setQtys] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(false);
 
@@ -418,7 +420,6 @@ function InitiateReturnDialog({ sale, onClose }: InitiateReturnDialogProps) {
     if (!sale) return;
     const selectedItems = sale.items.filter(i => (qtys[i.id] ?? 0) > 0);
     if (selectedItems.length === 0) { toast.error("Select at least one item to return."); return; }
-    if (!reason.trim()) { toast.error("Please enter a return reason."); return; }
     setLoading(true);
     try {
       await createReturn({
@@ -428,13 +429,14 @@ function InitiateReturnDialog({ sale, onClose }: InitiateReturnDialogProps) {
           sale_item_id: i.id,
           product_id: i.product_id,
           quantity_returned: qtys[i.id],
-          unit_price: i.unit_price,
+          unit_price: Number(i.unit_price),
         })),
       });
       toast.success("Return request submitted.");
       onClose();
-    } catch { toast.error("Failed to submit return."); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to submit return.");
+    } finally { setLoading(false); }
   };
 
   const returnableItems = sale?.items.filter(i => i.is_returnable && i.quantity - i.quantity_returned > 0) ?? [];
@@ -471,7 +473,14 @@ function InitiateReturnDialog({ sale, onClose }: InitiateReturnDialogProps) {
           </table>
           <div>
             <Label className="font-semibold mb-1.5 block">Return Reason</Label>
-            <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="Describe the reason…" disabled={loading} />
+            <select
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              disabled={loading}
+              className="w-full h-9 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              {RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
+            </select>
           </div>
         </div>
         <DialogFooter className="mt-4">
@@ -479,6 +488,96 @@ function InitiateReturnDialog({ sale, onClose }: InitiateReturnDialogProps) {
           <Button onClick={handleSubmit} disabled={loading || returnableItems.length === 0}>
             {loading ? "Submitting…" : "Submit Return"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+// ─── Sale Detail Modal ────────────────────────────────────────────────────────
+
+function SaleDetailModal({ sale, onClose, onInitiateReturn }: {
+  sale: Sale | null;
+  onClose: () => void;
+  onInitiateReturn: (sale: Sale) => void;
+}) {
+  if (!sale) return null;
+  const returnableCount = sale.items.filter(i => i.is_returnable && i.quantity - i.quantity_returned > 0).length;
+  return (
+    <Dialog open={!!sale} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-base">{sale.invoice_number}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {/* Header info */}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm bg-gray-50 rounded-xl p-4">
+            <div><span className="text-gray-500">Date:</span> <span className="font-medium">{fmtDate(sale.created_at)}</span></div>
+            <div><span className="text-gray-500">Cashier:</span> <span className="font-medium">{sale.cashier_name}</span></div>
+            <div><span className="text-gray-500">Customer:</span> <span className="font-semibold text-gray-900">{sale.customer_name}</span></div>
+            {sale.customer_tin && <div><span className="text-gray-500">TIN:</span> <span className="text-gray-700">{sale.customer_tin}</span></div>}
+            {sale.customer_address && (
+              <div className="col-span-2"><span className="text-gray-500">Address:</span> <span className="text-gray-700">{sale.customer_address}</span></div>
+            )}
+          </div>
+
+          {/* Items */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Product</th>
+                  <th className="text-center py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Qty</th>
+                  <th className="text-right py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Unit Price</th>
+                  <th className="text-right py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Subtotal</th>
+                  <th className="text-center py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Returnable</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sale.items.map((item) => {
+                  const remaining = item.quantity - item.quantity_returned;
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="py-2.5 px-4">
+                        <p className="font-medium text-gray-900">{item.product_name}</p>
+                        {item.barcode && <p className="font-mono text-xs text-gray-400">{item.barcode}</p>}
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-semibold">{item.quantity}</td>
+                      <td className="py-2.5 px-4 text-right text-gray-600">{fmtPeso(item.unit_price)}</td>
+                      <td className="py-2.5 px-4 text-right font-semibold">{fmtPeso(item.subtotal)}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        {item.is_returnable
+                          ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              remaining > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                            }`}>{remaining > 0 ? `${remaining} left` : "Returned"}</span>
+                          : <span className="text-xs text-gray-400">No</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div className="rounded-xl border border-gray-200 p-4 space-y-2 text-sm">
+            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span className="tabular-nums">{fmtPeso(sale.subtotal)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>VAT</span><span className="tabular-nums">{fmtPeso(sale.vat_amount)}</span></div>
+            <div className="flex justify-between font-bold text-lg text-gray-900 pt-2 border-t border-gray-200">
+              <span>Total</span><span className="tabular-nums text-blue-600">{fmtPeso(sale.total_amount)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600"><span>Cash Tendered</span><span className="tabular-nums">{fmtPeso(sale.cash_tendered)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>Change</span><span className="tabular-nums">{fmtPeso(sale.change_amount)}</span></div>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          {returnableCount > 0 && (
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { onClose(); onInitiateReturn(sale); }}>
+              Initiate Return
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -495,7 +594,8 @@ function SalesSearchPanel() {
   const [dateTo, setDateTo] = useState("");
   const [results, setResults] = useState<SaleSummary[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [viewSale, setViewSale] = useState<Sale | null>(null);
+  const [returnSale, setReturnSale] = useState<Sale | null>(null);
   const [loadingSale, setLoadingSale] = useState<number | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -513,11 +613,12 @@ function SalesSearchPanel() {
     finally { setSearching(false); }
   };
 
-  const handleInitiate = async (summary: SaleSummary) => {
+  const handleLoadSale = async (summary: SaleSummary, mode: "view" | "return") => {
     setLoadingSale(summary.id);
     try {
       const sale = await getSaleByInvoice(summary.invoice_number);
-      setSelectedSale(sale);
+      if (mode === "view") setViewSale(sale);
+      else setReturnSale(sale);
     } catch { toast.error("Failed to load sale."); }
     finally { setLoadingSale(null); }
   };
@@ -551,7 +652,7 @@ function SalesSearchPanel() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  {["Invoice #", "Customer", "Cashier", "Date", "Total", "Action"].map(h => (
+                  {["Invoice #", "Customer", "Cashier", "Date", "Total", "Actions"].map(h => (
                     <th key={h} className="text-left py-3 px-4 font-semibold text-gray-700">{h}</th>
                   ))}
                 </tr>
@@ -565,9 +666,14 @@ function SalesSearchPanel() {
                     <td className="py-3 px-4 text-gray-600 text-xs">{fmtDate(s.created_at)}</td>
                     <td className="py-3 px-4 text-gray-700">{fmtPeso(s.total_amount)}</td>
                     <td className="py-3 px-4">
-                      <Button size="sm" variant="outline" disabled={loadingSale === s.id} onClick={() => handleInitiate(s)}>
-                        {loadingSale === s.id ? "Loading…" : "Initiate Return"}
-                      </Button>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="outline" disabled={loadingSale === s.id} onClick={() => handleLoadSale(s, "view")}>
+                          View Purchase
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={loadingSale === s.id} onClick={() => handleLoadSale(s, "return")}>
+                          {loadingSale === s.id ? "Loading…" : "Initiate Return"}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -576,7 +682,12 @@ function SalesSearchPanel() {
           </div>
         </Card>
       )}
-      <InitiateReturnDialog sale={selectedSale} onClose={() => setSelectedSale(null)} />
+      <SaleDetailModal
+        sale={viewSale}
+        onClose={() => setViewSale(null)}
+        onInitiateReturn={(sale) => setReturnSale(sale)}
+      />
+      <InitiateReturnDialog sale={returnSale} onClose={() => setReturnSale(null)} />
     </>
   );
 }

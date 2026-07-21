@@ -130,10 +130,10 @@ router.get("/logs", async (req: Request, res: Response) => {
 
     if (product_id) {
       where += " AND il.product_id = ?";
-      params.push(Number(product_id));
+      params.push(parseInt(product_id as string, 10));
     }
 
-    params.push(Number(limit), Number(offset));
+    params.push(parseInt(limit as string, 10), parseInt(offset as string, 10));
 
     const [rows] = await pool.execute<any[]>(`
       SELECT
