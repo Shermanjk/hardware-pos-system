@@ -322,20 +322,20 @@ function VerifyProductField({ itemId, expectedBarcode, productName, sel, setSele
 
   return (
     <div ref={wrapperRef}>
-      <label className="text-xs text-gray-500 mb-0.5 block">Scan Barcode or Search by Name to Verify</label>
+      <label className="text-xs font-semibold text-gray-700 mb-0.5 block">Scan Barcode or Search by Name to Verify</label>
       <div className="flex gap-2 relative">
         <div className="relative flex-1">
           {searching
             ? <Loader2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 animate-spin" />
-            : <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            : <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
           }
           <Input
             value={sel.scannedBarcode}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirm(sel.scannedBarcode); } }}
             placeholder="Scan barcode or type product name…"
-            className={`h-8 text-sm pl-8 ${
-              sel.barcodeConfirmed ? "border-green-400 bg-green-50" : ""
+            className={`h-9 text-sm pl-8 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ${
+              sel.barcodeConfirmed ? "border-green-500 bg-green-50" : ""
             }`}
           />
           {/* Name search dropdown */}
@@ -918,11 +918,11 @@ export default function Cashier() {
         <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-0">
           {/* Barcode / search input */}
           <div className="shrink-0 bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
               Barcode Scanner / Product Search
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 z-10" />
               {searchLoading && (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin z-10" />
               )}
@@ -934,7 +934,7 @@ export default function Cashier() {
                 onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                 onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
                 placeholder="Scan barcode or type product name…"
-                className="pl-9 h-10 text-sm bg-gray-50 border-gray-200 focus:border-blue-500 focus:bg-white"
+                className="pl-9 h-11 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 autoFocus
               />
               {/* Search results dropdown */}
@@ -1003,7 +1003,7 @@ export default function Cashier() {
 
             {/* Column headers */}
             {cartItems.length > 0 && (
-              <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2 bg-gray-100 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 <div className="col-span-5">Product</div>
                 <div className="col-span-3 text-center">Qty</div>
                 <div className="col-span-2 text-right">Price</div>
@@ -1068,7 +1068,7 @@ export default function Cashier() {
         {/* ══ MIDDLE — Customer Details ══════════════════════ */}
         <div className="w-72 shrink-0 flex flex-col min-h-0">
           <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex flex-col">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-4">
               <User className="h-4 w-4 text-blue-600" />
               <h3 className="text-sm font-bold text-gray-900">Customer Details</h3>
               {(customerInfo.name || customerInfo.tin) && (
@@ -1082,39 +1082,39 @@ export default function Cashier() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Sold To</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Sold To <span className="text-red-500">*</span></label>
                 <Input
                   value={customerInfo.name}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
                   placeholder="Name or company"
-                  className="h-9 text-sm"
+                  className="h-10 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Address</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
                 <Input
                   value={customerInfo.address}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
                   placeholder="Street, City, Province"
-                  className="h-9 text-sm"
+                  className="h-10 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">TIN</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">TIN</label>
                 <Input
                   value={customerInfo.tin}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, tin: e.target.value })}
                   placeholder="000-000-000-000"
-                  className="h-9 text-sm"
+                  className="h-10 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Business Style</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Business Style</label>
                 <Input
                   value={customerInfo.businessStyle}
                   onChange={(e) => setCustomerInfo({ ...customerInfo, businessStyle: e.target.value })}
                   placeholder="e.g. Trading"
-                  className="h-9 text-sm"
+                  className="h-10 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
             </div>
@@ -1146,13 +1146,13 @@ export default function Cashier() {
 
             {/* Cash tendered */}
             <div className="border-t border-dashed border-gray-200 pt-3 space-y-2">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">
                 Cash Tendered
               </label>
               <div className="relative">
                 <span
                   className="absolute left-4 top-1/2 -translate-y-1/2 font-bold pointer-events-none select-none"
-                  style={{ fontSize: "1.4rem", lineHeight: 1, color: "#9ca3af" }}
+                  style={{ fontSize: "1.4rem", lineHeight: 1, color: "#6b7280" }}
                 >₱</span>
                 <input
                   type="text"
@@ -1170,10 +1170,10 @@ export default function Cashier() {
                     focus:ring-2 focus:ring-offset-0
                     ${
                       cashCents > 0 && cashCents < totalCents
-                        ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-red-200 text-red-700"
+                        ? "border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200 text-red-700"
                         : cashCents >= totalCents && cashCents > 0
-                        ? "border-green-300 bg-green-50 focus:border-green-400 focus:ring-green-200 text-green-700"
-                        : "border-gray-300 bg-gray-50 focus:border-blue-400 focus:ring-blue-100 text-gray-900"
+                        ? "border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-200 text-green-700"
+                        : "border-gray-400 bg-white focus:border-blue-500 focus:ring-blue-100 text-gray-900"
                     }`}
                 />
               </div>
@@ -1407,7 +1407,7 @@ export default function Cashier() {
                     onChange={(e) => setReturnInvoice(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleReturnLookup()}
                     placeholder="e.g. INV-20250120-0001"
-                    className="h-9 text-sm flex-1"
+                    className="h-10 text-sm flex-1 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     autoFocus
                   />
                   <Button size="sm" onClick={handleReturnLookup} disabled={returnLookupLoading || !returnInvoice.trim()} className="h-9 px-4">
@@ -1424,7 +1424,7 @@ export default function Cashier() {
                     onChange={(e) => setCustomerSearch(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSaleSearch()}
                     placeholder="Customer name…"
-                    className="h-9 text-sm flex-1"
+                    className="h-10 text-sm flex-1 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     autoFocus
                   />
                   <Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || !customerSearch.trim()} className="h-9 px-4">
@@ -1438,12 +1438,12 @@ export default function Cashier() {
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-0.5 block">From</label>
-                      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm" />
+                      <label className="text-xs font-semibold text-gray-700 mb-0.5 block">From</label>
+                      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 text-sm bg-white border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
                     </div>
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-0.5 block">To</label>
-                      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm" />
+                      <label className="text-xs font-semibold text-gray-700 mb-0.5 block">To</label>
+                      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 text-sm bg-white border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
                     </div>
                   </div>
                   <Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || (!dateFrom && !dateTo)} className="h-9 w-full">
@@ -1569,7 +1569,7 @@ export default function Cashier() {
                               {/* Qty + Reason */}
                               <div className="flex gap-2">
                                 <div className="flex-1">
-                                  <label className="text-xs text-gray-500 mb-0.5 block">Return Qty</label>
+                                  <label className="text-xs font-semibold text-gray-700 mb-0.5 block">Return Qty</label>
                                   <input
                                     type="number"
                                     min={1}
@@ -1579,15 +1579,15 @@ export default function Cashier() {
                                       const v = Math.min(remaining, Math.max(1, Number(e.target.value)));
                                       setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], quantity: v } }));
                                     }}
-                                    className="w-full h-8 text-sm border border-gray-300 rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                    className="w-full h-9 text-sm border border-gray-300 rounded-md px-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
                                   />
                                 </div>
                                 <div className="flex-1">
-                                  <label className="text-xs text-gray-500 mb-0.5 block">Reason</label>
+                                  <label className="text-xs font-semibold text-gray-700 mb-0.5 block">Reason</label>
                                   <select
                                     value={sel.reason}
                                     onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))}
-                                    className="w-full h-8 text-sm border border-gray-300 rounded-md px-2 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                                    className="w-full h-9 text-sm border border-gray-300 rounded-md px-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
                                   >
                                     <option>Damaged</option>
                                     <option>Missing Items</option>

@@ -49,30 +49,42 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex">
-      {/* Left — illustration */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-50 to-blue-100 items-center justify-center p-12">
+    <div className="min-h-screen flex">
+      {/* Left — store image */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900">
+        {/* Replace /store-image.jpg with your own image in the public/ folder */}
         <img
-          src="/manus-storage/hardware_store_login_illustration_c297adc7.png"
-          alt="Isra Hardware"
-          className="w-full h-full object-cover rounded-2xl shadow-2xl"
+          src="/store-image.jpg"
+          alt="Isra Hardware Store"
+          className="absolute inset-0 w-full h-full object-cover opacity-80"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
         />
+        {/* Overlay gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent" />
+        {/* Placeholder shown when no image is set */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white/30 pointer-events-none select-none">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p className="text-sm font-medium">Drop store-image.jpg in /public</p>
+        </div>
       </div>
 
       {/* Right — form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
-        <Card className="w-full max-w-md p-8 shadow-lg">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
+        <Card className="w-full max-w-md p-8 shadow-xl border-0 bg-white">
 
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-lg">
+            <div className="flex items-center justify-center gap-3 mb-1">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
                 <span className="text-white font-display font-bold text-xl">IH</span>
               </div>
-              <h1 className="text-2xl font-display font-bold text-gray-900">Isra Hardware POS</h1>
+              <div className="text-left">
+                <h1 className="text-2xl font-display font-bold text-gray-900 leading-tight">Isra Hardware POS</h1>
+                <p className="text-gray-500 text-sm">Point of Sale &amp; Inventory Management</p>
+              </div>
             </div>
-            <p className="text-gray-600 text-sm">Point of Sale &amp; Inventory Management System</p>
-            <p className="text-gray-500 text-xs mt-2">Version 1.0.0</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5" noValidate>
@@ -192,11 +204,8 @@ export default function Login() {
           </form>
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-            <p className="text-xs text-gray-500">© 2024 Isra Hardware. All rights reserved.</p>
-            <p className="text-xs text-gray-500 mt-1">
-              System Version 1.0.0 | Enterprise Edition
-            </p>
+          <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-400">© 2024 Isra Hardware. All rights reserved.</p>
           </div>
         </Card>
       </div>

@@ -615,7 +615,7 @@ export default function Users() {
                   <tr key={user.id} className="hover:bg-blue-50/40 transition-colors">
                     <td className="py-3.5 px-5">
                       <p className="font-semibold text-gray-900">{user.full_name}</p>
-                      {user.must_change_password && (
+                      {user.must_change_password === true && (
                         <span className="inline-block px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded mt-0.5">
                           Temp pwd
                         </span>
