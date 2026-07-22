@@ -65,7 +65,14 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex relative">
+      <button
+        onClick={() => window.close()}
+        className="absolute top-4 right-4 z-50 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        aria-label="Close application"
+      >
+        <X className="h-5 w-5" />
+      </button>
       {/* Left — slideshow */}
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 p-10">
         <div

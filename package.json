@@ -10,7 +10,22 @@
     "start": "set NODE_ENV=production && node dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "electron": "npx --no electron electron/main.cjs",
+    "electron:build": "pnpm build && electron-builder"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.israhardware.pos",
+    "productName": "Isra Hardware POS",
+    "files": ["dist/**/*", "electron/**/*", "client/public/**/*"],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
