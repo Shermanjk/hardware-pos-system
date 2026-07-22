@@ -206,6 +206,17 @@ router.put("/:id", async (req: Request, res: Response) => {
       return;
     }
 
+    const updatedUser = rows[0];
+    const isRoleChange = updates.role !== undefined;
+    await logAuditEvent({
+      action: isRoleChange ? "USER_ROLE_CHANGED" : "USER_UPDATED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username,
+      targetUserId: userId,
+      targetUsername: updatedUser.username,
+      newValues: updates as Record<string, unknown>,
+    });
+
     res.status(200).json(rows[0]);
   } catch (err) {
     console.error("[users/PUT /:id] Unexpected error:", err);

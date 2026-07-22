@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 
 const router = Router();
 
@@ -208,13 +209,22 @@ router.post("/stock-in", async (req: Request, res: Response) => {
   try {
     await conn.beginTransaction();
 
-    // Generate unique Stock In ID: SI-YYYYMMDD-XXXX
+    // Generate unique Stock In ID: SI-YYYYMMDD-NNNNNN (concurrency-safe row-locked sequence)
     const dateStr = delivery_date.replace(/-/g, "").slice(0, 8);
-    const [countRows] = await conn.execute<any[]>(
-      `SELECT COUNT(*) AS cnt FROM inventory_logs WHERE transaction_type = 'Stock In' AND DATE(created_at) = CURDATE()`
+    const [seqRows] = await conn.execute<any[]>(
+      `SELECT id, current_number FROM invoice_sequences WHERE prefix = 'SI' LIMIT 1 FOR UPDATE`
     );
-    const seq = String((countRows[0]?.cnt ?? 0) + 1).padStart(4, "0");
-    const stockInId = `SI-${dateStr}-${seq}`;
+    if (!seqRows[0]) {
+      await conn.rollback();
+      res.status(500).json({ message: "Stock-in sequence not found. Run migration 011." });
+      return;
+    }
+    const nextSeq = (seqRows[0].current_number as number) + 1;
+    await conn.execute(
+      `UPDATE invoice_sequences SET current_number = ?, updated_at = NOW() WHERE id = ?`,
+      [nextSeq, seqRows[0].id]
+    );
+    const stockInId = `SI-${dateStr}-${String(nextSeq).padStart(6, "0")}`;
 
     const reference = invoice_number?.trim() || stockInId;
 
@@ -245,6 +255,14 @@ router.post("/stock-in", async (req: Request, res: Response) => {
     }
 
     await conn.commit();
+
+    await logAuditEvent({
+      action: "STOCK_RECEIVED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username ?? "unknown",
+      entityType: "inventory",
+      newValues: { stock_in_id: stockInId, reference, source, item_count: items.length },
+    });
 
     res.status(201).json({ message: "Stock in successful", stock_in_id: stockInId, reference });
   } catch (err) {
@@ -304,6 +322,17 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
     `, [product_id, type, quantityChange, product.quantity, newQuantity, reason, req.user?.id]);
 
     await conn.commit();
+
+    await logAuditEvent({
+      action: type === "Damaged" ? "DAMAGED_ITEM_RECORDED" : "STOCK_ADJUSTED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username ?? "unknown",
+      entityType: "products",
+      entityId: product_id,
+      reason,
+      previousValues: { quantity: product.quantity },
+      newValues: { quantity: newQuantity, adjustment_type: type },
+    });
 
     res.status(201).json({ message: "Stock adjustment successful", product_id, type, new_quantity: newQuantity });
   } catch (err) {

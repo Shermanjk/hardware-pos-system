@@ -61,19 +61,34 @@ export interface CreateSalePayload {
     quantity: number;
     unit_price: number;
     subtotal: number;
+    tax_type?: "VATABLE" | "VAT_EXEMPT" | "ZERO_RATED" | "NON_TAXABLE";
   }>;
+}
+
+export interface SaleItemSnapshot {
+  product_id:     number;
+  tax_type:       "VATABLE" | "VAT_EXEMPT" | "ZERO_RATED" | "NON_TAXABLE";
+  taxable_amount: number;
+  vat_amount:     number;
+  line_subtotal:  number;
+}
+
+export interface CreateSaleResult {
+  invoice_number: string;
+  id:             number;
+  subtotal:       number;
+  vat_amount:     number;
+  total_amount:   number;
+  change_amount:  number;
+  items:          SaleItemSnapshot[];
 }
 
 // ─── API functions ────────────────────────────────────────────────────────────
 
-export async function createSale(
-  payload: CreateSalePayload
-): Promise<{ invoice_number: string; id: number }> {
-  const response = await axios.post<{ invoice_number: string; id: number }>(
-    "/api/sales",
-    payload,
-    { headers: authHeaders() }
-  );
+export async function createSale(payload: CreateSalePayload): Promise<CreateSaleResult> {
+  const response = await axios.post<CreateSaleResult>("/api/sales", payload, {
+    headers: authHeaders(),
+  });
   return response.data;
 }
 

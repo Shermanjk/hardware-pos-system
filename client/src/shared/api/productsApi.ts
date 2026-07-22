@@ -26,6 +26,8 @@ export interface Unit {
   description?: string | null;
 }
 
+export type TaxType = "VATABLE" | "VAT_EXEMPT" | "ZERO_RATED" | "NON_TAXABLE";
+
 export interface ProductRecord {
   id: number;
   barcode: string;
@@ -48,6 +50,7 @@ export interface ProductRecord {
   status: "Active" | "Inactive";
   is_returnable: boolean;
   damaged_stock: number;
+  tax_type: TaxType;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -75,6 +78,7 @@ export interface CreateProductPayload {
   reorder_level: number;
   is_returnable?: boolean;
   status?: "Active" | "Inactive";
+  tax_type?: TaxType;
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload>;
@@ -190,6 +194,7 @@ export interface CashierProduct {
   unit: string;
   unit_abbreviation: string;
   is_returnable: boolean;
+  tax_type: TaxType;
 }
 
 export async function lookupProduct(query: string): Promise<CashierProduct[]> {

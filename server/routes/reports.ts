@@ -15,7 +15,7 @@ router.get("/", async (req: Request, res: Response) => {
       date_to   = new Date().toISOString().slice(0, 10),
     } = req.query as Record<string, string>;
 
-    // ── 1. Summary KPIs for the period ──────────────────────────────────────
+    // ── 1. Summary KPIs — exclude voided sales ───────────────────────────────
     const [summaryRows] = await pool.execute<any[]>(`
       SELECT
         COUNT(*)                          AS total_transactions,
@@ -27,9 +27,10 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(MIN(total_amount), 0)    AS smallest_sale
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
+        AND void_status != 'voided'
     `, [date_from, date_to]);
 
-    // ── 2. Daily sales breakdown for the period ──────────────────────────────
+    // ── 2. Daily sales breakdown — exclude voided ────────────────────────────
     const [dailyRows] = await pool.execute<any[]>(`
       SELECT
         DATE(created_at)                  AS sale_date,
@@ -39,11 +40,12 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(SUM(total_amount), 0)    AS total
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
+        AND void_status != 'voided'
       GROUP BY DATE(created_at)
       ORDER BY sale_date ASC
     `, [date_from, date_to]);
 
-    // ── 3. Top products for the period ───────────────────────────────────────
+    // ── 3. Top products — exclude voided sales ───────────────────────────────
     const [topProductRows] = await pool.execute<any[]>(`
       SELECT
         p.barcode,
@@ -57,12 +59,13 @@ router.get("/", async (req: Request, res: Response) => {
       JOIN sales     s ON s.id = si.sale_id
       LEFT JOIN categories c ON c.id = p.category_id
       WHERE DATE(s.created_at) BETWEEN ? AND ?
+        AND s.void_status != 'voided'
       GROUP BY si.product_id, p.product_name, p.barcode, c.category_name, si.unit_price
       ORDER BY units_sold DESC
       LIMIT 20
     `, [date_from, date_to]);
 
-    // ── 4. Sales per cashier for the period ──────────────────────────────────
+    // ── 4. Sales per cashier — exclude voided ────────────────────────────────
     const [cashierRows] = await pool.execute<any[]>(`
       SELECT
         u.full_name                       AS cashier,
@@ -71,11 +74,56 @@ router.get("/", async (req: Request, res: Response) => {
       FROM sales s
       JOIN users u ON u.id = s.cashier_id
       WHERE DATE(s.created_at) BETWEEN ? AND ?
+        AND s.void_status != 'voided'
       GROUP BY s.cashier_id, u.full_name
       ORDER BY revenue DESC
     `, [date_from, date_to]);
 
-    // ── 5. Current inventory / stock level report ────────────────────────────
+    // ── 5. VAT Classification Summary (Implementation 5) ────────────────────
+    // Summarizes from sale_items.tax_type — historical values are preserved.
+    const [vatSummaryRows] = await pool.execute<any[]>(`
+      SELECT
+        si.tax_type,
+        COALESCE(SUM(si.taxable_amount), 0) AS taxable_sales,
+        COALESCE(SUM(si.vat_amount), 0)     AS vat_amount,
+        COALESCE(SUM(si.subtotal), 0)       AS gross_amount
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE DATE(s.created_at) BETWEEN ? AND ?
+        AND s.void_status != 'voided'
+      GROUP BY si.tax_type
+    `, [date_from, date_to]);
+
+    // Build structured VAT summary
+    const vatMap: Record<string, { taxable_sales: number; vat_amount: number; gross_amount: number }> = {
+      VATABLE:     { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
+      VAT_EXEMPT:  { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
+      ZERO_RATED:  { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
+      NON_TAXABLE: { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
+    };
+    for (const row of vatSummaryRows as any[]) {
+      if (vatMap[row.tax_type]) {
+        vatMap[row.tax_type] = {
+          taxable_sales: Number(row.taxable_sales),
+          vat_amount:    Number(row.vat_amount),
+          gross_amount:  Number(row.gross_amount),
+        };
+      }
+    }
+    const totalVatAmount = Object.values(vatMap).reduce((s, v) => s + v.vat_amount, 0);
+    const totalSales     = Object.values(vatMap).reduce((s, v) => s + v.gross_amount, 0);
+
+    const vat_summary = {
+      vatable_sales:    vatMap.VATABLE.taxable_sales,
+      vat_exempt_sales: vatMap.VAT_EXEMPT.gross_amount,
+      zero_rated_sales: vatMap.ZERO_RATED.gross_amount,
+      non_taxable_sales: vatMap.NON_TAXABLE.gross_amount,
+      total_vat_amount: totalVatAmount,
+      total_sales:      totalSales,
+      by_type:          vatMap,
+    };
+
+    // ── 6. Current inventory / stock level report ────────────────────────────
     const [inventoryRows] = await pool.execute<any[]>(`
       SELECT
         p.barcode,
@@ -102,7 +150,6 @@ router.get("/", async (req: Request, res: Response) => {
       ORDER BY p.product_name ASC
     `);
 
-    // ── 6. Low stock items only ───────────────────────────────────────────────
     const lowStockRows = (inventoryRows as any[]).filter(
       (r) => r.stock_status !== "In Stock"
     );
@@ -113,6 +160,7 @@ router.get("/", async (req: Request, res: Response) => {
       daily_sales:  dailyRows,
       top_products: topProductRows,
       by_cashier:   cashierRows,
+      vat_summary,
       inventory:    inventoryRows,
       low_stock:    lowStockRows,
       generated_at: new Date().toISOString(),

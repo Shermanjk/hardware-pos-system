@@ -2,16 +2,22 @@ import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 
 export interface StoreSettings {
-  store_name:       string;
-  store_fb:         string;
-  store_phone:      string;
-  store_address:    string;
-  currency:         string;
-  tax_rate:         number;
-  business_license: string;
-  pos_min:          string | undefined;
-  pos_serial:       string | undefined;
-  vat_registered:   boolean;
+  // General
+  store_name:               string;
+  store_fb:                 string;
+  store_phone:              string;
+  store_address:            string;
+  currency:                 string;
+  // Business / taxpayer
+  registered_taxpayer_name: string;
+  tin:                      string;
+  business_license:         string; // kept for backward compat
+  document_type:            string;
+  tax_rate:                 number;
+  vat_registered:           boolean;
+  // POS machine
+  pos_min:                  string | undefined;
+  pos_serial:               string | undefined;
 }
 
 function authHeaders() {

@@ -18,6 +18,7 @@ import Suppliers from "./modules/admin/pages/Suppliers";
 import ReorderAlerts from "./modules/admin/pages/ReorderAlerts";
 import Sales from "./modules/admin/pages/Sales";
 import Returns from "./modules/admin/pages/Returns";
+import VoidRequests from "./modules/admin/pages/VoidRequests";
 import Reports from "./modules/admin/pages/Reports";
 import Users from "./modules/admin/pages/Users";
 import Settings from "./modules/admin/pages/Settings";
@@ -68,6 +69,7 @@ function AdminRouter() {
         <Route path="/reorder-alerts"  component={ReorderAlerts}  />
         <Route path="/sales"           component={Sales}          />
         <Route path="/returns"         component={Returns}        />
+        <Route path="/void-requests"    component={VoidRequests}   />
         <Route path="/reports"         component={Reports}        />
         <Route path="/users"           component={Users}          />
         <Route path="/settings"        component={Settings}       />

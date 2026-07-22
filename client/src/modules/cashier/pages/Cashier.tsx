@@ -13,10 +13,10 @@ import {
   X, Search, DollarSign, ChevronDown, PauseCircle, PlayCircle, Loader2, RotateCcw, Hourglass,
 } from "lucide-react";
 import { useAuth } from "@/shared/contexts/AuthContext";
-import { createSale, type CreateSalePayload, getSaleByInvoice, type Sale } from "@/shared/api/salesApi";
+import { createSale, type CreateSalePayload, type SaleItemSnapshot, getSaleByInvoice, type Sale } from "@/shared/api/salesApi";
 import { createReturn, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
 import { searchSales, type SaleSummary } from "@/shared/api/salesApi";
-import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
+import { lookupProduct, getProduct, type CashierProduct, type TaxType } from "@/shared/api/productsApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,6 +32,7 @@ interface CartItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  tax_type: TaxType;
 }
 
 interface CustomerInfo {
@@ -110,6 +111,7 @@ interface SaleReceiptParams {
   changeCents: number | null;
   cashierName: string;
   settings: StoreSettings;
+  itemSnapshots: SaleItemSnapshot[];
 }
 
 // ─── Text helpers for monospace receipt layout ───────────────────────────────
@@ -140,13 +142,16 @@ function buildReceiptText(params: SaleReceiptParams): string {
     cashCents, changeCents, cashierName, settings,
   } = params;
 
-  const storeName     = settings.store_name     || "";
-  const storeFb       = settings.store_fb       || "";
-  const storePhone    = settings.store_phone    || "";
-  const storeAddress  = settings.store_address  || "";
-  const storeTIN      = settings.business_license || "";
-  const taxRate       = Number(settings.tax_rate) > 0 ? Number(settings.tax_rate) : 12;
-  const currSym       = settings.currency === "PHP" ? "P" : settings.currency;
+  const storeName              = settings.store_name              || "";
+  const storeFb                = settings.store_fb                || "";
+  const storePhone             = settings.store_phone             || "";
+  const storeAddress           = settings.store_address           || "";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  // Use dedicated tin field; fall back to business_license for backward compat
+  const storeTIN               = settings.tin || settings.business_license || "";
+  const documentType           = settings.document_type           || "SALES INVOICE";
+  const taxRate                = Number(settings.tax_rate) > 0 ? Number(settings.tax_rate) : 12;
+  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
 
   const now      = new Date();
   const dateStr  = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -160,15 +165,16 @@ function buildReceiptText(params: SaleReceiptParams): string {
   const ln = (s = "") => lines.push(s);
 
   ln(rule("="));
+  if (registeredTaxpayerName) ln(center(registeredTaxpayerName));
   ln(center(storeName));
   ln(center(storeAddress));
-  ln(center(`TIN: ${storeTIN}${settings.vat_registered ? " (VAT-Registered)" : ""}`));
+  ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}${settings.vat_registered ? " (VAT-Registered)" : ""}`));
   if (posMin || posSerial) {
     ln(center(`MIN: ${posMin}   |   S/N: ${posSerial}`));
   }
   ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
-  ln(center("OFFICIAL RECEIPT / SALES INVOICE"));
+  ln(center(documentType || "[DOCUMENT TYPE NOT CONFIGURED]"));
   ln();
   ln(lr(`SI No: ${invoiceNumber}`, `Date: ${dateStr}`));
   ln(`${"".padEnd(W - timeStr.length)}${timeStr}`);
@@ -196,7 +202,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(rule("-"));
   ln(lr(`ITEMS TOTAL: ${totalItems}`, `TOTAL:    ${currSym} ${fmtCents(totalCents)}`));
   ln(rule("-"));
-  ln(center("VAT BREAKDOWN (BIR-Compliant):"));
+  ln(center("VAT BREAKDOWN:"));
 
   const bw = 42; // breakdown block width
   const bline = (label: string, cents: number) => {
@@ -206,10 +212,28 @@ function buildReceiptText(params: SaleReceiptParams): string {
   };
 
   if (settings.vat_registered) {
-    bline(`VATable Sales (net of VAT):`, subtotalCents);
+    // Use backend-authoritative tax snapshots for the VAT breakdown
+    const snaps = params.itemSnapshots;
+    const vatableNetCents = snaps
+      .filter((s) => s.tax_type === "VATABLE")
+      .reduce((acc, s) => acc + toCentavos(s.taxable_amount), 0);
+    const zeroRatedCents = snaps
+      .filter((s) => s.tax_type === "ZERO_RATED")
+      .reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
+    const vatExemptCents = snaps
+      .filter((s) => s.tax_type === "VAT_EXEMPT")
+      .reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
+    const nonTaxableCents = snaps
+      .filter((s) => s.tax_type === "NON_TAXABLE")
+      .reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
+
+    bline(`VATable Sales (net of VAT):`, vatableNetCents);
     bline(`Total VAT Amount (${taxRate}%):`,  taxCents);
-    bline("Zero-Rated Sales:",                0);
-    bline("VAT-Exempt Sales:",                0);
+    bline("Zero-Rated Sales:",                zeroRatedCents);
+    bline("VAT-Exempt Sales:",                vatExemptCents);
+    if (nonTaxableCents > 0) {
+      bline("Non-Taxable Sales:",             nonTaxableCents);
+    }
   } else {
     bline("Non-VAT Sales:",   totalCents);
     bline("Total VAT Amount:", 0);
@@ -405,6 +429,7 @@ export default function Cashier() {
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     store_name: "", store_fb: "", store_phone: "", store_address: "",
     currency: "PHP", tax_rate: 0, business_license: "",
+    registered_taxpayer_name: "", tin: "", document_type: "SALES INVOICE",
     pos_min: "", pos_serial: "", vat_registered: false,
   });
 
@@ -497,7 +522,11 @@ export default function Cashier() {
   // Sum item subtotals in centavos (prices are VAT-inclusive)
   const totalCents     = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
   const taxRate        = storeSettings.tax_rate > 0 ? storeSettings.tax_rate : 12;
-  const taxCents       = Math.round(totalCents * taxRate / (100 + taxRate));
+  // Only VATABLE items contribute to VAT; all other tax types have 0% VAT
+  const vatableCents   = cartItems
+    .filter((i) => i.tax_type === "VATABLE")
+    .reduce((s, i) => s + toCentavos(i.subtotal), 0);
+  const taxCents       = Math.round(vatableCents * taxRate / (100 + taxRate));
   const subtotalCents  = totalCents - taxCents;
 
   const cashCents      = parseCashInput(cashTendered);
@@ -558,6 +587,7 @@ export default function Cashier() {
         quantity:  1,
         unitPrice: price,
         subtotal:  price,
+        tax_type:  product.tax_type ?? "VATABLE",
       }];
     });
     setBarcodeInput("");
@@ -848,24 +878,77 @@ export default function Cashier() {
     if (cartItems.length === 0 || cashCents < totalCents || !customerInfo.name.trim()) return;
     setIsProcessing(true);
     try {
+      // ── Pre-flight: check for price / tax_type drift since items were added ──
+      const freshResults = await Promise.allSettled(
+        cartItems.map((item) => getProduct(item.id))
+      );
+
+      // Check for any product that could not be fetched (deleted / unavailable)
+      const unavailable = cartItems.filter((_, idx) => freshResults[idx].status === "rejected");
+      if (unavailable.length > 0) {
+        toast.error(
+          "Some products are no longer available and cannot be sold.",
+          { description: `Unavailable: ${unavailable.map((i) => i.name).join(", ")}`, duration: 8000 }
+        );
+        setIsProcessing(false);
+        return;
+      }
+
+      const changedNames: string[] = [];
+      const refreshedCart = cartItems.map((item, idx) => {
+        const result = freshResults[idx];
+        if (result.status !== "fulfilled") return item;
+        const fresh = result.value;
+        const priceChanged = toCentavos(Number(fresh.selling_price)) !== toCentavos(item.unitPrice);
+        const taxChanged   = fresh.tax_type !== item.tax_type;
+        if (priceChanged || taxChanged) {
+          changedNames.push(item.name);
+          const newPrice = Number(fresh.selling_price);
+          return {
+            ...item,
+            unitPrice: newPrice,
+            subtotal:  Math.round(newPrice * item.quantity * 100) / 100,
+            tax_type:  fresh.tax_type,
+          };
+        }
+        return item;
+      });
+
+      if (changedNames.length > 0) {
+        setCartItems(refreshedCart);
+        toast.warning(
+          "Some product information has changed. Please review the updated cart before completing the sale.",
+          { description: `Updated: ${changedNames.join(", ")}`, duration: 8000 }
+        );
+        setIsProcessing(false);
+        return;
+      }
+
+      // ── Submit sale ──────────────────────────────────────────────────────────
       const payload: CreateSalePayload = {
-        customer_name: customerInfo.name || "Walk-in Customer",
+        customer_name:    customerInfo.name || "Walk-in Customer",
         customer_address: customerInfo.address || undefined,
-        customer_tin: customerInfo.tin || undefined,
-        subtotal: subtotalCents / 100,
-        vat_amount: taxCents / 100,
-        total_amount: totalCents / 100,
+        customer_tin:     customerInfo.tin || undefined,
+        subtotal:      subtotalCents / 100,
+        vat_amount:    taxCents / 100,
+        total_amount:  totalCents / 100,
         cash_tendered: cashCents / 100,
         change_amount: changeCents !== null ? changeCents / 100 : 0,
         items: cartItems.map((item) => ({
           product_id: item.id,
-          quantity: item.quantity,
+          quantity:   item.quantity,
           unit_price: Number(item.unitPrice),
-          subtotal: Number(item.subtotal),
+          subtotal:   Number(item.subtotal),
+          tax_type:   item.tax_type,
         })),
       };
 
-      const { invoice_number } = await createSale(payload);
+      const saleResult = await createSale(payload);
+      const { invoice_number } = saleResult;
+
+      // Capture cart + customer before clearing (needed for receipt)
+      const receiptCartItems = cartItems;
+      const receiptCustomer  = customerInfo;
 
       // Sale saved — clear cart immediately so cashier can serve next customer
       clearCart();
@@ -874,23 +957,23 @@ export default function Cashier() {
       // Print receipt separately — a print failure does NOT undo the sale
       try {
         printSaleReceipt({
-          invoiceNumber: invoice_number,
-          cartItems,
-          customerInfo,
-          subtotalCents,
-          taxCents,
-          totalCents,
+          invoiceNumber:  invoice_number,
+          cartItems:      receiptCartItems,
+          customerInfo:   receiptCustomer,
+          subtotalCents:  Math.round(saleResult.subtotal * 100),
+          taxCents:       Math.round(saleResult.vat_amount * 100),
+          totalCents:     Math.round(saleResult.total_amount * 100),
           cashCents,
-          changeCents,
-          cashierName: user?.full_name ?? "—",
-          settings: storeSettings,
+          changeCents:    Math.round(saleResult.change_amount * 100),
+          cashierName:    user?.full_name ?? "—",
+          settings:       storeSettings,
+          itemSnapshots:  saleResult.items,
         });
       } catch {
         toast.warning(`Sale saved (${invoice_number}) but receipt could not print. Allow pop-ups and reprint from Sales history.`);
       }
     } catch (err: any) {
-      const message =
-        err?.response?.data?.message ?? "Failed to save transaction. Please try again.";
+      const message = err?.response?.data?.message ?? "Failed to save transaction. Please try again.";
       toast.error(message);
     } finally {
       setIsProcessing(false);

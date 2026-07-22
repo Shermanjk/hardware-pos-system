@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/productsApi";
 import type {
   ProductRecord, Category, Supplier, Unit,
-  CreateProductPayload, UpdateProductPayload, StockStatus,
+  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType,
 } from "@/shared/api/productsApi";
 import axios from "axios";
 
@@ -132,6 +132,7 @@ function emptyForm() {
     reorder_level:    "" as unknown as number,
     is_returnable:    true,
     status:           "Active" as "Active" | "Inactive",
+    tax_type:         "VATABLE" as TaxType,
   };
 }
 type ProductForm = ReturnType<typeof emptyForm>;
@@ -151,6 +152,7 @@ function formFromRecord(p: ProductRecord): ProductForm {
     reorder_level:    p.reorder_level,
     is_returnable:    Boolean(p.is_returnable),
     status:           p.status,
+    tax_type:         (p.tax_type ?? "VATABLE") as TaxType,
   };
 }
 
@@ -277,6 +279,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
         reorder_level:    Number(form.reorder_level),
         is_returnable:    form.is_returnable,
         status:           form.status,
+        tax_type:         form.tax_type,
       };
       const saved = mode === "add"
         ? await createProduct(payload)
@@ -483,6 +486,27 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             </label>
           </div>
 
+          {/* Tax Classification */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Tax Classification</Label>
+            <Select
+              value={form.tax_type}
+              onValueChange={(v) => set("tax_type", v as TaxType)}
+              disabled={isLoading}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="VATABLE">VATABLE (12% VAT)</SelectItem>
+                <SelectItem value="VAT_EXEMPT">VAT Exempt</SelectItem>
+                <SelectItem value="ZERO_RATED">Zero-Rated</SelectItem>
+                <SelectItem value="NON_TAXABLE">Non-Taxable</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-amber-600">Confirm classification with your accountant before changing from VATABLE.</p>
+          </div>
+
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading}>
@@ -541,6 +565,7 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
             <div><span className="font-medium text-gray-500">Damaged:</span> {product.damaged_stock}</div>
             <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>
             <div><span className="font-medium text-gray-500">Status:</span> {product.status}</div>
+            <div><span className="font-medium text-gray-500">Tax Type:</span> {product.tax_type ?? "VATABLE"}</div>
           </div>
           {product.supplier_barcode && (
             <div><span className="font-medium text-gray-500">Supplier Barcode:</span> {product.supplier_barcode}</div>

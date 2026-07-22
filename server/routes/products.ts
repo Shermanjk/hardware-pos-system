@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PoolConnection } from "mysql2/promise";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 
 const router = Router();
 
@@ -39,11 +40,14 @@ const PRODUCT_COLS = `
   p.status,
   p.is_returnable,
   p.damaged_stock,
+  p.tax_type,
   p.created_at,
   p.updated_at
 `;
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
+const TAX_TYPES = ["VATABLE", "VAT_EXEMPT", "ZERO_RATED", "NON_TAXABLE"] as const;
+
 const productSchema = z.object({
   barcode:          z.string().min(1, "Barcode is required"),
   barcode_source:   z.enum(["manufacturer", "store"]),
@@ -58,6 +62,7 @@ const productSchema = z.object({
   reorder_level:    z.number().int().min(0, "Reorder level must be 0 or greater"),
   is_returnable:    z.boolean().optional().default(true),
   status:           z.enum(["Active", "Inactive"]).optional().default("Active"),
+  tax_type:         z.enum(TAX_TYPES).optional().default("VATABLE"),
 });
 
 const updateProductSchema = productSchema.partial();
@@ -147,7 +152,8 @@ router.get("/lookup", async (req: Request, res: Response) => {
          p.quantity,
          COALESCE(u.unit_name, '')      AS unit,
          COALESCE(u.abbreviation, '')   AS unit_abbreviation,
-         p.is_returnable
+         p.is_returnable,
+         p.tax_type
        FROM products p
        LEFT JOIN units u ON u.id = p.unit_id
        WHERE p.status = 'Active'
@@ -225,7 +231,7 @@ router.post("/", async (req: Request, res: Response) => {
     barcode, barcode_source, supplier_barcode, product_name, description,
     category_id, supplier_id, unit_id,
     cost_price, selling_price, reorder_level,
-    is_returnable, status,
+    is_returnable, status, tax_type,
   } = parsed.data;
 
   const conn = await pool.getConnection();
@@ -245,13 +251,13 @@ router.post("/", async (req: Request, res: Response) => {
          (barcode, barcode_source, supplier_barcode, product_name, description,
           category_id, supplier_id, unit_id,
           cost_price, selling_price, quantity, reorder_level,
-          is_returnable, damaged_stock, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`,
+          is_returnable, damaged_stock, status, tax_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?)`,
       [
         barcode, barcode_source, supplier_barcode ?? null, product_name, description ?? null,
         category_id, supplier_id ?? null, unit_id,
         cost_price, selling_price, reorder_level,
-        is_returnable ? 1 : 0, status,
+        is_returnable ? 1 : 0, status, tax_type ?? "VATABLE",
       ]
     );
 
@@ -265,6 +271,15 @@ router.post("/", async (req: Request, res: Response) => {
        WHERE p.id = ?`,
       [newId]
     );
+
+    await logAuditEvent({
+      action: "PRODUCT_CREATED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username,
+      entityType: "products",
+      entityId: newId,
+      newValues: { barcode, product_name, selling_price, cost_price },
+    });
 
     res.status(201).json((newRows as any[])[0]);
   } catch (err) {
@@ -332,6 +347,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       reorder_level:    data.reorder_level,
       is_returnable:    data.is_returnable !== undefined ? (data.is_returnable ? 1 : 0) : undefined,
       status:           data.status,
+      tax_type:         data.tax_type,
     };
 
     for (const [col, val] of Object.entries(fieldMap)) {
@@ -356,6 +372,20 @@ router.put("/:id", async (req: Request, res: Response) => {
        WHERE p.id = ?`,
       [id]
     );
+
+    // Detect price change for specific audit action
+    const [prevRows] = await conn.execute<any[]>("SELECT selling_price, cost_price FROM products WHERE id = ? LIMIT 1", [id]);
+    const prev = prevRows[0];
+    const isPriceChange = data.selling_price !== undefined || data.cost_price !== undefined;
+    await logAuditEvent({
+      action: isPriceChange ? "PRODUCT_PRICE_CHANGED" : "PRODUCT_UPDATED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username,
+      entityType: "products",
+      entityId: id,
+      previousValues: isPriceChange ? { selling_price: prev?.selling_price, cost_price: prev?.cost_price } : undefined,
+      newValues: data as Record<string, unknown>,
+    });
 
     res.status(200).json((updated as any[])[0]);
   } catch (err) {

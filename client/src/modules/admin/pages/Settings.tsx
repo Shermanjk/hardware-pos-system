@@ -173,7 +173,8 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
 
 function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
-    business_license: "", pos_min: "", pos_serial: "",
+    registered_taxpayer_name: "", tin: "", business_license: "",
+    document_type: "", pos_min: "", pos_serial: "",
   });
   const [vatRegistered, setVatRegistered] = useState(false);
   const [vatSaving, setVatSaving] = useState(false);
@@ -181,9 +182,12 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
   useEffect(() => {
     if (initial) {
       setSaved({
-        business_license: initial.business_license ?? "",
-        pos_min:          initial.pos_min           ?? "",
-        pos_serial:       initial.pos_serial        ?? "",
+        registered_taxpayer_name: initial.registered_taxpayer_name ?? "",
+        tin:                      initial.tin                      ?? "",
+        business_license:         initial.business_license         ?? "",
+        document_type:            initial.document_type            ?? "SALES INVOICE",
+        pos_min:                  initial.pos_min                  ?? "",
+        pos_serial:               initial.pos_serial               ?? "",
       });
       setVatRegistered(initial.vat_registered ?? false);
     }
@@ -210,6 +214,41 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
     <Card className="p-6">
       <h2 className="text-lg font-display font-bold text-gray-900 mb-6">Business Settings</h2>
       <div className="space-y-4">
+
+        {/* Registered Taxpayer Information */}
+        <div className="border border-amber-100 bg-amber-50 rounded-lg p-4 space-y-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+            Registered Taxpayer Information
+          </p>
+          <p className="text-xs text-amber-600">
+            Confirm these values with your accountant or BIR before printing on official documents.
+          </p>
+          <EditableField
+            label="Registered Taxpayer Name"
+            fieldKey="registered_taxpayer_name"
+            savedValue={saved.registered_taxpayer_name}
+            placeholder="e.g. DELA CRUZ, JUAN SANTOS"
+            onSave={handleSave}
+          />
+          <EditableField
+            label="TIN (Tax Identification Number)"
+            fieldKey="tin"
+            savedValue={saved.tin}
+            placeholder="e.g. 766-490-574-00000"
+            onSave={handleSave}
+          />
+          <EditableField
+            label="Document Type"
+            fieldKey="document_type"
+            savedValue={saved.document_type}
+            placeholder="e.g. SALES INVOICE"
+            onSave={handleSave}
+          />
+          <p className="text-xs text-amber-600">
+            Document type (e.g. SALES INVOICE, OFFICIAL RECEIPT) must be confirmed by your accountant or BIR.
+          </p>
+        </div>
+
         <div>
           <Label className="mb-1.5 block font-semibold text-sm">Currency</Label>
           <div className="h-9 px-3 flex items-center rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-500 w-40 select-none">
@@ -238,15 +277,15 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         </div>
 
         <EditableField
-          label="Business License (TIN)"
+          label="Business License / Other Reference"
           fieldKey="business_license"
           savedValue={saved.business_license}
-          placeholder="e.g. 765-490-574-00000"
+          placeholder="e.g. Business Permit No."
           onSave={handleSave}
         />
 
         <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">BIR POS Machine Registration</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">POS Machine Registration</p>
           <div className="grid grid-cols-2 gap-4">
             <EditableField
               label="MIN (Machine Identification No.)"
@@ -263,7 +302,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               onSave={handleSave}
             />
           </div>
-          <p className="mt-2 text-xs text-gray-400">These will be printed on every Sales Invoice receipt.</p>
+          <p className="mt-2 text-xs text-gray-400">These will be printed on every receipt.</p>
         </div>
       </div>
     </Card>

@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, FolderOpen, Boxes, Truck,
   BellRing, TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, RotateCcw,
+  ChevronLeft, ChevronRight, RotateCcw, Ban,
 } from "lucide-react";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
@@ -22,6 +22,7 @@ const menuItems = [
   { icon: BellRing,        label: "Reorder Alerts", href: "/reorder-alerts" },
   { icon: TrendingUp,      label: "Sales",          href: "/sales"          },
   { icon: RotateCcw,       label: "Returns",        href: "/returns"        },
+  { icon: Ban,             label: "Void Requests",  href: "/void-requests"  },
   { icon: BarChart3,       label: "Reports",        href: "/reports"        },
   { icon: Users,           label: "Users",          href: "/users"          },
   { icon: Settings,        label: "Settings",       href: "/settings"       },

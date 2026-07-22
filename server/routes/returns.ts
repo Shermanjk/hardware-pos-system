@@ -6,6 +6,7 @@ import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { generateReturnNumber } from "../utils/returnNumber.js";
 import { validateReturnItems, ReturnItemPayload } from "../utils/validateReturn.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 import { broadcastReturnRequest, sendReturnDecision } from "../ws.js";
 
 const router = Router();
@@ -150,6 +151,15 @@ router.post(
       }
 
       await conn.commit();
+
+      await logAuditEvent({
+        action: "RETURN_REQUESTED",
+        performedById: req.user!.id,
+        performedByUsername: req.user!.username,
+        entityType: "returns",
+        entityId: return_id,
+        newValues: { return_number, sale_id, return_reason },
+      });
 
       // Fetch cashier name + invoice/customer for the broadcast
       const [saleRows] = await conn.execute<any[]>(
@@ -343,6 +353,15 @@ router.patch(
 
       const updated = await fetchReturnSummary(conn, id);
 
+      await logAuditEvent({
+        action: "RETURN_APPROVED",
+        performedById: req.user!.id,
+        performedByUsername: req.user!.username,
+        entityType: "returns",
+        entityId: id,
+        newValues: { return_number: updated.return_number, invoice_number: updated.invoice_number },
+      });
+
       // Notify the cashier who submitted this return
       sendReturnDecision({
         type: "return_decision",
@@ -409,6 +428,16 @@ router.patch(
       );
 
       const updated = await fetchReturnSummary(conn, id);
+
+      await logAuditEvent({
+        action: "RETURN_REJECTED",
+        performedById: req.user!.id,
+        performedByUsername: req.user!.username,
+        entityType: "returns",
+        entityId: id,
+        reason: parsed.data.return_reason,
+        newValues: { return_number: updated.return_number, invoice_number: updated.invoice_number },
+      });
 
       // Notify the cashier who submitted this return
       sendReturnDecision({
@@ -529,6 +558,15 @@ router.patch(
            VALUES (?, 'return_refund', ?)`,
           [req.user!.id, returnRow.return_number]
         );
+
+        await logAuditEvent({
+          action: "REFUND_PROCESSED",
+          performedById: req.user!.id,
+          performedByUsername: req.user!.username,
+          entityType: "returns",
+          entityId: id,
+          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition },
+        });
       } else {
         // ── Replacement path ─────────────────────────────────────────────────
         // Check stock availability first
@@ -594,6 +632,15 @@ router.patch(
            VALUES (?, 'return_replacement', ?)`,
           [req.user!.id, returnRow.return_number]
         );
+
+        await logAuditEvent({
+          action: "EXCHANGE_COMPLETED",
+          performedById: req.user!.id,
+          performedByUsername: req.user!.username,
+          entityType: "returns",
+          entityId: id,
+          newValues: { return_number: returnRow.return_number, item_condition },
+        });
       }
 
       await conn.commit();
