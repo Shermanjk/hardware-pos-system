@@ -510,7 +510,7 @@ export default function ClerkStockAdjustment() {
                         ? 'text-blue-700 bg-blue-50 border border-blue-200'
                         : 'text-red-700 bg-red-50 border border-red-200'
                     }`}>
-                      {r.action === 'Correction' ? `→ ${r.quantity_change}` : `− ${r.quantity_change}`}
+                      {r.action === 'Correction' ? `→ ${Math.abs(r.quantity_change)}` : `− ${Math.abs(r.quantity_change)}`}
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-center">

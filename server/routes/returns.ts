@@ -62,7 +62,9 @@ async function fetchReturnSummary(conn: PoolConnection, id: number): Promise<any
      LIMIT 1`,
     [id]
   );
-  return rows[0] ?? null;
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return { ...r, refund_amount: r.refund_amount != null ? Number(r.refund_amount) : null };
 }
 
 // ─── Helper: fetch return items ───────────────────────────────────────────────
@@ -81,7 +83,7 @@ async function fetchReturnItems(conn: PoolConnection, returnId: number): Promise
      WHERE ri.return_id = ?`,
     [returnId]
   );
-  return rows;
+  return rows.map((r: any) => ({ ...r, unit_price: Number(r.unit_price) }));
 }
 
 // ─── Task 5.4 — POST / (Cashier, Admin) ──────────────────────────────────────

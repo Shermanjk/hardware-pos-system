@@ -33,7 +33,7 @@ router.get("/", async (req: Request, res: Response) => {
     const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
     const row = rows[0] ?? {};
     res.set("Cache-Control", "no-store");
-    res.status(200).json({ ...row, vat_registered: Boolean(row.vat_registered) });
+    res.status(200).json({ ...row, tax_rate: Number(row.tax_rate ?? 0), vat_registered: Boolean(row.vat_registered) });
   } catch (err) {
     console.error("[settings/GET] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
@@ -85,7 +85,7 @@ router.put("/", async (req: Request, res: Response) => {
 
     const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
     const row = rows[0] ?? {};
-    res.status(200).json({ ...row, vat_registered: Boolean(row.vat_registered) });
+    res.status(200).json({ ...row, tax_rate: Number(row.tax_rate ?? 0), vat_registered: Boolean(row.vat_registered) });
   } catch (err) {
     console.error("[settings/PUT] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });

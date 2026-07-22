@@ -185,7 +185,20 @@ router.get(
         [sale.id]
       );
 
-      res.status(200).json({ ...sale, items: itemRows });
+      res.status(200).json({
+        ...sale,
+        subtotal: Number(sale.subtotal),
+        vat_amount: Number(sale.vat_amount),
+        total_amount: Number(sale.total_amount),
+        cash_tendered: Number(sale.cash_tendered),
+        change_amount: Number(sale.change_amount),
+        items: itemRows.map((r: any) => ({
+          ...r,
+          unit_price: Number(r.unit_price),
+          subtotal: Number(r.subtotal),
+          quantity_returned: Number(r.quantity_returned),
+        })),
+      });
     } catch (err) {
       console.error("[GET /api/sales/:invoiceNumber] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });

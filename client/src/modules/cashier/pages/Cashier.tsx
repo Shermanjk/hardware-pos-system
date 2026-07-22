@@ -145,15 +145,16 @@ function buildReceiptText(params: SaleReceiptParams): string {
   const storePhone    = settings.store_phone    || "";
   const storeAddress  = settings.store_address  || "";
   const storeTIN      = settings.business_license || "";
-  const taxRate       = settings.tax_rate > 0   ? settings.tax_rate : 12;
+  const taxRate       = Number(settings.tax_rate) > 0 ? Number(settings.tax_rate) : 12;
   const currSym       = settings.currency === "PHP" ? "P" : settings.currency;
-  const taxDivisor    = 100 + taxRate;
-  const dynTaxCents   = Math.round(totalCents * taxRate / taxDivisor);
-  const dynSubCents   = totalCents - dynTaxCents;
 
-  const now     = new Date();
-  const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const now      = new Date();
+  const dateStr  = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const timeStr  = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
+
+  const posMin    = settings.pos_min    || "";
+  const posSerial = settings.pos_serial || "";
 
   const lines: string[] = [];
   const ln = (s = "") => lines.push(s);
@@ -161,12 +162,16 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(rule("="));
   ln(center(storeName));
   ln(center(storeAddress));
-  ln(center(`TIN: ${storeTIN} (VAT-Registered)`));
+  ln(center(`TIN: ${storeTIN}${settings.vat_registered ? " (VAT-Registered)" : ""}`));
+  if (posMin || posSerial) {
+    ln(center(`MIN: ${posMin}   |   S/N: ${posSerial}`));
+  }
   ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
-  ln(center("SALES INVOICE"));
+  ln(center("OFFICIAL RECEIPT / SALES INVOICE"));
   ln();
   ln(lr(`SI No: ${invoiceNumber}`, `Date: ${dateStr}`));
+  ln(`${"".padEnd(W - timeStr.length)}${timeStr}`);
   ln(rule("-"));
   ln(`SOLD TO: ${customerInfo.name}`);
   ln(`TIN: ${customerInfo.tin || ""}`);
@@ -191,7 +196,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(rule("-"));
   ln(lr(`ITEMS TOTAL: ${totalItems}`, `TOTAL:    ${currSym} ${fmtCents(totalCents)}`));
   ln(rule("-"));
-  ln(center("BREAKDOWN:"));
+  ln(center("VAT BREAKDOWN (BIR-Compliant):"));
 
   const bw = 42; // breakdown block width
   const bline = (label: string, cents: number) => {
@@ -199,21 +204,27 @@ function buildReceiptText(params: SaleReceiptParams): string {
     const row = `${label}${val.padStart(bw - label.length)}`;
     ln(" ".repeat(Math.floor((W - bw) / 2)) + row);
   };
-  bline("VATable Sales:",   dynSubCents);
-  bline(`${taxRate}% VAT:`, dynTaxCents);
-  bline("Zero-Rated:",      0);
-  bline("VAT Exempt:",      0);
+
+  if (settings.vat_registered) {
+    bline(`VATable Sales (net of VAT):`, subtotalCents);
+    bline(`Total VAT Amount (${taxRate}%):`,  taxCents);
+    bline("Zero-Rated Sales:",                0);
+    bline("VAT-Exempt Sales:",                0);
+  } else {
+    bline("Non-VAT Sales:",   totalCents);
+    bline("Total VAT Amount:", 0);
+  }
   ln(" ".repeat(Math.floor((W - bw) / 2)) + "-".repeat(bw));
-  bline("TOTAL DUE:",       totalCents);
+  bline("TOTAL AMOUNT DUE:", totalCents);
   ln();
-  ln(`Cash Tendered:  ${currSym} ${fmtCents(cashCents)}`);
-  ln(`Change:         ${currSym} ${fmtCents(changeCents ?? 0)}`);
+  ln(lr(`Cash Tendered:`, `${currSym} ${fmtCents(cashCents)}`));
+  ln(lr(`Change:`,         `${currSym} ${fmtCents(changeCents ?? 0)}`));
   ln(rule("-"));
-  ln(`PROCESSED BY: ${cashierName}`);
+  ln(`CASHIER: ${cashierName}`);
   ln(rule("-"));
-  ln(center("Thank you for partnering with Isra Hardware!"));
-  ln(center("Your trusted provider for quality building materials."));
-  ln(center('"This serves as your Sales Invoice"'));
+  ln(center("Thank you for your business!"));
+  ln(center("This is your Official Receipt."));
+  ln(center('"This document is not valid for claiming input taxes."'));
   ln(rule("="));
 
   return lines.join("\n");
@@ -856,21 +867,27 @@ export default function Cashier() {
 
       const { invoice_number } = await createSale(payload);
 
-      printSaleReceipt({
-        invoiceNumber: invoice_number,
-        cartItems,
-        customerInfo,
-        subtotalCents,
-        taxCents,
-        totalCents,
-        cashCents,
-        changeCents,
-        cashierName: user?.full_name ?? "—",
-        settings: storeSettings,
-      });
-
+      // Sale saved — clear cart immediately so cashier can serve next customer
       clearCart();
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
+
+      // Print receipt separately — a print failure does NOT undo the sale
+      try {
+        printSaleReceipt({
+          invoiceNumber: invoice_number,
+          cartItems,
+          customerInfo,
+          subtotalCents,
+          taxCents,
+          totalCents,
+          cashCents,
+          changeCents,
+          cashierName: user?.full_name ?? "—",
+          settings: storeSettings,
+        });
+      } catch {
+        toast.warning(`Sale saved (${invoice_number}) but receipt could not print. Allow pop-ups and reprint from Sales history.`);
+      }
     } catch (err: any) {
       const message =
         err?.response?.data?.message ?? "Failed to save transaction. Please try again.";
@@ -1195,7 +1212,7 @@ export default function Cashier() {
             </div>
 
             <div className="flex justify-between text-sm text-gray-600">
-              <span>VAT ({storeSettings.tax_rate > 0 ? storeSettings.tax_rate : 12}%)</span>
+              <span>VAT ({Number(storeSettings.tax_rate) > 0 ? Number(storeSettings.tax_rate) : 12}%)</span>
               <span className="font-medium tabular-nums">₱{fmtCents(taxCents)}</span>
             </div>
 

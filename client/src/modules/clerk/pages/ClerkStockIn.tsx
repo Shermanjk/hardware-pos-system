@@ -265,6 +265,9 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Prevent the Search button mousedown from closing the dropdown before click fires
+  const handleSearchMouseDown = (e: React.MouseEvent) => e.preventDefault();
+
   const lookup = useCallback(async (query: string) => {
     if (!query.trim()) return;
     setSearching(true);
@@ -278,7 +281,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
         return;
       }
       // If exact barcode match — skip the list and go straight to the card
-      const exact = data.find((r) => r.barcode === query.trim());
+      const exact = data.find((r) => r.barcode.toLowerCase() === query.trim().toLowerCase());
       if (exact) {
         setMatched(exact);
         setQtyInput("");
@@ -395,8 +398,8 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
       </div>
 
       {/* Search input with results dropdown */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2">
+g4      <div className="bg-gray-50 border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2 rounded-t-xl">
           <ScanLine className="h-4 w-4 text-white" />
           <p className="text-sm font-bold text-white">Scan or Search Product</p>
         </div>
@@ -433,6 +436,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
               </div>
               <Button size="sm"
                 className="h-11 px-5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
+                onMouseDown={handleSearchMouseDown}
                 onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); lookup(barcodeInput); }}
                 disabled={searching || !barcodeInput.trim()}>
                 <Search className="h-4 w-4" /> Search
@@ -441,7 +445,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
 
             {/* Results dropdown */}
             {showDropdown && results.length > 0 && (
-              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
                   <p className="text-xs font-semibold text-gray-500">{results.length} result{results.length !== 1 ? "s" : ""} found — select a product</p>
                 </div>

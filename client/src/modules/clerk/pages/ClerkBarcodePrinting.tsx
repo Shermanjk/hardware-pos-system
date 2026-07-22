@@ -96,9 +96,10 @@ interface PrintModalProps {
   product: ProductRecord | null;
   open: boolean;
   onClose: () => void;
+  onPrinted: (product: ProductRecord, count: number) => void;
 }
 
-function PrintModal({ product, open, onClose }: PrintModalProps) {
+function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
   const [labelCount, setLabelCount] = useState(1);
   const [sizeValue, setSizeValue] = useState("medium");
 
@@ -115,11 +116,12 @@ function PrintModal({ product, open, onClose }: PrintModalProps) {
       }
     `;
     document.head.appendChild(style);
+    const cleanup = () => document.getElementById("__barcode_print_style__")?.remove();
+    window.addEventListener("afterprint", cleanup, { once: true });
+    setTimeout(cleanup, 2000);
     window.print();
-    setTimeout(() => {
-      document.getElementById("__barcode_print_style__")?.remove();
-    }, 1000);
     toast.success(`Printing ${labelCount} label(s) for "${product.product_name}"`);
+    onPrinted(product, clampedCount);
     onClose();
   };
 
@@ -257,6 +259,7 @@ export default function ClerkBarcodePrinting() {
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [lookupError, setLookupError] = useState("");
+  const [printHistory, setPrintHistory] = useState<{ product: ProductRecord; count: number; time: Date }[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -438,11 +441,25 @@ export default function ClerkBarcodePrinting() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={2} className="py-8 text-center text-gray-400 text-sm">
-                  No barcode labels printed yet this session
-                </td>
-              </tr>
+              {printHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="py-8 text-center text-gray-400 text-sm">
+                    No barcode labels printed yet this session
+                  </td>
+                </tr>
+              ) : (
+                printHistory.map((entry, i) => (
+                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="py-3 px-5">
+                      <p className="text-sm font-semibold text-gray-900">{entry.product.product_name}</p>
+                      <p className="text-xs text-gray-400 font-mono mt-0.5">{entry.product.barcode} · {entry.count} label{entry.count !== 1 ? "s" : ""}</p>
+                    </td>
+                    <td className="py-3 px-5 text-xs text-gray-500 whitespace-nowrap">
+                      {entry.time.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -452,6 +469,7 @@ export default function ClerkBarcodePrinting() {
         product={selectedProduct}
         open={modalOpen}
         onClose={() => { setModalOpen(false); setSelectedProduct(null); }}
+        onPrinted={(p, count) => setPrintHistory((h) => [{ product: p, count, time: new Date() }, ...h])}
       />
     </div>
   );

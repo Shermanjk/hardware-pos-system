@@ -151,14 +151,20 @@ router.get("/lookup", async (req: Request, res: Response) => {
        FROM products p
        LEFT JOIN units u ON u.id = p.unit_id
        WHERE p.status = 'Active'
-         AND (p.barcode = ? OR p.product_name LIKE ?)
+         AND (p.barcode = ? OR p.barcode LIKE ? OR p.product_name LIKE ?)
        ORDER BY
          CASE WHEN p.barcode = ? THEN 0 ELSE 1 END,
          p.product_name ASC
        LIMIT 10`,
-      [q, `%${q}%`, q]
+      [q, `%${q}%`, `%${q}%`, q]
     );
-    res.status(200).json(rows);
+    res.status(200).json(
+      (rows as any[]).map((r) => ({
+        ...r,
+        selling_price: Number(r.selling_price),
+        quantity: Number(r.quantity),
+      }))
+    );
   } catch (err) {
     console.error("[products/GET /lookup]", err);
     res.status(500).json({ message: "An unexpected error occurred." });

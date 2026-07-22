@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,7 @@ function SortHeader({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClerkLowStock() {
+  const [, navigate] = useLocation();
   const [loading, setLoading] = useState(true);
   const [allProducts, setAllProducts] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<string[]>(["all"]);
@@ -187,7 +189,7 @@ export default function ClerkLowStock() {
           </Button>
           <Button
             className="gap-2 bg-blue-600 hover:bg-blue-700"
-            onClick={() => window.location.href = "/clerk/stock-in"}
+            onClick={() => navigate("/clerk/stock-in")}
           >
             <PackagePlus className="h-4 w-4" /> New Stock In
           </Button>
@@ -378,7 +380,7 @@ export default function ClerkLowStock() {
                         <Button
                           size="sm"
                           className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
-                          onClick={() => window.location.href = "/clerk/stock-in"}
+                          onClick={() => navigate("/clerk/stock-in")}
                         >
                           <PackagePlus className="h-3.5 w-3.5" /> Stock In
                         </Button>
@@ -410,7 +412,7 @@ export default function ClerkLowStock() {
               <Button
                 size="sm"
                 className="mt-3 gap-2 bg-blue-600 hover:bg-blue-700 h-8 text-xs"
-                onClick={() => window.location.href = "/clerk/stock-in"}
+                onClick={() => navigate("/clerk/stock-in")}
               >
                 <PackagePlus className="h-3.5 w-3.5" /> Open Stock In
               </Button>

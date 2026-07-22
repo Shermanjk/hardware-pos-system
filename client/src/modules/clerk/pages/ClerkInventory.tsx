@@ -305,8 +305,9 @@ export default function ClerkInventory() {
     if (!val) return;
     try {
       const results = await lookupProduct(val);
-      if (results.length > 0) {
-        const found = products.find(p => p.id === results[0].id);
+      const exact = results.find((r) => r.barcode.toLowerCase() === val.toLowerCase());
+      if (exact) {
+        const found = products.find(p => p.id === exact.id);
         if (found) {
           setDetailProduct(found);
           setDetailOpen(true);
@@ -314,6 +315,8 @@ export default function ClerkInventory() {
         } else {
           toast.error("Product not found in inventory");
         }
+      } else if (results.length > 0) {
+        toast.error("No exact barcode match. Use the name search to find products.");
       } else {
         toast.error("Product not registered. Please contact the Administrator.", {
           duration: 4000,
