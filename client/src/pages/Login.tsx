@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,22 @@ import axios from "axios";
 
 export default function Login() {
   const { login } = useAuth();
+
+  const images = ["/store-image-1.png", "/store-image-2.png", "/store-image-3.png"];
+  const [currentImage, setCurrentImage] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentImage((prev) => (prev + 1) % images.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.deltaY > 0) setCurrentImage((prev) => (prev + 1) % images.length);
+    else setCurrentImage((prev) => (prev - 1 + images.length) % images.length);
+  };
 
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe,   setRememberMe]   = useState(false);
@@ -50,48 +66,56 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left — store image */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900">
-        {/* Replace /store-image.jpg with your own image in the public/ folder */}
-        <img
-          src="/store-image.jpg"
-          alt="Isra Hardware Store"
-          className="absolute inset-0 w-full h-full object-cover opacity-80"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-        />
-        {/* Overlay gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/20 to-transparent" />
-        {/* Placeholder shown when no image is set */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white/30 pointer-events-none select-none">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <p className="text-sm font-medium">Drop store-image.jpg in /public</p>
+      {/* Left — slideshow */}
+      <div className="hidden lg:flex lg:w-1/2 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 p-10">
+        <div
+          className="relative w-full h-full max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+          onWheel={handleWheel}
+        >
+          {images.map((src, i) => (
+            <img
+              key={src}
+              src={src}
+              alt={`Store ${i + 1}`}
+              className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
+              style={{ opacity: currentImage === i ? 1 : 0 }}
+            />
+          ))}
+          {/* Subtle vignette */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+          {/* Dot indicators */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentImage(i)}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  currentImage === i ? "bg-white w-6" : "bg-white/40 w-2"
+                }`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Right — form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
-        <Card className="w-full max-w-md p-8 shadow-xl border-0 bg-white">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gradient-to-br from-slate-50 to-blue-50">
+        <Card className="w-full max-w-md p-8 shadow-2xl border border-gray-100 bg-white/90 backdrop-blur-sm rounded-2xl">
 
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-display font-bold text-xl">IH</span>
-              </div>
-              <div className="text-left">
-                <h1 className="text-2xl font-display font-bold text-gray-900 leading-tight">Isra Hardware POS</h1>
-                <p className="text-gray-500 text-sm">Point of Sale &amp; Inventory Management</p>
-              </div>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-lg mb-4">
+              <span className="text-white font-bold text-2xl">IH</span>
             </div>
+            <h1 className="text-2xl font-bold text-gray-900 leading-tight">Welcome back</h1>
+            <p className="text-gray-400 text-sm mt-1">Sign in to Isra Hardware POS</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5" noValidate>
 
             {/* Error banner */}
             {error && (
-              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
                 <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                 <p className="text-sm text-red-700 flex-1">{error}</p>
                 <button
@@ -106,10 +130,7 @@ export default function Login() {
 
             {/* Username */}
             <div>
-              <label
-                htmlFor="username"
-                className="block text-sm font-semibold text-gray-900 mb-2"
-              >
+              <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Username
               </label>
               <Input
@@ -122,23 +143,20 @@ export default function Login() {
                   if (fieldErrors.username)
                     setFieldErrors((p) => ({ ...p, username: undefined }));
                 }}
-                className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 ${
+                className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all ${
                   fieldErrors.username ? "border-red-400 focus:border-red-400" : ""
                 }`}
                 autoComplete="username"
                 disabled={isLoading}
               />
               {fieldErrors.username && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>
+                <p className="mt-1 text-xs text-red-500">{fieldErrors.username}</p>
               )}
             </div>
 
             {/* Password */}
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-semibold text-gray-900 mb-2"
-              >
+              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Password
               </label>
               <div className="relative">
@@ -152,7 +170,7 @@ export default function Login() {
                     if (fieldErrors.password)
                       setFieldErrors((p) => ({ ...p, password: undefined }));
                   }}
-                  className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-500 pr-10 ${
+                  className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 pr-10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all ${
                     fieldErrors.password ? "border-red-400 focus:border-red-400" : ""
                   }`}
                   autoComplete="current-password"
@@ -162,16 +180,14 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                   tabIndex={-1}
                 >
-                  {showPassword
-                    ? <EyeOff className="h-5 w-5" />
-                    : <Eye    className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
               {fieldErrors.password && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+                <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>
               )}
             </div>
 
@@ -182,11 +198,10 @@ export default function Login() {
                 checked={rememberMe}
                 onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                 disabled={isLoading}
-                className="border-gray-400"
+                className="border-gray-300"
               />
-              <label htmlFor="remember" className="text-sm text-gray-700 cursor-pointer">
-                Remember me{" "}
-                <span className="text-gray-400">(stay logged in for 30 days)</span>
+              <label htmlFor="remember" className="text-sm text-gray-600 cursor-pointer">
+                Remember me <span className="text-gray-400">(30 days)</span>
               </label>
             </div>
 
@@ -194,7 +209,7 @@ export default function Login() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 disabled:opacity-60"
+              className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-60"
             >
               {isLoading && (
                 <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />
@@ -204,7 +219,7 @@ export default function Login() {
           </form>
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+          <div className="mt-8 pt-5 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-400">© 2024 Isra Hardware. All rights reserved.</p>
           </div>
         </Card>

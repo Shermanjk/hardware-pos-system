@@ -178,6 +178,44 @@ router.post(
   }
 );
 
+// ─── GET /search-approved — Cashier: search approved returns by customer name ─
+router.get(
+  "/search-approved",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const { customer_name } = req.query as Record<string, string | undefined>;
+    if (!customer_name?.trim()) {
+      res.status(400).json({ message: "customer_name is required." });
+      return;
+    }
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.return_reason,
+           r.status,
+           r.resolution,
+           r.created_at
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         WHERE r.status = 'approved'
+           AND r.resolution IS NULL
+           AND s.customer_name LIKE ?
+         ORDER BY r.created_at DESC`,
+        [`%${customer_name.trim()}%`]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/search-approved] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
 // ─── Task 5.5 — GET / (Admin only) ───────────────────────────────────────────
 router.get(
   "/",
@@ -232,44 +270,6 @@ router.get(
     } catch (err) {
       console.error("[GET /api/returns] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
-    }
-  }
-);
-
-// ─── GET /search-approved — Cashier: search approved returns by customer name ─
-router.get(
-  "/search-approved",
-  authenticate,
-  requireRole("Cashier", "Admin"),
-  async (req: Request, res: Response): Promise<void> => {
-    const { customer_name } = req.query as Record<string, string | undefined>;
-    if (!customer_name?.trim()) {
-      res.status(400).json({ message: "customer_name is required." });
-      return;
-    }
-    try {
-      const [rows] = await pool.execute<any[]>(
-        `SELECT
-           r.id,
-           r.return_number,
-           s.invoice_number,
-           s.customer_name,
-           r.return_reason,
-           r.status,
-           r.resolution,
-           r.created_at
-         FROM returns r
-         JOIN sales s ON s.id = r.sale_id
-         WHERE r.status = 'approved'
-           AND r.resolution IS NULL
-           AND s.customer_name LIKE ?
-         ORDER BY r.created_at DESC`,
-        [`%${customer_name.trim()}%`]
-      );
-      res.status(200).json(rows);
-    } catch (err) {
-      console.error("[GET /api/returns/search-approved] Error:", err);
-      res.status(500).json({ message: "An unexpected error occurred." });
     }
   }
 );
