@@ -234,6 +234,8 @@ export default function Reports() {
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     store_name: "", store_fb: "", store_phone: "", store_address: "",
     currency: "PHP", tax_rate: 0, business_license: "",
+    registered_taxpayer_name: "", tin: "", document_type: "SALES INVOICE",
+    vat_registered: false, pos_min: undefined, pos_serial: undefined,
   });
 
   useEffect(() => {

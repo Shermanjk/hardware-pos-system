@@ -41,6 +41,7 @@ const PRODUCT_COLS = `
   p.is_returnable,
   p.damaged_stock,
   p.tax_type,
+  p.pricing_type,
   p.created_at,
   p.updated_at
 `;
@@ -63,6 +64,7 @@ const productSchema = z.object({
   is_returnable:    z.boolean().optional().default(true),
   status:           z.enum(["Active", "Inactive"]).optional().default("Active"),
   tax_type:         z.enum(TAX_TYPES).optional().default("VATABLE"),
+  pricing_type:     z.enum(["FIXED_PRICE", "MARKET_BASED"]).optional().default("FIXED_PRICE"),
 });
 
 const updateProductSchema = productSchema.partial();
@@ -153,7 +155,8 @@ router.get("/lookup", async (req: Request, res: Response) => {
          COALESCE(u.unit_name, '')      AS unit,
          COALESCE(u.abbreviation, '')   AS unit_abbreviation,
          p.is_returnable,
-         p.tax_type
+         p.tax_type,
+         p.pricing_type
        FROM products p
        LEFT JOIN units u ON u.id = p.unit_id
        WHERE p.status = 'Active'
@@ -231,7 +234,7 @@ router.post("/", async (req: Request, res: Response) => {
     barcode, barcode_source, supplier_barcode, product_name, description,
     category_id, supplier_id, unit_id,
     cost_price, selling_price, reorder_level,
-    is_returnable, status, tax_type,
+    is_returnable, status, tax_type, pricing_type,
   } = parsed.data;
 
   const conn = await pool.getConnection();
@@ -251,13 +254,13 @@ router.post("/", async (req: Request, res: Response) => {
          (barcode, barcode_source, supplier_barcode, product_name, description,
           category_id, supplier_id, unit_id,
           cost_price, selling_price, quantity, reorder_level,
-          is_returnable, damaged_stock, status, tax_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?)`,
+          is_returnable, damaged_stock, status, tax_type, pricing_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?)`,
       [
         barcode, barcode_source, supplier_barcode ?? null, product_name, description ?? null,
         category_id, supplier_id ?? null, unit_id,
         cost_price, selling_price, reorder_level,
-        is_returnable ? 1 : 0, status, tax_type ?? "VATABLE",
+        is_returnable ? 1 : 0, status, tax_type ?? "VATABLE", pricing_type ?? "FIXED_PRICE",
       ]
     );
 
@@ -348,6 +351,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       is_returnable:    data.is_returnable !== undefined ? (data.is_returnable ? 1 : 0) : undefined,
       status:           data.status,
       tax_type:         data.tax_type,
+      pricing_type:     data.pricing_type,
     };
 
     for (const [col, val] of Object.entries(fieldMap)) {

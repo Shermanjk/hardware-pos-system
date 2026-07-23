@@ -29,6 +29,16 @@ export type AuditAction =
   | "PRODUCT_CREATED"
   | "PRODUCT_UPDATED"
   | "PRODUCT_PRICE_CHANGED"
+  // ── Commodity pricing ────────────────────────────────────────────────────────
+  | "COMMODITY_PRICE_CHANGED"
+  | "COMMODITY_PURCHASE_SUBMITTED"
+  | "COMMODITY_PURCHASE_RECORDED"
+  | "COMMODITY_PURCHASE_APPROVED"
+  | "COMMODITY_PURCHASE_REJECTED"
+  | "COMMODITY_PURCHASE_CANCELLED"
+  | "PAYMENT_RECORDED"
+  | "PAYMENT_UPDATED"
+  | "PAYMENT_STATUS_CHANGED"
   // ── System / settings ───────────────────────────────────────────────────────
   | "SYSTEM_SETTINGS_UPDATED"
   | "TAX_CONFIGURATION_UPDATED"

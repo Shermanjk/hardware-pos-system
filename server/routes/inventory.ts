@@ -168,7 +168,9 @@ router.get("/logs", async (req: Request, res: Response) => {
 // ─── Schemas for stock-in and stock-adjustment ─────────────────────────────────
 const stockInItemSchema = z.object({
   product_id: z.number().int().positive(),
-  quantity_received: z.number().int().positive(),
+  // Accept decimals for commodity products (e.g. 100.5 kg).
+  // Whole-number products continue to work unchanged.
+  quantity_received: z.number().positive("Quantity must be greater than 0"),
   unit_cost: z.number().min(0).optional().nullable(),
 });
 
@@ -189,7 +191,7 @@ const stockInSchema = z.object({
 const stockAdjustmentSchema = z.object({
   product_id: z.number().int().positive(),
   type: z.enum(["Damaged", "Lost", "Expired", "Correction"]),
-  quantity: z.number().int().min(0),
+  quantity: z.number().min(0),
   reason: z.string().min(1, "Reason is required")
 });
 

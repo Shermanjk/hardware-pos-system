@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/productsApi";
 import type {
   ProductRecord, Category, Supplier, Unit,
-  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType,
+  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType, PricingType,
 } from "@/shared/api/productsApi";
 import axios from "axios";
 
@@ -133,6 +133,7 @@ function emptyForm() {
     is_returnable:    true,
     status:           "Active" as "Active" | "Inactive",
     tax_type:         "VATABLE" as TaxType,
+    pricing_type:     "FIXED_PRICE" as PricingType,
   };
 }
 type ProductForm = ReturnType<typeof emptyForm>;
@@ -153,6 +154,7 @@ function formFromRecord(p: ProductRecord): ProductForm {
     is_returnable:    Boolean(p.is_returnable),
     status:           p.status,
     tax_type:         (p.tax_type ?? "VATABLE") as TaxType,
+    pricing_type:     (p.pricing_type ?? "FIXED_PRICE") as PricingType,
   };
 }
 
@@ -280,6 +282,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
         is_returnable:    form.is_returnable,
         status:           form.status,
         tax_type:         form.tax_type,
+        pricing_type:     form.pricing_type,
       };
       const saved = mode === "add"
         ? await createProduct(payload)
@@ -507,6 +510,29 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             <p className="mt-1 text-xs text-amber-600">Confirm classification with your accountant before changing from VATABLE.</p>
           </div>
 
+          {/* Pricing Type */}
+          <div>
+            <Label className="mb-1.5 block font-semibold">Pricing Type</Label>
+            <Select
+              value={form.pricing_type}
+              onValueChange={(v) => set("pricing_type", v as PricingType)}
+              disabled={isLoading}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="FIXED_PRICE">Fixed Price — standard product</SelectItem>
+                <SelectItem value="MARKET_BASED">Market-Based — commodity (copra, charcoal…)</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.pricing_type === "MARKET_BASED" && (
+              <p className="mt-1 text-xs text-amber-600">
+                Market-based products use a configurable reference buying price managed under Commodity Prices.
+              </p>
+            )}
+          </div>
+
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading}>
@@ -566,6 +592,11 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
             <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>
             <div><span className="font-medium text-gray-500">Status:</span> {product.status}</div>
             <div><span className="font-medium text-gray-500">Tax Type:</span> {product.tax_type ?? "VATABLE"}</div>
+            <div><span className="font-medium text-gray-500">Pricing Type:</span>{" "}
+              <span className={product.pricing_type === "MARKET_BASED" ? "text-amber-700 font-semibold" : ""}>
+                {product.pricing_type === "MARKET_BASED" ? "Market-Based" : "Fixed Price"}
+              </span>
+            </div>
           </div>
           {product.supplier_barcode && (
             <div><span className="font-medium text-gray-500">Supplier Barcode:</span> {product.supplier_barcode}</div>

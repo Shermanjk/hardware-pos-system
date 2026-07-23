@@ -7,6 +7,30 @@ const router = Router();
 router.use(authenticate);
 router.use(requireRole("Admin"));
 
+// ─── GET /api/dashboard/pending-counts — counts for Admin requires attention ───
+router.get("/pending-counts", async (_req: Request, res: Response) => {
+  try {
+    const [commodityPending] = await pool.execute<any[]>(
+      "SELECT COUNT(*) as count FROM commodity_purchases WHERE status = 'PENDING_APPROVAL'"
+    );
+    const [returnsPending] = await pool.execute<any[]>(
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'pending'"
+    );
+    const [voidsPending] = await pool.execute<any[]>(
+      "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'pending'"
+    );
+    
+    res.status(200).json({
+      pending_commodity_approvals: Number(commodityPending[0]?.count || 0),
+      pending_returns: Number(returnsPending[0]?.count || 0),
+      pending_voids: Number(voidsPending[0]?.count || 0),
+    });
+  } catch (err) {
+    console.error("[dashboard/GET /pending-counts]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
 // ─── GET /api/dashboard — all KPIs in one round-trip ─────────────────────────
 router.get("/", async (_req: Request, res: Response) => {
   try {

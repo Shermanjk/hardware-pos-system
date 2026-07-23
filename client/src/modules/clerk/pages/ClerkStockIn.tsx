@@ -9,7 +9,7 @@ import {
   PackagePlus, ScanLine, Search, Trash2, CheckCircle2,
   ChevronRight, ChevronLeft, Truck, FileText, Plus,
   Package, Clock, AlertCircle, Edit2, RefreshCw,
-  History, X,
+  History, X, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -20,6 +20,10 @@ import {
   submitStockIn, getInventoryLogs,
   type StockInSource, type InventoryLog,
 } from "@/shared/api/inventoryApi";
+import {
+  getCurrentPrice, submitCommodityPurchase,
+  type CommodityCurrentPrice,
+} from "@/shared/api/commodityApi";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -228,6 +232,259 @@ function Step1({ state, setState, suppliers, errors, onNext }: Step1Props) {
   );
 }
 
+// ─── Commodity Purchase Card ─────────────────────────────────────────────────
+// Shown instead of the normal qty card when a MARKET_BASED product is matched.
+
+interface CommodityPurchaseCardProps {
+  product:    CashierProduct;
+  supplierId: string;
+  deliveryDate: string;
+  onDone:     () => void;
+  onCancel:   () => void;
+  onRefreshLogs: () => void;
+}
+
+function CommodityPurchaseCard({
+  product, supplierId, deliveryDate, onDone, onCancel, onRefreshLogs,
+}: CommodityPurchaseCardProps) {
+  const [currentPrice, setCurrentPrice] = useState<CommodityCurrentPrice | null>(null);
+  const [priceLoading, setPriceLoading] = useState(true);
+  const [priceError,   setPriceError]   = useState("");
+
+  const [qty,              setQty]              = useState("");
+  // NEW: deducted_quantity is physical weight (e.g., 3 kg), NOT price per unit
+  const [deductedQty,     setDeductedQty]      = useState("");
+  const [sellerName,       setSellerName]       = useState("");
+  const [remarks,          setRemarks]          = useState("");
+
+  const [saving,           setSaving]           = useState(false);
+
+  useEffect(() => {
+    setPriceLoading(true);
+    setPriceError("");
+    getCurrentPrice(product.id)
+      .then(setCurrentPrice)
+      .catch(() => setPriceError("No reference price set. Ask the Admin to set a buying price first."))
+      .finally(() => setPriceLoading(false));
+  }, [product.id]);
+
+  // Live preview — purely for display; backend recalculates authoritatively
+  // NEW MODEL: Physical quantity deduction
+  // Example: 100 kg received, 3 kg deducted -> pay for 97 kg
+  const refPrice      = currentPrice ? Number(currentPrice.price_per_unit) : 0;
+  const qtyNum        = parseFloat(qty) || 0;
+  const deductedQtyNum = parseFloat(deductedQty) || 0;
+  const payableQty    = Math.max(0, qtyNum - deductedQtyNum);
+  const grossAmount   = qtyNum * refPrice;
+  const deductionVal  = deductedQtyNum * refPrice; // Monetary value of the deduction
+  const finalAmt      = payableQty * refPrice;
+
+  const handleSubmitForApproval = async () => {
+    if (!currentPrice) return;
+    const q = parseFloat(qty);
+    if (isNaN(q) || q <= 0) { toast.error("Quantity must be greater than 0."); return; }
+    // NEW: deducted_quantity is physical weight, not price per unit
+    const d = parseFloat(deductedQty) || 0;
+    if (d < 0) { toast.error("Deducted quantity cannot be negative."); return; }
+    // Validate: deducted quantity cannot exceed quantity received
+    if (d > q) { toast.error(`Deducted quantity (${d}) cannot exceed Quantity Received (${q}).`); return; }
+    setSaving(true);
+    try {
+      const result = await submitCommodityPurchase({
+        product_id:       product.id,
+        supplier_id:      supplierId ? parseInt(supplierId) : null,
+        seller_name:      sellerName.trim() || null,
+        quantity:         q,
+        // NEW: Use deducted_quantity (physical weight) instead of deduction_per_unit (price)
+        deducted_quantity: d,
+        transaction_date: deliveryDate,
+        remarks:          remarks.trim() || null,
+      });
+      toast.success(
+        `${product.product_name}: ${q} ${product.unit_abbreviation} submitted for approval. ` +
+        `Payable: ${result.payable_quantity} ${product.unit_abbreviation} = ₱${result.final_amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`
+      );
+      onRefreshLogs();
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to submit purchase.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-4">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+          <TrendingUp className="h-5 w-5 text-amber-700" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-gray-900">{product.product_name}</p>
+            <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+              Market-Based
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            <span className="font-mono">{product.barcode}</span>
+            {" · "}{product.unit}
+            {" · "}<span className="font-medium">Current stock: {product.quantity}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Reference price display */}
+      {priceLoading ? (
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Spinner className="text-amber-500" /> Loading reference price…
+        </div>
+      ) : priceError ? (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0" /> {priceError}
+        </div>
+      ) : currentPrice && (
+        <div className="p-3 bg-white border border-amber-200 rounded-lg">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Current Reference Buying Price</p>
+          <p className="text-2xl font-bold text-amber-700 tabular-nums mt-0.5">
+            ₱{Number(currentPrice.price_per_unit).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+            <span className="text-sm font-normal text-gray-500"> / {product.unit_abbreviation}</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">Set by {currentPrice.changed_by_name}</p>
+        </div>
+      )}
+
+      {/* Inputs */}
+      {!priceLoading && !priceError && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Quantity Received ({product.unit_abbreviation}) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                type="number" min="0.001" step="any"
+                placeholder="e.g. 100.5"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                className="h-9 font-bold border-2 border-amber-300 focus:border-amber-500"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Deducted Quantity ({product.unit_abbreviation}) <span className="text-gray-400 font-normal">(optional)</span>
+              </Label>
+              <Input
+                type="number" min="0" step="any"
+                placeholder="0.00"
+                value={deductedQty}
+                onChange={(e) => setDeductedQty(e.target.value)}
+                className="h-9 border-2 border-gray-300"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Seller Name <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input
+                placeholder="e.g. Juan dela Cruz"
+                value={sellerName}
+                onChange={(e) => setSellerName(e.target.value)}
+                className="h-9 border-gray-300"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Remarks <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input
+                placeholder="Quality notes…"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                className="h-9 border-gray-300"
+              />
+            </div>
+          </div>
+
+          {/* Live calculation preview - NEW MODEL: Physical quantity deduction */}
+          {qtyNum > 0 && (
+            <div className="p-3 bg-white border border-amber-200 rounded-lg space-y-1.5 text-sm">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Calculation Preview</p>
+              
+              {/* Quantity breakdown */}
+              <div className="flex justify-between text-gray-600">
+                <span>Quantity Received</span>
+                <span className="tabular-nums font-medium">{qtyNum} {product.unit_abbreviation}</span>
+              </div>
+              {deductedQtyNum > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Deducted Quantity</span>
+                  <span className="tabular-nums font-medium">−{deductedQty} {product.unit_abbreviation}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5">
+                <span>Payable Quantity</span>
+                <span className="tabular-nums font-bold">{payableQty} {product.unit_abbreviation}</span>
+              </div>
+              
+              {/* Financial breakdown */}
+              <div className="flex justify-between text-gray-600 mt-2">
+                <span>Gross Value ({qtyNum} × ₱{refPrice.toFixed(2)})</span>
+                <span className="tabular-nums font-medium">₱{grossAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+              </div>
+              {deductedQtyNum > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Deduction Value ({deductedQty} × ₱{refPrice.toFixed(2)})</span>
+                  <span className="tabular-nums font-medium">−₱{deductionVal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5">
+                <span>Final Amount Payable</span>
+                <span className="tabular-nums text-emerald-700 font-bold">₱{finalAmt.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+              </div>
+              
+              <p className="text-xs text-gray-400 mt-1">* Backend recalculates all values. This preview is for reference only.</p>
+            </div>
+          )}
+
+          {/* Approval notice */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs font-semibold text-blue-700">Submit for Approval</p>
+            <p className="text-xs text-blue-600 mt-1">
+              This purchase will be submitted to Admin for approval. Inventory will only increase after Admin approves this purchase.
+            </p>
+            <p className="text-xs text-blue-500 mt-1">
+              The Cashier will handle seller payment after approval.
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Actions */}
+      {!priceLoading && !priceError && (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={handleSubmitForApproval}
+            disabled={saving || !qty || parseFloat(qty) <= 0}
+            className="gap-1 bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {saving ? <Spinner className="text-white" /> : <Plus className="h-3.5 w-3.5" />}
+            {saving ? "Submitting…" : "Submit for Approval"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}
+            className="text-gray-400 hover:text-gray-600">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+      {priceError && (
+        <Button size="sm" variant="ghost" onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+          <X className="h-3.5 w-3.5" /> Cancel
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ─── Step 2: Add Items ────────────────────────────────────────────────────────
 
 interface Step2Props {
@@ -237,9 +494,10 @@ interface Step2Props {
   setItems:   (items: WizardItem[]) => void;
   onBack:     () => void;
   onNext:     () => void;
+  onRefreshLogs: () => void;
 }
 
-function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Props) {
+function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshLogs }: Step2Props) {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [searching,    setSearching]    = useState(false);
   const [results,      setResults]      = useState<CashierProduct[]>([]);
@@ -398,7 +656,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext }: Step2Pro
       </div>
 
       {/* Search input with results dropdown */}
-g4      <div className="bg-gray-50 border border-gray-200 rounded-xl">
+      <div className="bg-gray-50 border border-gray-200 rounded-xl">
         <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2 rounded-t-xl">
           <ScanLine className="h-4 w-4 text-white" />
           <p className="text-sm font-bold text-white">Scan or Search Product</p>
@@ -484,8 +742,17 @@ g4      <div className="bg-gray-50 border border-gray-200 rounded-xl">
         </div>
       )}
 
-      {/* Selected product card */}
-      {matched && (
+      {/* Selected product card — commodity vs normal */}
+      {matched && matched.pricing_type === "MARKET_BASED" ? (
+        <CommodityPurchaseCard
+          product={matched}
+          supplierId={session.supplierId}
+          deliveryDate={session.deliveryDate}
+          onDone={() => { setMatched(null); setQtyInput(""); barcodeRef.current?.focus(); }}
+          onCancel={() => { setMatched(null); setLookupError(""); }}
+          onRefreshLogs={onRefreshLogs}
+        />
+      ) : matched && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
@@ -816,7 +1083,9 @@ export default function ClerkStockIn() {
     getInventoryLogs({ limit: 50 })
       .then((data) => {
         setLogs(data.filter((l) =>
-          l.transaction_type === "Stock In" || l.action === "Received Stock"
+          l.transaction_type === "Stock In" ||
+          l.action === "Received Stock" ||
+          l.action === "Commodity Purchase"
         ));
       })
       .catch(() => {})
@@ -903,6 +1172,7 @@ export default function ClerkStockIn() {
                 setItems={setItems}
                 onBack={() => setStep(1)}
                 onNext={() => setStep(3)}
+                onRefreshLogs={() => setRefreshKey((k) => k + 1)}
               />
             )}
             {step === 3 && (

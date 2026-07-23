@@ -6,12 +6,13 @@ import {
 import {
   TrendingUp, AlertCircle, Package, Truck,
   DollarSign, ShoppingCart, RefreshCw, RotateCcw,
-  AlertTriangle, TrendingDown,
+  AlertTriangle, TrendingDown, CheckCircle, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
+import { getPendingCounts } from "@/shared/api/dashboardApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,14 @@ export default function Dashboard() {
   const [data,    setData]    = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  
+  // Pending counts for "Requires Attention" section
+  const [pendingCounts, setPendingCounts] = useState({
+    pending_commodity_approvals: 0,
+    pending_returns: 0,
+    pending_voids: 0,
+  });
+  const [pendingLoading, setPendingLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -110,6 +119,13 @@ export default function Dashboard() {
     try {
       const res = await axios.get<DashboardData>("/api/dashboard", { headers: authHeaders() });
       setData(res.data);
+      
+      // Also load pending counts
+      try {
+        const counts = await getPendingCounts();
+        setPendingCounts(counts);
+      } catch { /* silent */ }
+      setPendingLoading(false);
     } catch (err) {
       setError(axios.isAxiosError(err) ? (err.response?.data?.message ?? "Failed to load dashboard.") : "Failed to load dashboard.");
     } finally {
@@ -186,6 +202,79 @@ export default function Dashboard() {
           sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/returns" />
         <KpiCard icon={ShoppingCart} label="Today's Orders"    value={(kpis?.today_transactions ?? 0).toString()}
           color="text-indigo-600" bg="bg-indigo-50" loading={loading} href="/sales" />
+      </div>
+
+      {/* Requires Attention Section - Database-backed pending items */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border-2 border-amber-200 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="h-5 w-5 text-amber-600" />
+          <h2 className="text-base font-bold text-gray-900">Requires Attention</h2>
+          <span className="ml-auto text-xs text-gray-500">Persistence-backed ·survives restart</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Commodity Approvals */}
+          <Link href="/commodity-prices">
+            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 font-medium">Pending Commodity Approvals</p>
+                {pendingLoading ? <Spinner className="text-amber-500 mt-1" /> : (
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">
+                    {pendingCounts.pending_commodity_approvals}
+                  </p>
+                )}
+              </div>
+              {pendingCounts.pending_commodity_approvals > 0 && (
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </a>
+          </Link>
+          
+          {/* Returns */}
+          <Link href="/returns">
+            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-orange-200 hover:border-orange-400 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                <RotateCcw className="h-5 w-5 text-orange-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 font-medium">Return Requests</p>
+                {pendingLoading ? <Spinner className="text-orange-500 mt-1" /> : (
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">
+                    {pendingCounts.pending_returns}
+                  </p>
+                )}
+              </div>
+              {pendingCounts.pending_returns > 0 && (
+                <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+              )}
+            </a>
+          </Link>
+          
+          {/* Void Requests */}
+          <Link href="/void-requests">
+            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-red-200 hover:border-red-400 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 font-medium">Void Requests</p>
+                {pendingLoading ? <Spinner className="text-red-500 mt-1" /> : (
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">
+                    {pendingCounts.pending_voids}
+                  </p>
+                )}
+              </div>
+              {pendingCounts.pending_voids > 0 && (
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </a>
+          </Link>
+        </div>
+        <p className="text-xs text-gray-400 mt-3">
+          These counts are loaded from the database and persist across system restarts.
+        </p>
       </div>
 
       {/* Charts row */}
