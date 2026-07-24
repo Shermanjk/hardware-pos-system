@@ -1,23 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { LogOut, Clock, User, ChevronDown, PauseCircle, Hourglass, TrendingUp } from "lucide-react";
+import { LogOut, Clock, User, ChevronDown, PauseCircle, Hourglass, Ban } from "lucide-react";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { createSale, type CreateSalePayload } from "@/shared/api/salesApi";
 import { getProduct } from "@/shared/api/productsApi";
 import { getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  getApprovedCommodityPurchases, recordPayment as recordCommodityPayment,
-  type CommodityPurchase,
-} from "@/shared/api/commodityApi";
 import { toast } from "sonner";
-import { useReturnDecisions, type ReturnDecisionNotification } from "@/shared/hooks/useReturnNotifications";
+import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
 import { toCentavos, parseCashInput } from "../utils/money";
 import { printSaleReceipt } from "../utils/receipt";
 import CartPanel from "../components/CartPanel";
@@ -30,6 +20,8 @@ import type { CartItem, CustomerInfo } from "../utils/receipt";
 import type { HeldOrder } from "../components/HeldOrdersPanel";
 import type { HeldReturn } from "../components/PendingReturnsPanel";
 import { getSuspendedSales, suspendSale, discardSuspendedSale, type SuspendedSale as SuspendedSaleApi } from "@/shared/api/suspendedSalesApi";
+import VoidSaleDialog from "../components/VoidSaleDialog";
+import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
 
 function LiveClock() {
   const [time, setTime] = useState(() => new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -61,12 +53,17 @@ export default function Cashier() {
   const [holdCounter, setHoldCounter] = useState(0);
   const [showHolds, setShowHolds] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
+  // Void state
+  const [showVoidDialog, setShowVoidDialog] = useState(false);
+  const [showVoidRequests, setShowVoidRequests] = useState(false);
+  const [latestVoidDecision, setLatestVoidDecision] = useState<VoidDecisionNotification | null>(null);
+
   // Persistent suspended sales (from database)
   const [suspendedSales, setSuspendedSales] = useState<SuspendedSaleApi[]>([]);
   const [suspendedLoading, setSuspendedLoading] = useState(false);
 
-  const [heldReturns, setHeldReturns] = useState< HeldReturn[]>([]);
+  const [heldReturns, setHeldReturns] = useState<HeldReturn[]>([]);
   const [showHeldReturns, setShowHeldReturns] = useState(false);
   const [showReturns, setShowReturns] = useState(false);
   const [resolveData, setResolveData] = useState<ReturnFull | null>(null);
@@ -85,11 +82,30 @@ export default function Cashier() {
   const cashCents = parseCashInput(cashTendered);
   const changeCents = cashCents >= totalCents ? cashCents - totalCents : null;
 
+  const fmt = (n: number) => "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   // WebSocket return decisions
   useReturnDecisions((n: ReturnDecisionNotification) => {
     setHeldReturns((prev) => prev.map((hr) => hr.returnId === n.id ? { ...hr, decision: n.decision, adminName: n.admin_name } : hr));
     if (n.decision === "approved") toast.success(`Return ${n.return_number} approved by ${n.admin_name}`, { description: `Invoice ${n.invoice_number} · ${n.customer_name}`, duration: 8000 });
     else toast.error(`Return ${n.return_number} rejected by ${n.admin_name}`, { description: `Invoice ${n.invoice_number} · ${n.customer_name}`, duration: 8000 });
+  });
+
+  // WebSocket void decisions
+  useVoidDecisions((n: VoidDecisionNotification) => {
+    setLatestVoidDecision(n);
+    setShowVoidRequests(true); // auto-open panel so cashier sees the decision immediately
+    if (n.decision === "approved") {
+      toast.success(`Void Approved — ${n.invoice_number}`, {
+        description: `${fmt(n.total_amount)} · Approved by ${n.admin_name}. Inventory restored.`,
+        duration: 10000,
+      });
+    } else {
+      toast.error(`Void Rejected — ${n.invoice_number}`, {
+        description: n.rejection_reason ?? `Rejected by ${n.admin_name}`,
+        duration: 10000,
+      });
+    }
   });
 
   // Cart actions
@@ -99,7 +115,7 @@ export default function Cashier() {
     if (!resolveData) return;
     setResolveLoading(true); setResolveError(null);
     try {
-      const resolved = await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
+      await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
       toast.success(resolution === "refund" ? "Return completed." : "Replacement completed.");
       setShowResolution(false); setResolveData(null);
     } catch (err: any) { setResolveError(err?.response?.data?.message ?? "Failed."); }
@@ -113,15 +129,6 @@ export default function Cashier() {
     setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
     setHeldReturns((prev) => prev.filter((r) => r.id !== hr.id));
   };
-
-  // Commodity payment state
-  const [commodityPurchases, setCommodityPurchases] = useState<CommodityPurchase[]>([]);
-  const [commodityLoading, setCommodityLoading] = useState(false);
-  const [selectedPurchase, setSelectedPurchase] = useState<CommodityPurchase | null>(null);
-  const [commodityPayAmount, setCommodityPayAmount] = useState("");
-  const [commodityPayMethod, setCommodityPayMethod] = useState("CASH");
-  const [commodityPayRef, setCommodityPayRef] = useState("");
-  const [commodityPaying, setCommodityPaying] = useState(false);
 
   // Load persistent suspended sales on mount
   const loadSuspendedSales = useCallback(async () => {
@@ -142,8 +149,6 @@ export default function Cashier() {
       const next = holdCounter + 1;
       setHoldCounter(next);
       const label = `Order #${next}${customerInfo.name ? ` — ${customerInfo.name}` : ""}`;
-      
-      // Convert CartItem to SuspendedCartItem format
       const cartItemsPayload = cartItems.map(item => ({
         product_id: item.id,
         name: item.name,
@@ -156,7 +161,6 @@ export default function Cashier() {
         taxable_amount: item.taxable_amount,
         vat_amount: item.vat_amount,
       }));
-
       await suspendSale({
         customer_name: customerInfo.name,
         customer_address: customerInfo.address,
@@ -164,10 +168,9 @@ export default function Cashier() {
         cart_items: cartItemsPayload,
         label,
       });
-
       toast.success("Transaction suspended and saved.");
       loadSuspendedSales();
-      clearCart(); 
+      clearCart();
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Failed to suspend sale.");
@@ -178,8 +181,6 @@ export default function Cashier() {
   const handleRecall = useCallback((holdId: string) => {
     const held = suspendedSales.find((h) => h.suspended_order_id === holdId);
     if (!held) return;
-    
-    // Convert persisted cart data back to CartItem format
     const restoredItems: CartItem[] = held.cart_data.map(item => ({
       id: item.product_id,
       name: item.name,
@@ -192,7 +193,6 @@ export default function Cashier() {
       taxable_amount: item.taxable_amount || 0,
       vat_amount: item.vat_amount || 0,
     }));
-
     setCartItems(restoredItems);
     setCustomerInfo({
       name: held.customer_name || "",
@@ -216,7 +216,6 @@ export default function Cashier() {
     }
   }, [loadSuspendedSales]);
 
-  // Convert HeldOrder to SuspendedSale format for backward compatibility panel
   const heldOrders: HeldOrder[] = suspendedSales.map(s => ({
     id: s.suspended_order_id,
     heldAt: new Date(s.updated_at),
@@ -240,46 +239,6 @@ export default function Cashier() {
     },
     label: s.label || s.suspended_order_id,
   }));
-
-  // Load approved commodity purchases for payment
-  const loadCommodityPurchases = useCallback(async () => {
-    setCommodityLoading(true);
-    try {
-      const data = await getApprovedCommodityPurchases();
-      setCommodityPurchases(data);
-    } catch { /* silent */ }
-    setCommodityLoading(false);
-  }, []);
-
-  useEffect(() => { loadCommodityPurchases(); }, [loadCommodityPurchases]);
-
-  // Handle commodity payment
-  const handleCommodityPayment = async () => {
-    if (!selectedPurchase) return;
-    const amount = parseFloat(commodityPayAmount);
-    if (isNaN(amount) || amount <= 0) { toast.error("Enter a valid payment amount."); return; }
-    if (amount > selectedPurchase.balance_due) { toast.error("Payment cannot exceed the remaining balance."); return; }
-    setCommodityPaying(true);
-    try {
-      const result = await recordCommodityPayment(selectedPurchase.id, {
-        amount,
-        payment_method: commodityPayMethod || null,
-        payment_reference: commodityPayRef.trim() || null,
-      });
-      toast.success(
-        `Payment of ₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })} recorded. ` +
-        `Status: ${result.payment_status}`
-      );
-      setSelectedPurchase(null);
-      setCommodityPayAmount("");
-      setCommodityPayRef("");
-      loadCommodityPurchases();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Payment failed.");
-    } finally {
-      setCommodityPaying(false);
-    }
-  };
 
   // Payments
   const handleProcessPayment = async () => {
@@ -350,121 +309,32 @@ export default function Cashier() {
       <div className="flex-1 flex gap-3 p-3 overflow-hidden min-h-0">
         <CartPanel cartItems={cartItems} setCartItems={setCartItems} barcodeInput={barcodeInput} setBarcodeInput={setBarcodeInput} searchResults={searchResults} setSearchResults={setSearchResults} searchLoading={searchLoading} setSearchLoading={setSearchLoading} showDropdown={showDropdown} setShowDropdown={setShowDropdown} barcodeRef={barcodeRef} searchTimeoutRef={searchTimeout} />
         <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} />
-        <PaymentPanel subtotalCents={subtotalCents} taxCents={taxCents} totalCents={totalCents} taxRate={taxRate} cashTendered={cashTendered} setCashTendered={setCashTendered} cartLength={cartItems.length} customerName={customerInfo.name} isProcessing={isProcessing} onProcessPayment={handleProcessPayment} onHold={handleHold} onReturn={() => setShowReturns(true)} />
+        <PaymentPanel subtotalCents={subtotalCents} taxCents={taxCents} totalCents={totalCents} taxRate={taxRate} cashTendered={cashTendered} setCashTendered={setCashTendered} cartLength={cartItems.length} customerName={customerInfo.name} isProcessing={isProcessing} onProcessPayment={handleProcessPayment} onHold={handleHold} onReturn={() => setShowReturns(true)} onVoid={() => setShowVoidDialog(true)} onVoidRequests={() => setShowVoidRequests(true)} unseenVoidDecisions={0} />
       </div>
 
-      {/* Badges */}
-      {heldOrders.length > 0 && <button onClick={() => setShowHolds(true)} className="fixed bottom-4 left-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold z-30"><PauseCircle className="h-3.5 w-3.5" />On Hold<span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-xs">{heldOrders.length}</span></button>}
-      {/* Commodity Payment Section */}
-      {commodityPurchases.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-30">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg shadow-lg p-3 w-72">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-amber-600" />
-              <span className="text-xs font-bold text-amber-800">Commodity Payments</span>
-              <span className="ml-auto bg-amber-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {commodityPurchases.filter((p) => p.payment_status !== "PAID").length}
-              </span>
-            </div>
-            <div className="max-h-32 overflow-y-auto space-y-1.5">
-              {commodityPurchases.slice(0, 5).map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => { setSelectedPurchase(p); setCommodityPayAmount(String(p.balance_due)); }}
-                  className={`w-full text-left p-2 rounded border text-xs ${selectedPurchase?.id === p.id ? "border-amber-500 bg-amber-100" : "border-amber-200 bg-white hover:bg-amber-50"}`}
-                >
-                  <p className="font-semibold text-gray-900 truncate">{p.product_name}</p>
-                  <p className="text-gray-500">₱{p.balance_due.toLocaleString("en-PH", { minimumFractionDigits: 2 })} due</p>
-                  <span className={`inline-block px-1 py-0.5 rounded text-xs font-medium mt-1 ${p.payment_status === "PAID" ? "bg-green-100 text-green-700" : p.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
-                    {p.payment_status}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {commodityPurchases.length > 5 && (
-              <p className="text-xs text-amber-600 mt-2 text-center">+{commodityPurchases.length - 5} more</p>
-            )}
-          </div>
-        </div>
+      {/* Fixed bottom badges */}
+      {heldOrders.length > 0 && (
+        <button onClick={() => setShowHolds(true)} className="fixed bottom-4 left-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold z-30">
+          <PauseCircle className="h-3.5 w-3.5" />On Hold
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-xs">{heldOrders.length}</span>
+        </button>
       )}
-
-      {/* Commodity Payment Modal */}
-      {selectedPurchase && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setSelectedPurchase(null)}>
-          <div className="bg-white rounded-xl p-5 w-96 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-amber-600" />
-              <h3 className="text-lg font-bold">Record Seller Payment</h3>
-            </div>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
-              <p className="font-semibold text-gray-900">{selectedPurchase.product_name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Seller: {selectedPurchase.seller || "—"}</p>
-              <p className="text-xs text-gray-500">Qty: {Number(selectedPurchase.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="text-xs text-gray-500">Final Amount</p>
-                <p className="font-bold text-gray-900">₱{Number(selectedPurchase.final_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <p className="text-xs text-gray-500">Amount Paid</p>
-                <p className="font-bold text-green-600">₱{Number(selectedPurchase.amount_paid).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div className="p-2 bg-gray-50 rounded col-span-2">
-                <p className="text-xs text-gray-500">Remaining Balance</p>
-                <p className="font-bold text-red-600">₱{selectedPurchase.balance_due.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Payment Amount <span className="text-red-500">*</span></Label>
-              <Input
-                type="number" min="0.01" step="0.01"
-                value={commodityPayAmount}
-                onChange={(e) => setCommodityPayAmount(e.target.value)}
-                className="h-10"
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Payment Method</Label>
-              <Select value={commodityPayMethod} onValueChange={setCommodityPayMethod}>
-                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CASH">Cash</SelectItem>
-                  <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
-                  <SelectItem value="CHECK">Check</SelectItem>
-                  <SelectItem value="ONLINE">Online</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Reference No. <span className="text-gray-400 font-normal">(optional)</span></Label>
-              <Input
-                placeholder="e.g. OR-12345"
-                value={commodityPayRef}
-                onChange={(e) => setCommodityPayRef(e.target.value)}
-                className="h-10"
-              />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" onClick={() => setSelectedPurchase(null)} className="flex-1">Cancel</Button>
-              <Button
-                onClick={handleCommodityPayment}
-                disabled={commodityPaying || !commodityPayAmount}
-                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white gap-2"
-              >
-                {commodityPaying ? "Processing..." : "Record Payment"}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {heldReturns.length > 0 && (
+        <button onClick={() => setShowHeldReturns(true)} className={`fixed bottom-4 left-36 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold z-30 ${heldReturns.some((r) => r.decision) ? "border-green-300 bg-green-50 text-green-700" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
+          <Hourglass className="h-3.5 w-3.5" />Pending Returns
+          <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs ${heldReturns.some((r) => r.decision) ? "bg-green-500" : "bg-purple-500"}`}>{heldReturns.length}</span>
+        </button>
       )}
-
-      {heldReturns.length > 0 && <button onClick={() => setShowHeldReturns(true)} className={`fixed bottom-4 left-36 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold z-30 ${heldReturns.some((r) => r.decision) ? "border-green-300 bg-green-50 text-green-700" : "border-purple-200 bg-purple-50 text-purple-700"}`}><Hourglass className="h-3.5 w-3.5" />Pending Returns<span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs ${heldReturns.some((r) => r.decision) ? "bg-green-500" : "bg-purple-500"}`}>{heldReturns.length}</span></button>}
+      <button
+        onClick={() => setShowVoidRequests(true)}
+        className="fixed bottom-4 right-4 hidden"
+      />
 
       <HeldOrdersPanel show={showHolds} onClose={() => setShowHolds(false)} heldOrders={heldOrders} taxRate={taxRate} onRecall={handleRecall} onDiscard={handleDiscard} />
       <PendingReturnsPanel show={showHeldReturns} onClose={() => setShowHeldReturns(false)} heldReturns={heldReturns} onProcess={handleProcessReturn} onDiscard={(id: string) => setHeldReturns((prev) => prev.filter((r) => r.id !== id))} />
       <ReturnsPanel show={showReturns} onClose={() => setShowReturns(false)} storeSettings={storeSettings} onHeldReturn={(hr: HeldReturn) => setHeldReturns((prev) => [...prev, hr])} onProcessResolution={(ret: ReturnFull) => { setResolveData(ret); setShowResolution(true); }} />
+      <CashierVoidRequestsPanel show={showVoidRequests} onClose={() => setShowVoidRequests(false)} newDecision={latestVoidDecision} />
+      <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
 
       {showResolution && resolveData && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowResolution(false)}>

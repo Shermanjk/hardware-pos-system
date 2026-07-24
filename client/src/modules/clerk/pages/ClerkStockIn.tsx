@@ -9,8 +9,10 @@ import {
   PackagePlus, ScanLine, Search, Trash2, CheckCircle2,
   ChevronRight, ChevronLeft, Truck, FileText, Plus,
   Package, Clock, AlertCircle, Edit2, RefreshCw,
-  History, X, TrendingUp,
+  History, X, TrendingUp, XCircle, Loader2,
 } from "lucide-react";
+
+type HistoryTabType = "stockin" | "commodity";
 import { toast } from "sonner";
 import {
   lookupProduct, getSuppliers,
@@ -21,8 +23,8 @@ import {
   type StockInSource, type InventoryLog,
 } from "@/shared/api/inventoryApi";
 import {
-  getCurrentPrice, submitCommodityPurchase,
-  type CommodityCurrentPrice,
+  getCurrentPrice, submitCommodityPurchase, getPurchaseHistory,
+  type CommodityCurrentPrice, type CommodityPurchase,
 } from "@/shared/api/commodityApi";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -656,7 +658,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
       </div>
 
       {/* Search input with results dropdown */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl">
+      <div className="bg-white border-2 border-gray-300 rounded-xl shadow-sm">
         <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2 rounded-t-xl">
           <ScanLine className="h-4 w-4 text-white" />
           <p className="text-sm font-bold text-white">Scan or Search Product</p>
@@ -667,7 +669,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
               <div className="relative flex-1">
                 {searching
                   ? <Spinner className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
-                  : <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
+                  : <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
                 }
                 <Input
                   ref={barcodeRef}
@@ -682,18 +684,18 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
                     }
                     if (e.key === "Escape") clearSearch();
                   }}
-                  className="pl-9 pr-8 h-11 bg-white border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500 rounded-lg shadow-sm"
+                  className="pl-11 pr-8 h-12 text-base bg-white border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500 rounded-lg shadow-sm"
                   autoFocus
                 />
                 {barcodeInput && (
                   <button onClick={clearSearch}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     <X className="h-4 w-4" />
                   </button>
                 )}
               </div>
               <Button size="sm"
-                className="h-11 px-5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
+                className="h-12 px-6 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
                 onMouseDown={handleSearchMouseDown}
                 onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); lookup(barcodeInput); }}
                 disabled={searching || !barcodeInput.trim()}>
@@ -1051,6 +1053,187 @@ function SuccessScreen({
   );
 }
 
+// ─── History Panel with Tabs ─────────────────────────────────────────────────
+
+interface HistoryPanelProps {
+  logs: InventoryLog[];
+  logsLoading: boolean;
+  commodityRequests: CommodityPurchase[];
+  commodityLoading: boolean;
+  refreshKey: number;
+  onRefresh: () => void;
+}
+
+function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, refreshKey, onRefresh }: HistoryPanelProps) {
+  const [activeTab, setActiveTab] = useState<HistoryTabType>("stockin");
+
+  const TabButton = ({ tab, icon: Icon, label, count }: { tab: HistoryTabType; icon: any; label: string; count?: number }) => (
+    <button
+      onClick={() => setActiveTab(tab)}
+      className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+        activeTab === tab
+          ? tab === "stockin"
+            ? "border-blue-500 text-blue-800 bg-white"
+            : "border-amber-500 text-amber-800 bg-white"
+          : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+      }`}
+    >
+      <Icon className={`h-4 w-4 ${activeTab === tab ? (tab === "stockin" ? "text-blue-600" : "text-amber-600") : "text-gray-400"}`} />
+      {label}
+      {count !== undefined && count > 0 && (
+        <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{count}</span>
+      )}
+    </button>
+  );
+
+  const pendingCount = commodityRequests.filter(r => r.approval_status === "PENDING_APPROVAL").length;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Tabs */}
+      <div className="flex items-center border-b border-gray-200 bg-gray-50">
+        <TabButton tab="stockin" icon={History} label="Stock In History" count={logs.length} />
+        <TabButton tab="commodity" icon={TrendingUp} label="Commodity Requests" count={pendingCount} />
+        <div className="ml-auto px-3">
+          <button
+            onClick={onRefresh}
+            className="h-8 w-8 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${(logsLoading || commodityLoading) ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Stock In History Tab */}
+      {activeTab === "stockin" && (
+        logsLoading ? (
+          <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
+            <Spinner className="text-blue-500" /> Loading history…
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="py-10 text-center text-gray-400 text-sm">No stock-in history yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-y border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Qty Added</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Stock</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[160px]">Reference</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {logs.map((log, idx) => (
+                  <tr key={log.id}
+                    className={`transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <p className="text-xs font-medium text-gray-700">{new Date(log.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <p className="font-semibold text-gray-900 text-sm leading-tight">{log.product_name}</p>
+                      <p className="font-mono text-xs text-gray-400 mt-0.5">{log.barcode}</p>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">
+                        +{log.quantity_change ?? log.quantity ?? 0}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-sm font-bold text-gray-900 tabular-nums">{log.remaining_stock ?? "—"}</span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-mono text-gray-600 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">{log.reference ?? "—"}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-xs font-medium text-gray-700">{log.performed_by}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+
+      {/* Commodity Requests Tab */}
+      {activeTab === "commodity" && (
+        commodityLoading ? (
+          <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
+            <Spinner className="text-amber-500" /> Loading requests…
+          </div>
+        ) : commodityRequests.length === 0 ? (
+          <div className="py-10 text-center text-gray-400 text-sm">No commodity purchase requests yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-y border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-24">Qty</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Amount</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Seller</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {commodityRequests.map((req, idx) => (
+                  <tr key={req.id}
+                    className={`transition-colors hover:bg-amber-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <p className="text-xs font-medium text-gray-700">{new Date(req.transaction_date).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <p className="font-semibold text-gray-900 text-sm leading-tight">{req.product_name}</p>
+                      <p className="font-mono text-xs text-gray-400 mt-0.5">{req.barcode}</p>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-sm font-bold text-gray-900 tabular-nums">{req.quantity} {req.unit_name}</span>
+                      {req.deducted_quantity > 0 && (
+                        <p className="text-xs text-gray-500">−{req.deducted_quantity} {req.unit_name}</p>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-sm font-bold text-emerald-700 tabular-nums">
+                        ₱{Number(req.final_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                      </span>
+                      {req.payment_status !== "PAID" && req.balance_due > 0 && (
+                        <p className="text-xs text-gray-500">{req.balance_due > 0 ? `₱${Number(req.balance_due).toLocaleString("en-PH", { minimumFractionDigits: 2 })} balance` : ""}</p>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {req.approval_status === "PENDING_APPROVAL" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold border border-yellow-200">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Pending
+                        </span>
+                      ) : req.approval_status === "APPROVED" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold border border-green-200">
+                          <CheckCircle2 className="h-3 w-3" /> Approved
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold border border-red-200">
+                          <XCircle className="h-3 w-3" /> Rejected
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs text-gray-700">
+                      {req.seller || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ClerkStockIn() {
@@ -1074,6 +1257,10 @@ export default function ClerkStockIn() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [refreshKey,  setRefreshKey]  = useState(0);
 
+  // Commodity purchase requests state
+  const [commodityRequests, setCommodityRequests] = useState<CommodityPurchase[]>([]);
+  const [commodityLoading, setCommodityLoading] = useState(false);
+
   useEffect(() => {
     getSuppliers().then(setSuppliers).catch(() => {});
   }, []);
@@ -1090,6 +1277,15 @@ export default function ClerkStockIn() {
       })
       .catch(() => {})
       .finally(() => setLogsLoading(false));
+  }, [refreshKey]);
+
+  // Fetch clerk's commodity purchase requests
+  useEffect(() => {
+    setCommodityLoading(true);
+    getPurchaseHistory({ limit: 50 })
+      .then(setCommodityRequests)
+      .catch(() => {})
+      .finally(() => setCommodityLoading(false));
   }, [refreshKey]);
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -1196,72 +1392,15 @@ export default function ClerkStockIn() {
         )}
       </div>
 
-      {/* History log */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-blue-600" />
-            <h2 className="text-sm font-bold text-gray-900">Stock In History</h2>
-          </div>
-          <button
-            onClick={() => setRefreshKey((k) => k + 1)}
-            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`h-4 w-4 ${logsLoading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-
-        {logsLoading ? (
-          <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
-            <Spinner className="text-blue-500" /> Loading history…
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="py-10 text-center text-gray-400 text-sm">No stock-in history yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-100 border-y border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Qty Added</th>
-                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Stock</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[160px]">Reference</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {logs.map((log, idx) => (
-                  <tr key={log.id}
-                    className={`transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <p className="text-xs font-medium text-gray-700">{new Date(log.created_at).toLocaleDateString()}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-semibold text-gray-900 text-sm leading-tight">{log.product_name}</p>
-                      <p className="font-mono text-xs text-gray-400 mt-0.5">{log.barcode}</p>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">
-                        +{log.quantity_change ?? log.quantity ?? 0}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="text-sm font-bold text-gray-900 tabular-nums">{log.remaining_stock ?? "—"}</span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-xs font-mono text-gray-600 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">{log.reference ?? "—"}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-xs font-medium text-gray-700">{log.performed_by}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Combined History Panel with Tabs */}
+      <HistoryPanel
+        logs={logs}
+        logsLoading={logsLoading}
+        commodityRequests={commodityRequests}
+        commodityLoading={commodityLoading}
+        refreshKey={refreshKey}
+        onRefresh={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }

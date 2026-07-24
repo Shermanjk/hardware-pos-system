@@ -42,6 +42,7 @@ const PRODUCT_COLS = `
   p.damaged_stock,
   p.tax_type,
   p.pricing_type,
+  p.product_usage,
   p.created_at,
   p.updated_at
 `;
@@ -49,7 +50,7 @@ const PRODUCT_COLS = `
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 const TAX_TYPES = ["VATABLE", "VAT_EXEMPT", "ZERO_RATED", "NON_TAXABLE"] as const;
 
-const productSchema = z.object({
+const productBaseSchema = z.object({
   barcode:          z.string().min(1, "Barcode is required"),
   barcode_source:   z.enum(["manufacturer", "store"]),
   supplier_barcode: z.string().optional().nullable(),
@@ -58,16 +59,41 @@ const productSchema = z.object({
   category_id:      z.number().int().positive("Category is required"),
   supplier_id:      z.number().int().positive().optional().nullable(),
   unit_id:          z.number().int().positive("Unit is required"),
-  cost_price:       z.number().min(0, "Cost price must be 0 or greater"),
-  selling_price:    z.number().min(0, "Selling price must be 0 or greater"),
-  reorder_level:    z.number().int().min(0, "Reorder level must be 0 or greater"),
+  cost_price:       z.number().min(0, "Cost price must be 0 or greater").optional(),
+  selling_price:    z.number().min(0, "Selling price must be 0 or greater").optional(),
+  reorder_level:    z.number().int().min(0, "Reorder level must be 0 or greater").optional().default(0),
   is_returnable:    z.boolean().optional().default(true),
   status:           z.enum(["Active", "Inactive"]).optional().default("Active"),
   tax_type:         z.enum(TAX_TYPES).optional().default("VATABLE"),
   pricing_type:     z.enum(["FIXED_PRICE", "MARKET_BASED"]).optional().default("FIXED_PRICE"),
+  product_usage:    z.enum(["RETAIL_PRODUCT", "RAW_MATERIAL_COMMODITY", "BOTH"]).optional().default("RETAIL_PRODUCT"),
 });
 
-const updateProductSchema = productSchema.partial();
+function applyPricingRules<T extends { pricing_type?: string; cost_price?: number; selling_price?: number }>(
+  data: T, ctx: z.RefinementCtx
+) {
+  if ((data.pricing_type ?? "FIXED_PRICE") === "FIXED_PRICE") {
+    if (data.cost_price === undefined)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cost_price"], message: "Cost price is required for fixed-price products." });
+    if (data.selling_price === undefined)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["selling_price"], message: "Selling price is required for fixed-price products." });
+  }
+}
+
+const productSchema = productBaseSchema
+  .superRefine(applyPricingRules)
+  .transform((data) => ({
+    ...data,
+    cost_price:    (data.pricing_type ?? "FIXED_PRICE") === "MARKET_BASED" ? 0 : (data.cost_price ?? 0),
+    selling_price: (data.pricing_type ?? "FIXED_PRICE") === "MARKET_BASED" ? 0 : (data.selling_price ?? 0),
+  }));
+
+const updateProductSchema = productBaseSchema.partial()
+  .superRefine(applyPricingRules)
+  .transform((data) => ({
+    ...data,
+    ...(data.pricing_type === "MARKET_BASED" ? { cost_price: 0, selling_price: 0 } : {}),
+  }));
 
 // ─── Barcode auto-generation ──────────────────────────────────────────────────
 const STORE_BARCODE_START = 1;
@@ -226,7 +252,7 @@ router.post("/", async (req: Request, res: Response) => {
 
   const parsed = productSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
+    res.status(422).json({ errors: parsed.error.issues.map((i: z.ZodIssue) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
     return;
   }
 
@@ -234,7 +260,7 @@ router.post("/", async (req: Request, res: Response) => {
     barcode, barcode_source, supplier_barcode, product_name, description,
     category_id, supplier_id, unit_id,
     cost_price, selling_price, reorder_level,
-    is_returnable, status, tax_type, pricing_type,
+    is_returnable, status, tax_type, pricing_type, product_usage,
   } = parsed.data;
 
   const conn = await pool.getConnection();
@@ -254,13 +280,13 @@ router.post("/", async (req: Request, res: Response) => {
          (barcode, barcode_source, supplier_barcode, product_name, description,
           category_id, supplier_id, unit_id,
           cost_price, selling_price, quantity, reorder_level,
-          is_returnable, damaged_stock, status, tax_type, pricing_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?)`,
+          is_returnable, damaged_stock, status, tax_type, pricing_type, product_usage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?)`,
       [
         barcode, barcode_source, supplier_barcode ?? null, product_name, description ?? null,
         category_id, supplier_id ?? null, unit_id,
         cost_price, selling_price, reorder_level,
-        is_returnable ? 1 : 0, status, tax_type ?? "VATABLE", pricing_type ?? "FIXED_PRICE",
+        is_returnable ? 1 : 0, status, tax_type ?? "VATABLE", pricing_type ?? "FIXED_PRICE", product_usage ?? "RETAIL_PRODUCT",
       ]
     );
 
@@ -302,7 +328,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   const parsed = updateProductSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
+    res.status(422).json({ errors: parsed.error.issues.map((i: z.ZodIssue) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
     return;
   }
 
@@ -352,6 +378,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       status:           data.status,
       tax_type:         data.tax_type,
       pricing_type:     data.pricing_type,
+      product_usage:    data.product_usage,
     };
 
     for (const [col, val] of Object.entries(fieldMap)) {

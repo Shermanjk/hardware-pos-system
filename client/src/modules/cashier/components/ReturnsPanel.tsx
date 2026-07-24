@@ -6,7 +6,6 @@ import { RotateCcw, Loader2, X, Search, Hourglass } from "lucide-react";
 import { toast } from "sonner";
 import { searchSales, getSaleByInvoice, type SaleSummary, type Sale } from "@/shared/api/salesApi";
 import { createReturn, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
-import { useReturnDecisions, type ReturnDecisionNotification } from "@/shared/hooks/useReturnNotifications";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
@@ -59,8 +58,9 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     setReturnLookupLoading(true); setReturnLookupError(null); setSaleSearchResults([]);
     try {
       const results = await searchSales(searchMode === "customer" ? { customer_name: customerSearch.trim() } : { date_from: dateFrom || undefined, date_to: dateTo || undefined });
-      if (results.length === 0) setReturnLookupError("No transactions found.");
-      else setSaleSearchResults(results);
+      const active = results.filter((s) => s.void_status !== "voided");
+      if (active.length === 0) setReturnLookupError("No transactions found.");
+      else setSaleSearchResults(active);
     } catch { setReturnLookupError("Search failed."); }
     finally { setReturnLookupLoading(false); }
   };
@@ -70,6 +70,10 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     setReturnLookupLoading(true); setReturnLookupError(null); setReturnSale(null); setSelectedItems({});
     try {
       const sale = await getSaleByInvoice(returnInvoice.trim());
+      if (sale.void_status === "voided") {
+        setReturnLookupError("This sale has been voided and cannot be returned.");
+        return;
+      }
       setReturnSale(sale);
       const init: Record<number, SelectedItem> = {};
       sale.items.forEach((item) => {

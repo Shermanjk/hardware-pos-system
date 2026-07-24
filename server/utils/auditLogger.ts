@@ -39,6 +39,12 @@ export type AuditAction =
   | "PAYMENT_RECORDED"
   | "PAYMENT_UPDATED"
   | "PAYMENT_STATUS_CHANGED"
+  // ── External Processing Delivery ─────────────────────────────────────────────
+  | "EP_COMPANY_CREATED"
+  | "EP_COMPANY_UPDATED"
+  | "EP_COMPANY_DEACTIVATED"
+  | "EP_COMPANY_DELETED"
+  | "EP_DELIVERY_RECORDED"
   // ── System / settings ───────────────────────────────────────────────────────
   | "SYSTEM_SETTINGS_UPDATED"
   | "TAX_CONFIGURATION_UPDATED"

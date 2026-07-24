@@ -24,6 +24,31 @@ export interface ReturnDecisionNotification {
   cashier_user_id: number;
 }
 
+export interface VoidRequestNotification {
+  type: "void_request";
+  void_id: number;
+  sale_id: number;
+  invoice_number: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  customer_name: string;
+  total_amount: number;
+  reason: string;
+  created_at: string;
+}
+
+export interface VoidDecisionNotification {
+  type: "void_decision";
+  void_id: number;
+  sale_id: number;
+  invoice_number: string;
+  total_amount: number;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason: string | null;
+  cashier_user_id: number;
+}
+
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
@@ -67,6 +92,13 @@ export function initWebSocket(server: Server): void {
   });
 }
 
+export function broadcastVoidRequest(notification: VoidRequestNotification): void {
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(adminClients)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
 export function broadcastReturnRequest(notification: ReturnRequestNotification): void {
   const message = JSON.stringify(notification);
   for (const client of Array.from(adminClients)) {
@@ -75,6 +107,15 @@ export function broadcastReturnRequest(notification: ReturnRequestNotification):
 }
 
 export function sendReturnDecision(notification: ReturnDecisionNotification): void {
+  const sockets = cashierClients.get(notification.cashier_user_id);
+  if (!sockets) return;
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(sockets)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function sendVoidDecision(notification: VoidDecisionNotification): void {
   const sockets = cashierClients.get(notification.cashier_user_id);
   if (!sockets) return;
   const message = JSON.stringify(notification);

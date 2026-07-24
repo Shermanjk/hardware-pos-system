@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, PauseCircle, RotateCcw } from "lucide-react";
+import { Loader2, PauseCircle, RotateCcw, Ban } from "lucide-react";
 import { fmtCents, formatCashDisplay, parseCashInput } from "../utils/money";
 
 interface PaymentPanelProps {
@@ -15,13 +15,16 @@ interface PaymentPanelProps {
   onProcessPayment: () => void;
   onHold: () => void;
   onReturn: () => void;
+  onVoid: () => void;
+  onVoidRequests: () => void;
+  unseenVoidDecisions: number;
 }
 
 export default function PaymentPanel({
   subtotalCents, taxCents, totalCents, taxRate,
   cashTendered, setCashTendered,
   cartLength, customerName, isProcessing,
-  onProcessPayment, onHold, onReturn,
+  onProcessPayment, onHold, onReturn, onVoid, onVoidRequests, unseenVoidDecisions,
 }: PaymentPanelProps) {
   const cashCents   = parseCashInput(cashTendered);
   const changeCents = cashCents >= totalCents ? cashCents - totalCents : null;
@@ -100,11 +103,11 @@ export default function PaymentPanel({
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center">₱</span>}
           {isProcessing ? "Processing..." : !customerName.trim() ? "Enter Customer Name" : cashCents > 0 && cashCents < totalCents ? "Insufficient Cash" : "Process Payment"}
         </Button>
-        <div className="space-y-1">
-          <div className="flex gap-2">
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
-              className="flex-1 h-10 text-sm rounded-xl gap-2 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 text-sm rounded-xl gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHold}
               disabled={cartLength === 0 || !customerName.trim()}
             >
@@ -112,10 +115,29 @@ export default function PaymentPanel({
             </Button>
             <Button
               variant="outline"
-              className="flex-1 h-10 text-sm rounded-xl gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+              className="h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
               onClick={onReturn}
             >
               <RotateCcw className="h-4 w-4" /> Return
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+              onClick={onVoid}
+            >
+              <Ban className="h-4 w-4" /> Request Void
+            </Button>
+            <Button
+              variant="outline"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-gray-200 text-gray-600 hover:bg-gray-50"
+              onClick={onVoidRequests}
+            >
+              <Ban className="h-4 w-4" /> Void Requests
+              {unseenVoidDecisions > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold">
+                  {unseenVoidDecisions}
+                </span>
+              )}
             </Button>
           </div>
           {cartLength > 0 && !customerName.trim() && (

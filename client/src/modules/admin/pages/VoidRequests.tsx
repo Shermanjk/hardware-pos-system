@@ -82,27 +82,75 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
   if (!req) return null;
   return (
     <Dialog open={!!req} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Void Request Details</DialogTitle></DialogHeader>
         <div className="space-y-4">
+          {/* Header info grid */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
-            <div><span className="text-gray-500">Status:</span> <StatusBadge status={req.status} /></div>
+            <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> <StatusBadge status={req.status} /></div>
             <div><span className="text-gray-500">Customer:</span> {req.customer_name}</div>
             <div><span className="text-gray-500">Sale Amount:</span> <span className="font-semibold">{fmtPeso(req.total_amount)}</span></div>
             <div><span className="text-gray-500">Requested By:</span> {req.requested_by_name}</div>
             <div><span className="text-gray-500">Requested:</span> {fmtDate(req.created_at)}</div>
             {req.approved_by_name && (
-              <div><span className="text-gray-500">Resolved By:</span> {req.approved_by_name}</div>
+              <div><span className="text-gray-500">{req.status === "approved" ? "Approved" : "Rejected"} By:</span> {req.approved_by_name}</div>
             )}
             {req.resolved_at && (
               <div><span className="text-gray-500">Resolved:</span> {fmtDate(req.resolved_at)}</div>
             )}
           </div>
-          <div className="p-3 bg-gray-50 rounded text-sm">
-            <span className="text-gray-500">Void Reason: </span>{req.reason}
+
+          {/* Void reason */}
+          <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Void Reason</span>
+            <p className="mt-1 text-gray-800">{req.reason}</p>
           </div>
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+
+          {/* Rejection reason */}
+          {req.status === "rejected" && req.rejection_reason && (
+            <div className="p-3 bg-red-50 rounded-lg text-sm border border-red-200">
+              <span className="text-xs font-semibold uppercase tracking-wide text-red-500">Rejection Reason</span>
+              <p className="mt-1 text-red-800">{req.rejection_reason}</p>
+            </div>
+          )}
+
+          {/* Sale items */}
+          {req.items && req.items.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Sale Items</p>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Product</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Qty</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Unit Price</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {req.items.map((item, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="py-2 px-3 font-medium text-gray-900">{item.product_name}</td>
+                        <td className="py-2 px-3 text-center text-gray-600">{item.quantity}{item.unit ? ` ${item.unit}` : ""}</td>
+                        <td className="py-2 px-3 text-right text-gray-600 tabular-nums">{fmtPeso(item.unit_price)}</td>
+                        <td className="py-2 px-3 text-right font-semibold text-gray-900 tabular-nums">{fmtPeso(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                      <td colSpan={3} className="py-2 px-3 text-right font-semibold text-gray-700">Total</td>
+                      <td className="py-2 px-3 text-right font-bold text-gray-900 tabular-nums">{fmtPeso(req.total_amount)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
             Approving a void marks the sale as voided. The original transaction record is preserved and cannot be deleted.
           </div>
         </div>

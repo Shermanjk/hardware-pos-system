@@ -44,6 +44,7 @@ router.get("/", async (_req: Request, res: Response) => {
         COALESCE(SUM(total_amount), 0) AS today_revenue
       FROM sales
       WHERE DATE(created_at) = ?
+        AND void_status != 'voided'
     `, [today]);
 
     // ── Monthly sales ────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ router.get("/", async (_req: Request, res: Response) => {
       SELECT COALESCE(SUM(total_amount), 0) AS monthly_revenue
       FROM sales
       WHERE DATE(created_at) >= ?
+        AND void_status != 'voided'
     `, [monthStart]);
 
     // ── Product counts ───────────────────────────────────────────────────────
@@ -81,6 +83,7 @@ router.get("/", async (_req: Request, res: Response) => {
         COALESCE(SUM(total_amount), 0)  AS revenue
       FROM sales
       WHERE DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND void_status != 'voided'
       GROUP BY DATE(created_at)
       ORDER BY sale_date ASC
     `);
@@ -92,6 +95,7 @@ router.get("/", async (_req: Request, res: Response) => {
         COALESCE(SUM(total_amount), 0)   AS revenue
       FROM sales
       WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
+        AND void_status != 'voided'
       GROUP BY DATE_FORMAT(created_at, '%Y-%m')
       ORDER BY month ASC
     `);
@@ -104,6 +108,8 @@ router.get("/", async (_req: Request, res: Response) => {
         SUM(si.subtotal) AS revenue
       FROM sale_items si
       JOIN products p ON p.id = si.product_id
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.void_status != 'voided'
       GROUP BY si.product_id, p.product_name
       ORDER BY units_sold DESC
       LIMIT 5
@@ -119,6 +125,7 @@ router.get("/", async (_req: Request, res: Response) => {
         s.created_at
       FROM sales s
       JOIN users u ON u.id = s.cashier_id
+      WHERE s.void_status != 'voided'
       ORDER BY s.created_at DESC
       LIMIT 8
     `);

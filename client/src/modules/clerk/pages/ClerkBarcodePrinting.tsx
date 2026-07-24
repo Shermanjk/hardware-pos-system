@@ -16,6 +16,8 @@ import {
 import { toast } from "sonner";
 import { getProducts, type ProductRecord } from "@/shared/api/productsApi";
 
+type PrintTabType = "products" | "history";
+
 // ─── Label size options ───────────────────────────────────────────────────────
 const LABEL_SIZES = [
   { value: "small",  label: "Small  — 38 × 25 mm",  width: "96px",  height: "64px"  },
@@ -255,9 +257,9 @@ export default function ClerkBarcodePrinting() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [barcodeInput, setBarcodeInput] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [activePrintTab, setActivePrintTab] = useState<PrintTabType>("products");
   const [lookupError, setLookupError] = useState("");
   const [printHistory, setPrintHistory] = useState<{ product: ProductRecord; count: number; time: Date }[]>([]);
 
@@ -288,16 +290,30 @@ export default function ClerkBarcodePrinting() {
 
   const handleBarcodeSearch = () => {
     setLookupError("");
-    const val = barcodeInput.trim();
+    const val = search.trim();
     if (!val) return;
-    const found = products.find((p) => p.barcode.toLowerCase() === val.toLowerCase());
-    if (found) {
-      setSelectedProduct(found);
+    // First, check if it's an exact barcode match
+    const exactMatch = products.find((p) => p.barcode.toLowerCase() === val.toLowerCase());
+    if (exactMatch) {
+      setSelectedProduct(exactMatch);
       setModalOpen(true);
-      setBarcodeInput("");
-    } else {
-      setLookupError("Product not registered. Please contact the Administrator.");
+      setSearch("");
+      return;
     }
+    // Otherwise, check if any product name contains the search term (for filtering)
+    const filtered = products.filter((p) => 
+      p.product_name.toLowerCase().includes(val.toLowerCase()) ||
+      p.barcode.toLowerCase().includes(val.toLowerCase()) ||
+      p.category.toLowerCase().includes(val.toLowerCase())
+    );
+    if (filtered.length === 0) {
+      setLookupError("No products found. Try scanning a barcode or searching by name.");
+      return;
+    }
+    // If we found matches, switch to products tab and let the filter show them
+    // (the search state already filters the products list via useMemo)
+    setActivePrintTab("products");
+    setSearch("");
   };
 
   const openModal = (product: ProductRecord) => {
@@ -325,145 +341,161 @@ export default function ClerkBarcodePrinting() {
         </p>
       </div>
 
-      {/* Search bar */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <Input
-              placeholder="Search by product name or category…"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setLookupError(""); }}
-              className="pl-9 h-10 bg-gray-50"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-              <Input
-                placeholder="Scan or type barcode (Enter)…"
-                value={barcodeInput}
-                onChange={(e) => { setBarcodeInput(e.target.value); setLookupError(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeSearch(); }}}
-                className="pl-9 h-10 bg-gray-50 font-mono"
-              />
-            </div>
-            <Button variant="outline" className="h-10 px-4 flex-shrink-0" onClick={handleBarcodeSearch}>
-              Lookup
-            </Button>
-          </div>
+      {/* Search bar - single unified search */}
+      <div className="bg-white border-2 border-gray-300 rounded-xl p-4 shadow-sm">
+        <div className="relative">
+          <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+          <Input
+            placeholder="Scan barcode or search by name…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setLookupError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeSearch(); }}}
+            className="pl-12 h-12 text-base border-2 border-gray-300 bg-white font-medium rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
         </div>
+        <p className="text-xs text-gray-500 mt-2 text-center">
+          Type a product name to search, or scan/type a barcode to print directly
+        </p>
 
         {lookupError && (
           <div className="mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
             <Barcode className="h-4 w-4 flex-shrink-0" /> {lookupError}
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* Results */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="p-4"><Skeleton className="h-28 w-full" /></Card>
-          ))}
+      {/* Results with Tabs */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Tabs */}
+        <div className="flex items-center border-b border-gray-200 bg-gray-50">
+          <button
+            onClick={() => setActivePrintTab("products")}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+              activePrintTab === "products"
+                ? "border-blue-500 text-blue-800 bg-white"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            <Package className={`h-4 w-4 ${activePrintTab === "products" ? "text-blue-600" : "text-gray-400"}`} />
+            Products
+            {filtered.length > 0 && (
+              <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{filtered.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActivePrintTab("history")}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+              activePrintTab === "history"
+                ? "border-blue-500 text-blue-800 bg-white"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            <Printer className={`h-4 w-4 ${activePrintTab === "history" ? "text-blue-600" : "text-gray-400"}`} />
+            Print History
+            {printHistory.length > 0 && (
+              <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{printHistory.length}</span>
+            )}
+          </button>
         </div>
-      ) : filtered.length === 0 ? (
-        <Card className="py-16 text-center">
-          <div className="flex flex-col items-center gap-3 text-gray-400">
-            <Barcode className="h-12 w-12 opacity-30" />
-            <p className="font-medium text-gray-600">No products found</p>
-            <p className="text-sm">Try a different search term</p>
-          </div>
-        </Card>
-      ) : (
-        <>
-          <p className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-900">{filtered.length}</span> product{filtered.length !== 1 ? "s" : ""} found
-            — click any card to print its label
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((product) => (
-              <Card
-                key={product.id}
-                className="p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
-                onClick={() => openModal(product)}
-              >
-                <div className="flex justify-center mb-3 p-2 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors">
-                  <VisualBarcode code={product.barcode} height={36} />
-                </div>
 
-                <p className="font-mono text-xs font-bold tracking-widest text-gray-600 text-center mb-2">
-                  {product.barcode}
-                </p>
-
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
-                    {product.product_name}
-                  </p>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <Tag className="h-3 w-3" />
-                    <span>{product.category}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <Layers className="h-3 w-3" />
-                    <span>{product.unit}</span>
-                  </div>
-                </div>
-
-                <Button
-                  size="sm"
-                  className="w-full mt-3 gap-1.5 bg-blue-600 hover:bg-blue-700 text-xs h-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); openModal(product); }}
-                >
-                  <Printer className="h-3.5 w-3.5" /> Print Label
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Recent print log */}
-      <Card className="overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-          <h2 className="text-base font-semibold text-gray-900">Recent Print Activity</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Labels printed this session</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                {["Product", "Time"].map((h) => (
-                  <th key={h} className="text-left py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">{h}</th>
+        {/* Products Tab */}
+        {activePrintTab === "products" && (
+          <>
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Card key={i} className="p-4"><Skeleton className="h-28 w-full" /></Card>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {printHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={2} className="py-8 text-center text-gray-400 text-sm">
-                    No barcode labels printed yet this session
-                  </td>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <Barcode className="h-12 w-12 opacity-30 mx-auto mb-3" />
+                <p className="font-medium text-gray-600">No products found</p>
+                <p className="text-sm">Try a different search term</p>
+              </div>
+            ) : (
+              <>
+                <p className="px-4 pt-4 pb-2 text-sm text-gray-500">
+                  <span className="font-semibold text-gray-900">{filtered.length}</span> product{filtered.length !== 1 ? "s" : ""} found
+                  — click any card to print its label
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                  {filtered.map((product) => (
+                    <Card
+                      key={product.id}
+                      className="p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
+                      onClick={() => openModal(product)}
+                    >
+                      <div className="flex justify-center mb-3 p-2 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors">
+                        <VisualBarcode code={product.barcode} height={36} />
+                      </div>
+                      <p className="font-mono text-xs font-bold tracking-widest text-gray-600 text-center mb-2">
+                        {product.barcode}
+                      </p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
+                          {product.product_name}
+                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                          <Tag className="h-3 w-3" />
+                          <span>{product.category}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                          <Layers className="h-3 w-3" />
+                          <span>{product.unit}</span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full mt-3 gap-1.5 bg-blue-600 hover:bg-blue-700 text-xs h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); openModal(product); }}
+                      >
+                        <Printer className="h-3.5 w-3.5" /> Print Label
+                      </Button>
+                    </Card>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* History Tab */}
+        {activePrintTab === "history" && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  {["Product", "Time"].map((h) => (
+                    <th key={h} className="text-left py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
-              ) : (
-                printHistory.map((entry, i) => (
-                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                    <td className="py-3 px-5">
-                      <p className="text-sm font-semibold text-gray-900">{entry.product.product_name}</p>
-                      <p className="text-xs text-gray-400 font-mono mt-0.5">{entry.product.barcode} · {entry.count} label{entry.count !== 1 ? "s" : ""}</p>
-                    </td>
-                    <td className="py-3 px-5 text-xs text-gray-500 whitespace-nowrap">
-                      {entry.time.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </thead>
+              <tbody>
+                {printHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="py-12 text-center text-gray-400 text-sm">
+                      No barcode labels printed yet this session
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                ) : (
+                  printHistory.map((entry, i) => (
+                    <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                      <td className="py-3 px-5">
+                        <p className="text-sm font-semibold text-gray-900">{entry.product.product_name}</p>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">{entry.product.barcode} · {entry.count} label{entry.count !== 1 ? "s" : ""}</p>
+                      </td>
+                      <td className="py-3 px-5 text-xs text-gray-500 whitespace-nowrap">
+                        {entry.time.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <PrintModal
         product={selectedProduct}

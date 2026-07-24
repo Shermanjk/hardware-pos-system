@@ -415,6 +415,14 @@ router.post("/purchase", async (req: Request, res: Response) => {
     const purchaseId: number = purchaseResult.insertId;
     await conn.commit();
 
+    console.log("[DEBUG] Commodity purchase submitted:", {
+      id: purchaseId,
+      product_id,
+      status: purchaseStatus,
+      quantity,
+      final_amount,
+    });
+
     // 7. Audit log for submission
     await logAuditEvent({
       action: "COMMODITY_PURCHASE_SUBMITTED",
@@ -467,6 +475,151 @@ router.post("/purchase", async (req: Request, res: Response) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   } finally {
     conn.release();
+  }
+});
+
+// ─── GET /api/commodity-prices/purchases/pending — Admin pending approvals ─────
+router.get("/purchases/pending", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  console.log("[DEBUG] Admin fetching pending commodity purchases...");
+
+  try {
+    // First check if status column has PENDING_APPROVAL values at all
+    const [countCheck] = await pool.execute<any[]>(`
+      SELECT status, COUNT(*) as cnt FROM commodity_purchases GROUP BY status
+    `);
+    console.log("[DEBUG] Status counts:", countCheck);
+
+    const [rows] = await pool.execute<any[]>(`
+      SELECT
+        cp.id,
+        cp.product_id,
+        p.product_name,
+        p.barcode,
+        cp.seller_name,
+        cp.quantity,
+        cp.unit_name,
+        cp.reference_price,
+        -- New columns for physical quantity deduction
+        cp.deducted_quantity,
+        cp.payable_quantity,
+        cp.deduction_amount,
+        -- Legacy columns for backwards compatibility
+        cp.deduction_per_unit,
+        cp.final_unit_price,
+        cp.gross_amount,
+        cp.total_deduction,
+        cp.final_amount,
+        cp.remarks,
+        cp.transaction_date,
+        cp.created_at,
+        cp.status AS approval_status,
+        cp.prepared_by,
+        COALESCE(u.full_name, '—') AS prepared_by_name
+      FROM commodity_purchases cp
+      JOIN products p ON p.id = cp.product_id
+      LEFT JOIN users u ON u.id = cp.prepared_by
+      WHERE cp.status = 'PENDING_APPROVAL'
+      ORDER BY cp.created_at ASC
+    `);
+
+    console.log("[DEBUG] Found pending purchases:", rows.length);
+
+    res.status(200).json(rows.map((r) => ({
+      ...r,
+      quantity:           Number(r.quantity),
+      // New fields
+      deducted_quantity: Number(r.deducted_quantity),
+      payable_quantity:  Number(r.payable_quantity),
+      deduction_amount:  Number(r.deduction_amount),
+      reference_price:   Number(r.reference_price),
+      // Legacy fields
+      deduction_per_unit: Number(r.deduction_per_unit),
+      final_unit_price:   Number(r.final_unit_price),
+      gross_amount:       Number(r.gross_amount),
+      total_deduction:    Number(r.total_deduction),
+      final_amount:       Number(r.final_amount),
+    })));
+  } catch (err) {
+    console.error("[commodity/GET /purchases/pending]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
+// ─── GET /api/commodity-prices/purchases/approved — for Cashier payment ──────
+router.get("/purchases/approved", async (req: Request, res: Response) => {
+  if (!requireCashierOrAdmin(req, res)) return;
+
+  const { payment_status } = req.query;
+  let where = "WHERE cp.status = 'APPROVED'";
+  const params: any[] = [];
+
+  if (payment_status) {
+    where += " AND cp.payment_status = ?";
+    params.push(payment_status);
+  }
+
+  try {
+    const [rows] = await pool.execute<any[]>(`
+      SELECT
+        cp.id,
+        cp.product_id,
+        p.product_name,
+        p.barcode,
+        cp.seller_name,
+        cp.quantity,
+        cp.unit_name,
+        cp.reference_price,
+        -- New columns for physical quantity deduction
+        cp.deducted_quantity,
+        cp.payable_quantity,
+        cp.deduction_amount,
+        -- Legacy columns for backwards compatibility
+        cp.deduction_per_unit,
+        cp.final_unit_price,
+        cp.gross_amount,
+        cp.total_deduction,
+        cp.final_amount,
+        cp.payment_status,
+        cp.amount_paid,
+        cp.payment_method,
+        cp.payment_reference,
+        cp.paid_at,
+        cp.remarks,
+        cp.transaction_date,
+        cp.created_at,
+        cp.status AS approval_status,
+        cp.approved_by,
+        cp.approved_at,
+        COALESCE(u.full_name, '—') AS approved_by_name
+      FROM commodity_purchases cp
+      JOIN products p ON p.id = cp.product_id
+      LEFT JOIN users u ON u.id = cp.approved_by
+      ${where}
+      ORDER BY cp.approved_at DESC
+    `, params);
+
+    res.status(200).json(rows.map((r) => ({
+      ...r,
+      quantity:           Number(r.quantity),
+      // New fields
+      deducted_quantity: Number(r.deducted_quantity),
+      payable_quantity:  Number(r.payable_quantity),
+      deduction_amount:  Number(r.deduction_amount),
+      reference_price:   Number(r.reference_price),
+      // Legacy fields
+      deduction_per_unit: Number(r.deduction_per_unit),
+      final_unit_price:   Number(r.final_unit_price),
+      gross_amount:       Number(r.gross_amount),
+      total_deduction:    Number(r.total_deduction),
+      final_amount:       Number(r.final_amount),
+      amount_paid:        Number(r.amount_paid),
+      balance_due:        Math.round((Number(r.final_amount) - Number(r.amount_paid)) * 10000) / 10000,
+    })));
+  } catch (err) {
+    console.error("[commodity/GET /purchases/approved]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
 
@@ -758,141 +911,6 @@ router.get("/purchases", async (req: Request, res: Response) => {
     })));
   } catch (err) {
     console.error("[commodity/GET /purchases]", err);
-    res.status(500).json({ message: "An unexpected error occurred." });
-  }
-});
-
-// ─── GET /api/commodity-prices/purchases/pending — Admin pending approvals ─────
-router.get("/purchases/pending", async (req: Request, res: Response) => {
-  if (!requireAdmin(req, res)) return;
-
-  try {
-    const [rows] = await pool.execute<any[]>(`
-      SELECT
-        cp.id,
-        cp.product_id,
-        p.product_name,
-        p.barcode,
-        cp.seller_name,
-        cp.quantity,
-        cp.unit_name,
-        cp.reference_price,
-        -- New columns for physical quantity deduction
-        cp.deducted_quantity,
-        cp.payable_quantity,
-        cp.deduction_amount,
-        -- Legacy columns for backwards compatibility
-        cp.deduction_per_unit,
-        cp.final_unit_price,
-        cp.gross_amount,
-        cp.total_deduction,
-        cp.final_amount,
-        cp.remarks,
-        cp.transaction_date,
-        cp.created_at,
-        cp.status AS approval_status,
-        cp.prepared_by,
-        COALESCE(u.full_name, '—') AS prepared_by_name
-      FROM commodity_purchases cp
-      JOIN products p ON p.id = cp.product_id
-      LEFT JOIN users u ON u.id = cp.prepared_by
-      WHERE cp.status = 'PENDING_APPROVAL'
-      ORDER BY cp.created_at ASC
-    `);
-
-    res.status(200).json(rows.map((r) => ({
-      ...r,
-      quantity:           Number(r.quantity),
-      // New fields
-      deducted_quantity: Number(r.deducted_quantity),
-      payable_quantity:  Number(r.payable_quantity),
-      deduction_amount:  Number(r.deduction_amount),
-      reference_price:   Number(r.reference_price),
-      // Legacy fields
-      deduction_per_unit: Number(r.deduction_per_unit),
-      final_unit_price:   Number(r.final_unit_price),
-      gross_amount:       Number(r.gross_amount),
-      total_deduction:    Number(r.total_deduction),
-      final_amount:       Number(r.final_amount),
-    })));
-  } catch (err) {
-    console.error("[commodity/GET /purchases/pending]", err);
-    res.status(500).json({ message: "An unexpected error occurred." });
-  }
-});
-
-// ─── GET /api/commodity-prices/purchases/approved — for Cashier payment ──────
-router.get("/purchases/approved", async (req: Request, res: Response) => {
-  if (!requireCashierOrAdmin(req, res)) return;
-
-  const { payment_status } = req.query;
-  let where = "WHERE cp.status = 'APPROVED'";
-  const params: any[] = [];
-
-  if (payment_status) {
-    where += " AND cp.payment_status = ?";
-    params.push(payment_status);
-  }
-
-  try {
-    const [rows] = await pool.execute<any[]>(`
-      SELECT
-        cp.id,
-        cp.product_id,
-        p.product_name,
-        p.barcode,
-        cp.seller_name,
-        cp.quantity,
-        cp.unit_name,
-        cp.reference_price,
-        -- New columns for physical quantity deduction
-        cp.deducted_quantity,
-        cp.payable_quantity,
-        cp.deduction_amount,
-        -- Legacy columns for backwards compatibility
-        cp.deduction_per_unit,
-        cp.final_unit_price,
-        cp.gross_amount,
-        cp.total_deduction,
-        cp.final_amount,
-        cp.payment_status,
-        cp.amount_paid,
-        cp.payment_method,
-        cp.payment_reference,
-        cp.paid_at,
-        cp.remarks,
-        cp.transaction_date,
-        cp.created_at,
-        cp.status AS approval_status,
-        cp.approved_by,
-        cp.approved_at,
-        COALESCE(u.full_name, '—') AS approved_by_name
-      FROM commodity_purchases cp
-      JOIN products p ON p.id = cp.product_id
-      LEFT JOIN users u ON u.id = cp.approved_by
-      ${where}
-      ORDER BY cp.approved_at DESC
-    `, params);
-
-    res.status(200).json(rows.map((r) => ({
-      ...r,
-      quantity:           Number(r.quantity),
-      // New fields
-      deducted_quantity: Number(r.deducted_quantity),
-      payable_quantity:  Number(r.payable_quantity),
-      deduction_amount:  Number(r.deduction_amount),
-      reference_price:   Number(r.reference_price),
-      // Legacy fields
-      deduction_per_unit: Number(r.deduction_per_unit),
-      final_unit_price:   Number(r.final_unit_price),
-      gross_amount:       Number(r.gross_amount),
-      total_deduction:    Number(r.total_deduction),
-      final_amount:       Number(r.final_amount),
-      amount_paid:        Number(r.amount_paid),
-      balance_due:        Math.round((Number(r.final_amount) - Number(r.amount_paid)) * 10000) / 10000,
-    })));
-  } catch (err) {
-    console.error("[commodity/GET /purchases/approved]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });

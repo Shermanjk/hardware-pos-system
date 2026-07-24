@@ -4,6 +4,7 @@ import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { sendVoidDecision, broadcastVoidRequest } from "../ws.js";
 import { z } from "zod";
 
 const router = Router();
@@ -240,7 +241,7 @@ router.post(
       await conn.beginTransaction();
 
       const [rows] = await conn.execute<any[]>(
-        `SELECT id, invoice_number, void_status FROM sales WHERE id = ? FOR UPDATE`,
+        `SELECT id, invoice_number, void_status, customer_name, total_amount FROM sales WHERE id = ? FOR UPDATE`,
         [saleId]
       );
       const sale = rows[0];
@@ -278,6 +279,20 @@ router.post(
       });
 
       res.status(201).json({ message: "Void request submitted.", void_id: voidResult.insertId });
+
+      // Notify all admins in real-time
+      broadcastVoidRequest({
+        type: "void_request",
+        void_id: voidResult.insertId,
+        sale_id: saleId,
+        invoice_number: sale.invoice_number,
+        cashier_name: req.user!.full_name ?? req.user!.username,
+        cashier_user_id: req.user!.id,
+        customer_name: sale.customer_name,
+        total_amount: Number(sale.total_amount),
+        reason: parsed.data.reason,
+        created_at: new Date().toISOString(),
+      });
     } catch (err) {
       await conn.rollback();
       console.error("[POST /api/sales/:id/void-request] Error:", err);
@@ -305,7 +320,7 @@ router.patch(
       await conn.beginTransaction();
 
       const [rows] = await conn.execute<any[]>(
-        `SELECT sv.id, sv.sale_id, sv.status, s.invoice_number
+        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number
          FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
          WHERE sv.id = ? FOR UPDATE`,
         [voidId]
@@ -320,6 +335,23 @@ router.patch(
         await conn.rollback();
         res.status(422).json({ message: "Only pending void requests can be approved." });
         return;
+      }
+
+      // ── Restore inventory for each sold item (exactly once) ───────────────
+      const [saleItems] = await conn.execute<any[]>(
+        `SELECT product_id, quantity FROM sale_items WHERE sale_id = ?`,
+        [voidRow.sale_id]
+      );
+      for (const item of saleItems) {
+        await conn.execute(
+          `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+           VALUES (?, 'Void', 'void_restore', ?, ?, ?)`,
+          [item.product_id, item.quantity, voidRow.invoice_number, req.user!.id]
+        );
       }
 
       await conn.execute(
@@ -339,8 +371,29 @@ router.patch(
         performedByUsername: req.user!.username,
         entityType: "sales",
         entityId: voidRow.sale_id,
+        reason: voidRow.reason,
         newValues: { invoice_number: voidRow.invoice_number, void_request_id: voidId },
       });
+
+      // Notify the cashier who submitted the request
+      const [cashierRow] = await pool.execute<any[]>(
+        `SELECT s.cashier_id, s.total_amount FROM sales s WHERE s.id = ?`,
+        [voidRow.sale_id]
+      );
+      if ((cashierRow as any[])[0]) {
+        const { cashier_id, total_amount } = (cashierRow as any[])[0];
+        sendVoidDecision({
+          type: "void_decision",
+          void_id: voidId,
+          sale_id: voidRow.sale_id,
+          invoice_number: voidRow.invoice_number,
+          total_amount: Number(total_amount),
+          decision: "approved",
+          admin_name: req.user!.full_name ?? req.user!.username,
+          rejection_reason: null,
+          cashier_user_id: cashier_id,
+        });
+      }
 
       res.status(200).json({ message: "Sale voided successfully." });
     } catch (err) {
@@ -414,6 +467,26 @@ router.patch(
         newValues: { invoice_number: voidRow.invoice_number, void_request_id: voidId },
       });
 
+      // Notify the cashier who submitted the request
+      const [cashierRowR] = await pool.execute<any[]>(
+        `SELECT s.cashier_id, s.total_amount FROM sales s WHERE s.id = ?`,
+        [voidRow.sale_id]
+      );
+      if ((cashierRowR as any[])[0]) {
+        const { cashier_id, total_amount } = (cashierRowR as any[])[0];
+        sendVoidDecision({
+          type: "void_decision",
+          void_id: voidId,
+          sale_id: voidRow.sale_id,
+          invoice_number: voidRow.invoice_number,
+          total_amount: Number(total_amount),
+          decision: "rejected",
+          admin_name: req.user!.full_name ?? req.user!.username,
+          rejection_reason: parsed.data.rejection_reason ?? null,
+          cashier_user_id: cashier_id,
+        });
+      }
+
       res.status(200).json({ message: "Void request rejected." });
     } catch (err) {
       await conn.rollback();
@@ -421,6 +494,62 @@ router.patch(
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     } finally {
       conn.release();
+    }
+  }
+);
+
+// ─── GET /my-void-requests — Cashier: list their own void requests ───────────
+router.get(
+  "/my-void-requests",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT sv.id, sv.sale_id, s.invoice_number, s.customer_name,
+                s.total_amount, sv.reason, sv.status, sv.rejection_reason,
+                u2.full_name AS approved_by_name,
+                sv.created_at, sv.resolved_at
+         FROM sale_voids sv
+         JOIN sales s  ON s.id  = sv.sale_id
+         LEFT JOIN users u2 ON u2.id = sv.approved_by
+         WHERE sv.requested_by = ?
+         ORDER BY sv.created_at DESC
+         LIMIT 50`,
+        [req.user!.id]
+      );
+
+      // Attach sale items for each void request
+      const result = await Promise.all(
+        (rows as any[]).map(async (row) => {
+          const [items] = await pool.execute<any[]>(
+            `SELECT si.quantity, si.unit_price, si.subtotal,
+                    p.product_name,
+                    COALESCE(u.abbreviation, '') AS unit
+             FROM sale_items si
+             JOIN products p ON p.id = si.product_id
+             LEFT JOIN units u ON u.id = p.unit_id
+             WHERE si.sale_id = ?`,
+            [row.sale_id]
+          );
+          return {
+            ...row,
+            total_amount: Number(row.total_amount),
+            items: (items as any[]).map((i) => ({
+              product_name: i.product_name,
+              unit: i.unit,
+              quantity: Number(i.quantity),
+              unit_price: Number(i.unit_price),
+              subtotal: Number(i.subtotal),
+            })),
+          };
+        })
+      );
+
+      res.status(200).json(result);
+    } catch (err) {
+      console.error("[GET /api/sales/my-void-requests] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     }
   }
 );
@@ -437,6 +566,7 @@ router.get(
                 s.total_amount, sv.reason, sv.status,
                 u1.full_name AS requested_by_name,
                 u2.full_name AS approved_by_name,
+                sv.rejection_reason,
                 sv.created_at, sv.resolved_at
          FROM sale_voids sv
          JOIN sales s  ON s.id  = sv.sale_id
@@ -444,7 +574,34 @@ router.get(
          LEFT JOIN users u2 ON u2.id = sv.approved_by
          ORDER BY sv.created_at DESC`
       );
-      res.status(200).json(rows);
+
+      const result = await Promise.all(
+        (rows as any[]).map(async (row) => {
+          const [items] = await pool.execute<any[]>(
+            `SELECT si.quantity, si.unit_price, si.subtotal,
+                    p.product_name,
+                    COALESCE(u.abbreviation, '') AS unit
+             FROM sale_items si
+             JOIN products p ON p.id = si.product_id
+             LEFT JOIN units u ON u.id = p.unit_id
+             WHERE si.sale_id = ?`,
+            [row.sale_id]
+          );
+          return {
+            ...row,
+            total_amount: Number(row.total_amount),
+            items: (items as any[]).map((i) => ({
+              product_name: i.product_name,
+              unit: i.unit,
+              quantity: Number(i.quantity),
+              unit_price: Number(i.unit_price),
+              subtotal: Number(i.subtotal),
+            })),
+          };
+        })
+      );
+
+      res.status(200).json(result);
     } catch (err) {
       console.error("[GET /api/sales/void-requests] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });

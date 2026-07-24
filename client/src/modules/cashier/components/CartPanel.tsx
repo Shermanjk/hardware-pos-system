@@ -1,6 +1,6 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Search, Loader2, Minus, Plus, X, Trash2 } from "lucide-react";
+import { Search, Loader2, Minus, Plus, X, Trash2, AlertTriangle } from "lucide-react";
 import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
 import { toast } from "sonner";
 import { toCentavos, fmtCents } from "../utils/money";
@@ -30,7 +30,16 @@ export default function CartPanel({
   barcodeRef, searchTimeoutRef,
 }: CartPanelProps) {
 
+  const [marketBasedAlert, setMarketBasedAlert] = useState<string | null>(null);
+
   const addProductToCart = useCallback((product: CashierProduct) => {
+    if (product.pricing_type === "MARKET_BASED") {
+      setMarketBasedAlert(product.product_name);
+      setBarcodeInput("");
+      setShowDropdown(false);
+      setSearchResults([]);
+      return;
+    }
     if (product.quantity <= 0) {
       toast.error(`${product.product_name} is out of stock.`);
       return;
@@ -74,7 +83,7 @@ export default function CartPanel({
       try {
         const results = await lookupProduct(value.trim());
         if (results.length === 1 && results[0].barcode === value.trim()) {
-          addProductToCart(results[0]);
+          addProductToCart(results[0]); // will block if MARKET_BASED
           setSearchLoading(false);
           return;
         }
@@ -114,6 +123,24 @@ export default function CartPanel({
         <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
           Barcode Scanner / Product Search
         </label>
+
+        {/* Market-based product block alert */}
+        {marketBasedAlert && (
+          <div className="mb-2 flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">{marketBasedAlert}</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                This is a Market-Based Product. It cannot be sold through the Cashier Terminal.
+                Purchase and payment are handled through the Admin commodity purchase workflow.
+              </p>
+            </div>
+            <button onClick={() => setMarketBasedAlert(null)} className="text-amber-500 hover:text-amber-700 shrink-0">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 z-10" />
           {searchLoading && (
@@ -136,17 +163,30 @@ export default function CartPanel({
                 <button
                   key={product.id}
                   onMouseDown={() => addProductToCart(product)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50 text-left transition-colors border-b border-gray-50 last:border-0"
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors border-b border-gray-50 last:border-0 ${
+                    product.pricing_type === "MARKET_BASED"
+                      ? "bg-amber-50 hover:bg-amber-100 cursor-not-allowed"
+                      : "hover:bg-blue-50"
+                  }`}
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{product.product_name}</p>
                     <p className="text-xs text-gray-400 font-mono">{product.barcode}</p>
+                    {product.pricing_type === "MARKET_BASED" && (
+                      <p className="text-xs text-amber-600 font-semibold mt-0.5">Market-Based — not available at cashier</p>
+                    )}
                   </div>
                   <div className="ml-3 text-right shrink-0">
-                    <p className="text-sm font-bold text-blue-600">₱{Number(product.selling_price).toFixed(2)}</p>
-                    <p className={`text-xs ${product.quantity <= 0 ? "text-red-500 font-semibold" : "text-gray-400"}`}>
-                      {product.quantity <= 0 ? "Out of stock" : `Stock: ${product.quantity} ${product.unit_abbreviation}`}
-                    </p>
+                    {product.pricing_type === "MARKET_BASED" ? (
+                      <p className="text-xs text-amber-500 font-semibold">N/A</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-blue-600">₱{Number(product.selling_price).toFixed(2)}</p>
+                        <p className={`text-xs ${product.quantity <= 0 ? "text-red-500 font-semibold" : "text-gray-400"}`}>
+                          {product.quantity <= 0 ? "Out of stock" : `Stock: ${product.quantity} ${product.unit_abbreviation}`}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </button>
               ))}

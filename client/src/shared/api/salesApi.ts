@@ -34,6 +34,7 @@ export interface Sale {
   total_amount: number;
   cash_tendered: number;
   change_amount: number;
+  void_status: "active" | "void_requested" | "voided";
   created_at: string;
   items: SaleItem[];
 }
@@ -44,6 +45,7 @@ export interface SaleSummary {
   customer_name: string;
   cashier_name: string;
   total_amount: number;
+  void_status: "active" | "void_requested" | "voided";
   created_at: string;
 }
 
@@ -84,6 +86,18 @@ export interface CreateSaleResult {
 }
 
 // ─── API functions ────────────────────────────────────────────────────────────
+
+export async function requestVoidSale(
+  saleId: number,
+  reason: string
+): Promise<{ message: string; void_id: number }> {
+  const response = await axios.post<{ message: string; void_id: number }>(
+    `/api/sales/${saleId}/void-request`,
+    { reason },
+    { headers: authHeaders() }
+  );
+  return response.data;
+}
 
 export async function createSale(payload: CreateSalePayload): Promise<CreateSaleResult> {
   const response = await axios.post<CreateSaleResult>("/api/sales", payload, {

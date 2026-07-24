@@ -167,7 +167,7 @@ export default function Sales() {
   const [detailInvoice, setDetailInvoice] = useState<string | null>(null);
 
   // Summary stats (computed from loaded results)
-  const totalRevenue = sales.reduce((s, r) => s + Number(r.total_amount), 0);
+  const totalRevenue = sales.filter((s) => s.void_status !== "voided").reduce((s, r) => s + Number(r.total_amount), 0);
 
   // Default date range to today
   useEffect(() => {
@@ -377,7 +377,15 @@ export default function Sales() {
                       <td className="py-3.5 px-5 font-medium text-gray-900">{sale.customer_name}</td>
                       <td className="py-3.5 px-5 text-gray-600 text-sm">{sale.cashier_name}</td>
                       <td className="py-3.5 px-5 text-sm text-gray-500">{fmtDate(sale.created_at)}</td>
-                      <td className="py-3.5 px-5 text-right font-bold text-gray-900 tabular-nums">{fmt(sale.total_amount)}</td>
+                      <td className="py-3.5 px-5 text-right font-bold text-gray-900 tabular-nums">
+                        <span className={sale.void_status === "voided" ? "line-through text-gray-400" : ""}>{fmt(sale.total_amount)}</span>
+                        {sale.void_status === "voided" && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-600">VOID</span>
+                        )}
+                        {sale.void_status === "void_requested" && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">PENDING VOID</span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-5 text-center">
                         <button
                           onClick={() => setDetailInvoice(sale.invoice_number)}

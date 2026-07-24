@@ -43,6 +43,7 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: Truck, label: "Suppliers", href: "/suppliers" },
       { icon: BellRing, label: "Reorder Alerts", href: "/reorder-alerts", isAlertRoute: true },
       { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices" },
+      { icon: Truck, label: "External Processing", href: "/external-processing" },
     ],
   } as NavGroup,
 
@@ -123,9 +124,9 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   // Auto-expand group when route belongs to it
   const activeGroup    = getGroupForRoute(location);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(() => {
-    // Initially expand the group containing current route, or all groups if dashboard/reports
+    // Initially expand the group containing current route only
     if (activeGroup) return [activeGroup];
-    return ["Operations", "Sales", "Management"]; // Default expanded
+    return []; // Default: all collapsed
   });
 
   // Update expanded groups when location changes
@@ -214,6 +215,8 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           const group = item as NavGroup;
           const isExpanded = isGroupExpanded(group.label);
           const isGroupActive = group.items.some((subItem) => location === subItem.href);
+          const hasAlertInGroup = group.items.some((subItem) => subItem.hasAlertBadge) && hasAlerts;
+          const groupHasAlerts = hasAlertInGroup && !isExpanded;
 
           return (
             <div key={group.label}>
@@ -221,15 +224,24 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
               <button
                 onClick={() => toggleGroup(group.label)}
                 title={!isOpen ? group.label : undefined}
-                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
                   ${isGroupActive
                     ? "bg-blue-600/20 text-blue-400"
                     : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
                   }`}
               >
-                {group.icon && (
-                  <group.icon className="h-5 w-5 shrink-0" />
-                )}
+                <span className="relative shrink-0">
+                  {group.icon && (
+                    <group.icon className="h-5 w-5 shrink-0" />
+                  )}
+                  {/* Alert indicator when group is collapsed */}
+                  {groupHasAlerts && (
+                    <>
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 animate-ping opacity-75" />
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-1 ring-[#0f172a]" />
+                    </>
+                  )}
+                </span>
                 {isOpen && (
                   <>
                     <span className="text-sm font-medium truncate flex-1 text-left">{group.label}</span>

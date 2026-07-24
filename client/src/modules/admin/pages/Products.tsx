@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/productsApi";
 import type {
   ProductRecord, Category, Supplier, Unit,
-  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType, PricingType,
+  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType, PricingType, ProductUsage,
 } from "@/shared/api/productsApi";
 import axios from "axios";
 
@@ -134,6 +134,7 @@ function emptyForm() {
     status:           "Active" as "Active" | "Inactive",
     tax_type:         "VATABLE" as TaxType,
     pricing_type:     "FIXED_PRICE" as PricingType,
+    product_usage:    "RETAIL_PRODUCT" as ProductUsage,
   };
 }
 type ProductForm = ReturnType<typeof emptyForm>;
@@ -155,21 +156,28 @@ function formFromRecord(p: ProductRecord): ProductForm {
     status:           p.status,
     tax_type:         (p.tax_type ?? "VATABLE") as TaxType,
     pricing_type:     (p.pricing_type ?? "FIXED_PRICE") as PricingType,
+    product_usage:    (p.product_usage ?? "RETAIL_PRODUCT") as ProductUsage,
   };
 }
 
 function validateForm(form: ProductForm): Record<string, string> {
   const e: Record<string, string> = {};
-  if (!form.barcode.trim())    e.barcode      = "Barcode is required.";
-  if (!form.product_name.trim()) e.product_name = "Product name is required.";
-  if (!form.category_id)       e.category_id  = "Category is required.";
-  if (!form.unit_id)           e.unit_id      = "Unit is required.";
-  if (form.cost_price === "" as unknown as number || Number(form.cost_price) < 0)
-                               e.cost_price   = "Cost price must be 0 or greater.";
-  if (form.selling_price === "" as unknown as number || Number(form.selling_price) < 0)
-                               e.selling_price= "Selling price must be 0 or greater.";
-  if (form.reorder_level === "" as unknown as number || Number(form.reorder_level) < 0)
-                               e.reorder_level= "Reorder level must be 0 or greater.";
+  if (!form.barcode.trim())      e.barcode       = "Barcode is required.";
+  if (!form.product_name.trim()) e.product_name  = "Product name is required.";
+  if (!form.category_id)         e.category_id   = "Category is required.";
+  if (!form.unit_id)             e.unit_id       = "Unit is required.";
+  if (form.pricing_type === "FIXED_PRICE") {
+    if (form.cost_price === "" as unknown as number || Number(form.cost_price) < 0)
+                                 e.cost_price    = "Cost price must be 0 or greater.";
+    if (form.selling_price === "" as unknown as number || Number(form.selling_price) < 0)
+                                 e.selling_price = "Selling price must be 0 or greater.";
+    if (form.reorder_level === "" as unknown as number || Number(form.reorder_level) < 0)
+                                 e.reorder_level = "Reorder level must be 0 or greater.";
+  } else {
+    // MARKET_BASED: reorder level is optional
+    if (form.reorder_level !== ("" as unknown as number) && Number(form.reorder_level) < 0)
+                                 e.reorder_level = "Reorder level must be 0 or greater.";
+  }
   return e;
 }
 
@@ -267,6 +275,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
     setErrors({});
     setIsLoading(true);
     try {
+      const isMarket = form.pricing_type === "MARKET_BASED";
       const payload: CreateProductPayload = {
         barcode:          form.barcode.trim(),
         barcode_source:   form.barcode_source,
@@ -276,13 +285,17 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
         category_id:      Number(form.category_id),
         supplier_id:      form.supplier_id ? Number(form.supplier_id) : null,
         unit_id:          Number(form.unit_id),
-        cost_price:       Number(form.cost_price),
-        selling_price:    Number(form.selling_price),
-        reorder_level:    Number(form.reorder_level),
+        // cost_price and selling_price are omitted for MARKET_BASED; backend forces them to 0
+        ...(isMarket ? {} : {
+          cost_price:    Number(form.cost_price),
+          selling_price: Number(form.selling_price),
+        }),
+        reorder_level:    Number(form.reorder_level) || 0,
         is_returnable:    form.is_returnable,
         status:           form.status,
         tax_type:         form.tax_type,
         pricing_type:     form.pricing_type,
+        product_usage:    form.product_usage,
       };
       const saved = mode === "add"
         ? await createProduct(payload)
@@ -300,11 +313,20 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
+        {/* ── Header ── */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-gray-900">
+              {mode === "add" ? "Add New Product" : "Edit Product"}
+            </DialogTitle>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {mode === "add" ? "Fill in the details below to add a new product to your catalog." : "Update the product information below."}
+            </p>
+          </DialogHeader>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6">
           {errors.general && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -312,234 +334,329 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             </div>
           )}
 
-          {/* Barcode Source */}
+          {/* ════════════════════════════════════════════════════════════════
+             SECTION 1 — Classification
+             ════════════════════════════════════════════════════════════════ */}
           <div>
-            <Label className="mb-1.5 block font-semibold">Barcode Source <span className="text-red-500">*</span></Label>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
-              {(["manufacturer", "store"] as const).map((src, i) => (
-                <label key={src}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium cursor-pointer select-none transition-colors ${
-                    i === 0 ? "" : "border-l border-gray-200"
-                  } ${
-                    form.barcode_source === src
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-gray-600 hover:bg-gray-50"
-                  } ${isLoading || mode === "edit" ? "pointer-events-none opacity-60" : ""}`}>
-                  <input type="radio" name="barcode_source" value={src}
-                    checked={form.barcode_source === src}
-                    onChange={() => handleSourceChange(src)}
-                    className="sr-only" disabled={isLoading || mode === "edit"} />
-                  {src === "manufacturer" ? "Manufacturer Barcode" : "Store Barcode (Auto-Generate)"}
-                </label>
-              ))}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-5 w-1.5 bg-blue-600 rounded-full shadow-sm" />
+              <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Classification</h3>
             </div>
-          </div>
-
-          {/* Barcode Field */}
-          <div>
-            <Label className="mb-1.5 block font-semibold">Barcode <span className="text-red-500">*</span></Label>
-            {isStore ? (
-              <div className="flex gap-2">
-                <Input value={form.barcode} readOnly placeholder="Click Generate Barcode to assign"
-                  className={`bg-gray-50 ${errors.barcode ? "border-red-400" : ""}`} />
-                <Button type="button" variant="outline" onClick={handleGenerateBarcode}
-                  disabled={isLoading || generatingBC} className="shrink-0 gap-2">
-                  {generatingBC ? <Spinner className="text-gray-500" /> : <Wand2 className="h-4 w-4" />}
-                  Generate Barcode
-                </Button>
+            <div className="bg-white border-2 border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Pricing Type</Label>
+                  <Select
+                    value={form.pricing_type}
+                    onValueChange={(v) => {
+                      set("pricing_type", v as PricingType);
+                      if (v === "MARKET_BASED" && form.product_usage === "RETAIL_PRODUCT") {
+                        set("product_usage", "RAW_MATERIAL_COMMODITY" as ProductUsage);
+                      }
+                    }}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger className="w-full bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FIXED_PRICE">Fixed Price — standard product</SelectItem>
+                      <SelectItem value="MARKET_BASED">Market-Based — commodity (copra, charcoal…)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {form.pricing_type === "MARKET_BASED" && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Uses configurable reference buying price managed under Commodity Prices.
+                    </p>
+                  )}
+                </div>
+                {form.pricing_type === "MARKET_BASED" && (
+                  <div>
+                    <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Product Usage</Label>
+                    <Select
+                      value={form.product_usage}
+                      onValueChange={(v) => set("product_usage", v as ProductUsage)}
+                      disabled={isLoading}
+                    >
+                      <SelectTrigger className="w-full bg-white border-gray-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="RAW_MATERIAL_COMMODITY">Raw Material / Commodity</SelectItem>
+                        <SelectItem value="BOTH">Both — retail & raw material</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-gray-400">
+                      RAW_MATERIAL_COMMODITY = eligible for external processing delivery.
+                    </p>
+                  </div>
+                )}
+                {form.pricing_type !== "MARKET_BASED" && <div />}
               </div>
-            ) : (
-              <div className="flex gap-2">
-                <Input ref={barcodeInputRef} value={form.barcode}
-                  onChange={(e) => set("barcode", e.target.value.replace(/\s/g, ""))}
-                  onKeyDown={(e) => e.key === " " && e.preventDefault()}
-                  placeholder="Scan or enter barcode (e.g. 6920130600854)"
+              <div>
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Tax Classification</Label>
+                <Select
+                  value={form.tax_type}
+                  onValueChange={(v) => set("tax_type", v as TaxType)}
                   disabled={isLoading}
-                  className={errors.barcode ? "border-red-400" : ""} />
-                <Button type="button" variant="outline" onClick={handleScanClick}
-                  disabled={isLoading} className="shrink-0 gap-2" title="Click then scan with USB scanner">
-                  <ScanLine className="h-4 w-4" /> Scan
-                </Button>
+                >
+                  <SelectTrigger className="w-full max-w-xs bg-white border-gray-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="VATABLE">VATABLE (12% VAT)</SelectItem>
+                    <SelectItem value="VAT_EXEMPT">VAT Exempt</SelectItem>
+                    <SelectItem value="ZERO_RATED">Zero-Rated</SelectItem>
+                    <SelectItem value="NON_TAXABLE">Non-Taxable</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-amber-600">Confirm classification with your accountant before changing from VATABLE.</p>
               </div>
-            )}
-            {errors.barcode && <p className="mt-1 text-xs text-red-600">{errors.barcode}</p>}
-            {!isStore && (
-              <p className="mt-1 text-xs text-gray-400">Scan with USB barcode scanner or type manually.</p>
-            )}
-          </div>
-
-          {/* Product Name + Supplier Barcode */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block font-semibold">Product Name <span className="text-red-500">*</span></Label>
-              <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
-                placeholder="e.g. Claw Hammer 16oz" disabled={isLoading}
-                className={errors.product_name ? "border-red-400" : ""} />
-              {errors.product_name && <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>}
-            </div>
-            <div>
-              <Label className="mb-1.5 block font-semibold">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
-              <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
-                placeholder="Supplier's barcode" disabled={isLoading} />
             </div>
           </div>
 
-          {/* Category + Supplier */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block font-semibold">Category <span className="text-red-500">*</span></Label>
-              <Select value={form.category_id ? String(form.category_id) : ""}
-                onValueChange={(v) => set("category_id", v)} disabled={isLoading}>
-                <SelectTrigger className={errors.category_id ? "border-red-400" : ""}>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.category_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.category_id && <p className="mt-1 text-xs text-red-600">{errors.category_id}</p>}
-            </div>
-            <div>
-              <Label className="mb-1.5 block font-semibold">Supplier <span className="text-gray-400 font-normal">(optional)</span></Label>
-              <Select value={form.supplier_id ? String(form.supplier_id) : "none"}
-                onValueChange={(v) => set("supplier_id", v === "none" ? null : v)} disabled={isLoading}>
-                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— No supplier —</SelectItem>
-                  {suppliers.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Unit + Reorder Level */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block font-semibold">Unit <span className="text-red-500">*</span></Label>
-              <Select value={form.unit_id ? String(form.unit_id) : ""}
-                onValueChange={(v) => set("unit_id", v)} disabled={isLoading}>
-                <SelectTrigger className={errors.unit_id ? "border-red-400" : ""}>
-                  <SelectValue placeholder="Select unit" />
-                </SelectTrigger>
-                <SelectContent>
-                  {units.map((u) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.unit_name} ({u.abbreviation})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.unit_id && <p className="mt-1 text-xs text-red-600">{errors.unit_id}</p>}
-            </div>
-            <div>
-              <Label className="mb-1.5 block font-semibold">Reorder Level <span className="text-red-500">*</span></Label>
-              <Input type="number" min="0" value={form.reorder_level}
-                onChange={(e) => set("reorder_level", e.target.value)}
-                placeholder="e.g. 20" disabled={isLoading}
-                className={errors.reorder_level ? "border-red-400" : ""} />
-              {errors.reorder_level && <p className="mt-1 text-xs text-red-600">{errors.reorder_level}</p>}
-            </div>
-          </div>
-
-          {/* Cost + Selling Price */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="mb-1.5 block font-semibold">Cost Price (₱) <span className="text-red-500">*</span></Label>
-              <Input type="number" min="0" step="0.01" value={form.cost_price}
-                onChange={(e) => set("cost_price", e.target.value)}
-                placeholder="0.00" disabled={isLoading}
-                className={errors.cost_price ? "border-red-400" : ""} />
-              {errors.cost_price && <p className="mt-1 text-xs text-red-600">{errors.cost_price}</p>}
-            </div>
-            <div>
-              <Label className="mb-1.5 block font-semibold">Selling Price (₱) <span className="text-red-500">*</span></Label>
-              <Input type="number" min="0" step="0.01" value={form.selling_price}
-                onChange={(e) => set("selling_price", e.target.value)}
-                placeholder="0.00" disabled={isLoading}
-                className={errors.selling_price ? "border-red-400" : ""} />
-              {errors.selling_price && <p className="mt-1 text-xs text-red-600">{errors.selling_price}</p>}
-            </div>
-          </div>
-
-          {/* Description */}
+          {/* ════════════════════════════════════════════════════════════════
+             SECTION 2 — Barcode & Identification
+             ════════════════════════════════════════════════════════════════ */}
           <div>
-            <Label className="mb-1.5 block font-semibold">Description <span className="text-gray-400 font-normal">(optional)</span></Label>
-            <textarea value={form.description} onChange={(e) => set("description", e.target.value)}
-              rows={2} disabled={isLoading} placeholder="Additional product details…"
-              className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-5 w-1.5 bg-blue-600 rounded-full shadow-sm" />
+              <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Barcode & Identification</h3>
+            </div>
+            <div className="bg-white border-2 border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+              {/* Row 1 — Barcode Source toggle */}
+              <div>
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Barcode Source <span className="text-red-500">*</span></Label>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden w-fit bg-white">
+                  {(["manufacturer", "store"] as const).map((src, i) => (
+                    <label key={src}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium cursor-pointer select-none transition-colors ${
+                        i === 0 ? "" : "border-l border-gray-300"
+                      } ${
+                        form.barcode_source === src
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-gray-600 hover:bg-gray-50"
+                      } ${isLoading || mode === "edit" ? "pointer-events-none opacity-60" : ""}`}>
+                      <input type="radio" name="barcode_source" value={src}
+                        checked={form.barcode_source === src}
+                        onChange={() => handleSourceChange(src)}
+                        className="sr-only" disabled={isLoading || mode === "edit"} />
+                      {src === "manufacturer" ? "Manufacturer Barcode" : "Store Barcode (Auto-Generate)"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row 2 — Barcode (full width) */}
+              <div>
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Barcode <span className="text-red-500">*</span></Label>
+                {isStore ? (
+                  <div className="flex gap-2">
+                    <Input value={form.barcode} readOnly placeholder="Click Generate to assign a store barcode"
+                      className={`bg-gray-100 flex-1 ${errors.barcode ? "border-red-400" : "border-gray-300"}`} />
+                    <Button type="button" variant="outline" onClick={handleGenerateBarcode}
+                      disabled={isLoading || generatingBC} className="shrink-0 gap-2 border-gray-300">
+                      {generatingBC ? <Spinner className="text-gray-500" /> : <Wand2 className="h-4 w-4" />}
+                      Generate
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input ref={barcodeInputRef} value={form.barcode}
+                      onChange={(e) => set("barcode", e.target.value.replace(/\s/g, ""))}
+                      onKeyDown={(e) => e.key === " " && e.preventDefault()}
+                      placeholder="Scan or enter manufacturer barcode"
+                      disabled={isLoading}
+                      className={`flex-1 ${errors.barcode ? "border-red-400" : "border-gray-300"}`} />
+                    <Button type="button" variant="outline" onClick={handleScanClick}
+                      disabled={isLoading} className="shrink-0 gap-2 border-gray-300" title="Click then scan with USB scanner">
+                      <ScanLine className="h-4 w-4" /> Scan
+                    </Button>
+                  </div>
+                )}
+                {errors.barcode && <p className="mt-1 text-xs text-red-600">{errors.barcode}</p>}
+                <p className="mt-1 text-xs text-gray-400">
+                  {isStore ? "A unique store barcode will be auto-generated." : "Scan with a USB barcode scanner or type manually."}
+                </p>
+              </div>
+
+              {/* Row 3 — Supplier Barcode (half width) */}
+              <div className="max-w-sm">
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
+                <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
+                  placeholder="Supplier's own barcode, if different" disabled={isLoading}
+                  className="border-gray-300" />
+              </div>
+            </div>
           </div>
 
-          {/* Flags */}
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={form.is_returnable}
-                onChange={(e) => set("is_returnable", e.target.checked)}
-                className="h-4 w-4 accent-blue-600" disabled={isLoading} />
-              Returnable
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={form.status === "Active"}
-                onChange={(e) => set("status", e.target.checked ? "Active" : "Inactive")}
-                className="h-4 w-4 accent-blue-600" disabled={isLoading} />
-              Active
-            </label>
-          </div>
-
-          {/* Tax Classification */}
+          {/* ════════════════════════════════════════════════════════════════
+             SECTION 3 — Product Details
+             ════════════════════════════════════════════════════════════════ */}
           <div>
-            <Label className="mb-1.5 block font-semibold">Tax Classification</Label>
-            <Select
-              value={form.tax_type}
-              onValueChange={(v) => set("tax_type", v as TaxType)}
-              disabled={isLoading}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="VATABLE">VATABLE (12% VAT)</SelectItem>
-                <SelectItem value="VAT_EXEMPT">VAT Exempt</SelectItem>
-                <SelectItem value="ZERO_RATED">Zero-Rated</SelectItem>
-                <SelectItem value="NON_TAXABLE">Non-Taxable</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-xs text-amber-600">Confirm classification with your accountant before changing from VATABLE.</p>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-5 w-1.5 bg-blue-600 rounded-full shadow-sm" />
+              <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Product Details</h3>
+            </div>
+            <div className="bg-white border-2 border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+              <div>
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Product Name <span className="text-red-500">*</span></Label>
+                <Input value={form.product_name} onChange={(e) => set("product_name", e.target.value)}
+                  placeholder="e.g. Claw Hammer 16oz" disabled={isLoading}
+                  className={errors.product_name ? "border-red-400" : ""} />
+                {errors.product_name && <p className="mt-1 text-xs text-red-600">{errors.product_name}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Category <span className="text-red-500">*</span></Label>
+                  <Select value={form.category_id ? String(form.category_id) : ""}
+                    onValueChange={(v) => set("category_id", v)} disabled={isLoading}>
+                    <SelectTrigger className={`w-full bg-white ${errors.category_id ? "border-red-400" : "border-gray-300"}`}>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>{c.category_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.category_id && <p className="mt-1 text-xs text-red-600">{errors.category_id}</p>}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supplier <span className="text-gray-400 font-normal">(optional)</span></Label>
+                  <Select value={form.supplier_id ? String(form.supplier_id) : "none"}
+                    onValueChange={(v) => set("supplier_id", v === "none" ? null : v)} disabled={isLoading}>
+                    <SelectTrigger className="w-full bg-white border-gray-300"><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— No supplier —</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Unit <span className="text-red-500">*</span></Label>
+                  <Select value={form.unit_id ? String(form.unit_id) : ""}
+                    onValueChange={(v) => set("unit_id", v)} disabled={isLoading}>
+                    <SelectTrigger className={`w-full bg-white ${errors.unit_id ? "border-red-400" : "border-gray-300"}`}>
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {units.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>
+                          {u.unit_name} ({u.abbreviation})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.unit_id && <p className="mt-1 text-xs text-red-600">{errors.unit_id}</p>}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    Reorder Level
+                    {form.pricing_type === "MARKET_BASED" ? (
+                      <span className="text-gray-400 font-normal"> (optional)</span>
+                    ) : (
+                      <span className="text-red-500"> *</span>
+                    )}
+                  </Label>
+                  <Input type="number" min="0" value={form.reorder_level}
+                    onChange={(e) => set("reorder_level", e.target.value)}
+                    placeholder={form.pricing_type === "MARKET_BASED" ? "e.g. 30 (optional)" : "e.g. 20"}
+                    disabled={isLoading}
+                    className={errors.reorder_level ? "border-red-400" : ""} />
+                  {errors.reorder_level && <p className="mt-1 text-xs text-red-600">{errors.reorder_level}</p>}
+                  {form.pricing_type === "MARKET_BASED" && (
+                    <p className="mt-1 text-xs text-gray-400">Optional for market-based products.</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Description <span className="text-gray-400 font-normal">(optional)</span></Label>
+                <textarea value={form.description} onChange={(e) => set("description", e.target.value)}
+                  rows={2} disabled={isLoading} placeholder="Additional product details…"
+                  className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 bg-white" />
+              </div>
+            </div>
           </div>
 
-          {/* Pricing Type */}
+          {/* ════════════════════════════════════════════════════════════════
+             SECTION 4 — Pricing & Stock
+             ════════════════════════════════════════════════════════════════ */}
           <div>
-            <Label className="mb-1.5 block font-semibold">Pricing Type</Label>
-            <Select
-              value={form.pricing_type}
-              onValueChange={(v) => set("pricing_type", v as PricingType)}
-              disabled={isLoading}
-            >
-              <SelectTrigger className="w-64">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FIXED_PRICE">Fixed Price — standard product</SelectItem>
-                <SelectItem value="MARKET_BASED">Market-Based — commodity (copra, charcoal…)</SelectItem>
-              </SelectContent>
-            </Select>
-            {form.pricing_type === "MARKET_BASED" && (
-              <p className="mt-1 text-xs text-amber-600">
-                Market-based products use a configurable reference buying price managed under Commodity Prices.
-              </p>
-            )}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-5 w-1.5 bg-blue-600 rounded-full shadow-sm" />
+              <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Pricing & Stock</h3>
+            </div>
+            <div className="bg-white border-2 border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+
+              {form.pricing_type === "MARKET_BASED" ? (
+                /* ── MARKET_BASED: no cost/selling price ── */
+                <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <span className="text-amber-500 text-lg leading-none mt-0.5">⚠️</span>
+                  <div className="text-sm">
+                    <p className="font-semibold text-amber-800">Market-Based Product — No Fixed Price Required</p>
+                    <p className="text-amber-700 mt-1">
+                      Cost Price and Selling Price are not used for this product.
+                      The reference buying price is managed separately through the
+                      <span className="font-semibold"> Commodity Prices</span> module by the Admin.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* ── FIXED_PRICE: normal cost/selling price fields ── */
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Cost Price (₱) <span className="text-red-500">*</span></Label>
+                    <Input type="number" min="0" step="0.01" value={form.cost_price}
+                      onChange={(e) => set("cost_price", e.target.value)}
+                      placeholder="0.00" disabled={isLoading}
+                      className={errors.cost_price ? "border-red-400" : "border-gray-300"} />
+                    {errors.cost_price && <p className="mt-1 text-xs text-red-600">{errors.cost_price}</p>}
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Selling Price (₱) <span className="text-red-500">*</span></Label>
+                    <Input type="number" min="0" step="0.01" value={form.selling_price}
+                      onChange={(e) => set("selling_price", e.target.value)}
+                      placeholder="0.00" disabled={isLoading}
+                      className={errors.selling_price ? "border-red-400" : "border-gray-300"} />
+                    {errors.selling_price && <p className="mt-1 text-xs text-red-600">{errors.selling_price}</p>}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-6 pt-1">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={form.is_returnable}
+                    onChange={(e) => set("is_returnable", e.target.checked)}
+                    className="h-4 w-4 accent-blue-600 rounded" disabled={isLoading} />
+                  <span className="text-gray-700">Returnable</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={form.status === "Active"}
+                    onChange={(e) => set("status", e.target.checked ? "Active" : "Inactive")}
+                    className="h-4 w-4 accent-blue-600 rounded" disabled={isLoading} />
+                  <span className="text-gray-700">Active</span>
+                </label>
+              </div>
+            </div>
           </div>
 
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Spinner className="mr-2 text-white" />}
-              {isLoading ? (mode === "add" ? "Adding…" : "Saving…") : (mode === "add" ? "Add Product" : "Save Changes")}
+          {/* ── Footer ── */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="px-5">
+              Cancel
             </Button>
-          </DialogFooter>
+            <Button type="submit" disabled={isLoading} className="px-6 gap-2 bg-blue-600 hover:bg-blue-700">
+              {isLoading && <Spinner className="text-white" />}
+              {isLoading
+                ? (mode === "add" ? "Adding…" : "Saving…")
+                : (mode === "add" ? "Add Product" : "Save Changes")}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -585,8 +702,16 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
             <div><span className="font-medium text-gray-500">Supplier:</span> {product.supplier || "—"}</div>
             <div><span className="font-medium text-gray-500">Unit:</span> {product.unit} ({product.unit_abbreviation})</div>
             <div><span className="font-medium text-gray-500">Reorder Level:</span> {product.reorder_level}</div>
-            <div><span className="font-medium text-gray-500">Cost Price:</span> ₱{Number(product.cost_price).toFixed(2)}</div>
-            <div><span className="font-medium text-gray-500">Selling Price:</span> ₱{Number(product.selling_price).toFixed(2)}</div>
+            <div><span className="font-medium text-gray-500">Cost Price:</span>{" "}
+              {product.pricing_type === "MARKET_BASED"
+                ? <span className="text-amber-600 font-medium text-xs">Managed via Commodity Prices</span>
+                : `₱${Number(product.cost_price).toFixed(2)}`}
+            </div>
+            <div><span className="font-medium text-gray-500">Selling Price:</span>{" "}
+              {product.pricing_type === "MARKET_BASED"
+                ? <span className="text-amber-600 font-medium text-xs">Managed via Commodity Prices</span>
+                : `₱${Number(product.selling_price).toFixed(2)}`}
+            </div>
             <div><span className="font-medium text-gray-500">Stock:</span> <span className="font-bold text-gray-900">{product.quantity}</span></div>
             <div><span className="font-medium text-gray-500">Damaged:</span> {product.damaged_stock}</div>
             <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>

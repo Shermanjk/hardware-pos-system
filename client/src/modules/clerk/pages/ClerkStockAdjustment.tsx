@@ -441,18 +441,18 @@ export default function ClerkStockAdjustment() {
 
       {/* History table */}
       <Card className="overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div className="px-6 py-4 border-b-2 border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Adjustment History</h2>
+            <h2 className="text-base font-bold text-gray-900">Adjustment History</h2>
             <p className="text-xs text-gray-500 mt-0.5">All recorded stock adjustments</p>
           </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
             <Input
               placeholder="Search adjustments…"
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
-              className="pl-9 h-9 text-sm"
+              className="pl-11 h-11 text-sm border-2 border-gray-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             />
           </div>
         </div>

@@ -20,6 +20,7 @@ import dashboardRoutes from "./routes/dashboard.js";
 import reportsRoutes from "./routes/reports.js";
 import settingsRoutes from "./routes/settings.js";
 import commodityPricesRoutes from "./routes/commodityPrices.js";
+import externalProcessingRoutes from "./routes/externalProcessing.js";
 import suspendedSalesRoutes from "./routes/suspendedSales.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ async function startServer() {
   app.use("/api/reports",   reportsRoutes);
   app.use("/api/settings",  settingsRoutes);
   app.use("/api/commodity-prices", commodityPricesRoutes);
+  app.use("/api/external-processing", externalProcessingRoutes);
 app.use("/api/suspended-sales", suspendedSalesRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────

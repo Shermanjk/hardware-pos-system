@@ -304,22 +304,22 @@ export default function ClerkStockCount() {
       {/* Table */}
       <Card className="overflow-hidden border border-gray-200 shadow-sm">
         {/* Table toolbar */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-white flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+        <div className="px-6 py-4 border-b-2 border-gray-200 bg-white flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-900">
+            <p className="text-sm font-bold text-gray-900">
               {countedRows.length > 0
                 ? <><span className="text-purple-600">{countedRows.length}</span> of {rows.length} products counted</>  
                 : <>{rows.length} products to count</>}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">Click a row's Physical Count field to begin counting</p>
+            <p className="text-xs text-gray-500 mt-0.5">Click a row's Physical Count field to begin counting</p>
           </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
             <Input
               placeholder="Search products…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm border-gray-300"
+              className="pl-11 h-11 text-sm border-2 border-gray-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             />
           </div>
         </div>

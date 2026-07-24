@@ -283,10 +283,11 @@ export default function ClerkInventory() {
   // ─── Filtering ───────────────────────────────────────────────────────────────
 
   const filtered = products.filter((p) => {
+    const searchLower = search.toLowerCase().trim();
     const matchSearch =
       search === "" ||
-      p.product_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.barcode.toLowerCase().includes(search.toLowerCase());
+      p.product_name.toLowerCase().includes(searchLower) ||
+      p.barcode.toLowerCase().includes(searchLower);
     const matchCategory = categoryFilter === "all" || p.category === categoryFilter;
     const matchSupplier = supplierFilter === "all" || p.supplier === supplierFilter;
     return matchSearch && matchCategory && matchSupplier;
@@ -404,82 +405,116 @@ export default function ClerkInventory() {
         )}
       </div>
 
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Text search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <Input
-              placeholder="Search by name…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-10 bg-gray-50"
-            />
+      {/* Search & Filters */}
+      <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+          {/* Main Search Bar */}
+          <div className="flex-1 w-full lg:w-auto min-w-[300px]">
+            <label className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2 block">
+              <ScanLine className="h-3.5 w-3.5 inline mr-1" />
+              Search Products
+            </label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+              <Input
+                placeholder="Search by product name OR scan barcode…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const val = search.trim();
+                    if (val) {
+                      const isBarcode = /^[\d\w-]+$/.test(val);
+                      if (isBarcode && val.length >= 4) {
+                        setBarcodeInput(val);
+                        setTimeout(() => {
+                          const results = products.filter(p => 
+                            p.barcode.toLowerCase() === val.toLowerCase()
+                          );
+                          if (results.length === 1) {
+                            setDetailProduct(results[0]);
+                            setDetailOpen(true);
+                            setSearch("");
+                          } else if (results.length === 0) {
+                            toast.error("Product not found. Try a different search term.");
+                          } else {
+                            setDetailProduct(results[0]);
+                            setDetailOpen(true);
+                            setSearch("");
+                          }
+                        }, 50);
+                      }
+                    }
+                  }
+                }}
+                className="pl-12 h-11 text-base border-2 border-blue-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full font-medium">
+                <ScanLine className="h-3 w-3" />
+                <span>Scan</span>
+              </div>
+            </div>
           </div>
 
-          {/* Barcode scan input */}
-          <div className="relative">
-            <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
-            <Input
-              ref={barcodeRef}
-              placeholder="Scan barcode / Enter code…"
-              value={barcodeInput}
-              onChange={(e) => setBarcodeInput(e.target.value)}
-              onKeyDown={handleBarcodeKeyDown}
-              className="pl-9 pr-20 h-10 bg-gray-50 font-mono"
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-xs text-blue-600"
-              onClick={handleBarcodeScan}
-            >
-              Lookup
-            </Button>
+          {/* Filters */}
+          <div className="flex gap-3 w-full lg:w-auto">
+            <div className="flex-1 lg:flex-none">
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block lg:hidden">Category</label>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-gray-300 w-full font-medium">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c} value={c}>{c === "all" ? "All Categories" : c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex-1 lg:flex-none">
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block lg:hidden">Supplier</label>
+              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+                <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-gray-300 w-full font-medium">
+                  <SelectValue placeholder="Supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s} value={s}>{s === "all" ? "All Suppliers" : s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-
-          {/* Category filter */}
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-10 bg-gray-50 w-full">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((c) => (
-                <SelectItem key={c} value={c}>{c === "all" ? "All Categories" : c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Supplier filter */}
-          <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-            <SelectTrigger className="h-10 bg-gray-50 w-full">
-              <SelectValue placeholder="All Suppliers" />
-            </SelectTrigger>
-            <SelectContent>
-              {suppliers.map((s) => (
-                <SelectItem key={s} value={s}>{s === "all" ? "All Suppliers" : s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Active filter chips */}
         {(search || categoryFilter !== "all" || supplierFilter !== "all") && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
-            <span className="text-xs text-gray-500 font-medium self-center">Active filters:</span>
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-blue-200">
+            <span className="text-xs text-blue-700 font-bold self-center flex items-center gap-1">
+              <Search className="h-3 w-3" /> Active:
+            </span>
             {search && (
-              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSearch("")}>
-                Search: {search} <X className="h-3 w-3" />
+              <Badge 
+                className="gap-1 cursor-pointer bg-blue-600 text-white hover:bg-blue-700 font-medium" 
+                onClick={() => setSearch("")}
+              >
+                <ScanLine className="h-3 w-3" /> {search} <X className="h-3 w-3" />
               </Badge>
             )}
             {categoryFilter !== "all" && (
-              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCategoryFilter("all")}>
+              <Badge 
+                className="gap-1 cursor-pointer bg-indigo-600 text-white hover:bg-indigo-700 font-medium" 
+                onClick={() => setCategoryFilter("all")}
+              >
                 {categoryFilter} <X className="h-3 w-3" />
               </Badge>
             )}
             {supplierFilter !== "all" && (
-              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSupplierFilter("all")}>
+              <Badge 
+                className="gap-1 cursor-pointer bg-purple-600 text-white hover:bg-purple-700 font-medium" 
+                onClick={() => setSupplierFilter("all")}
+              >
                 {supplierFilter} <X className="h-3 w-3" />
               </Badge>
             )}

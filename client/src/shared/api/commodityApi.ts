@@ -291,3 +291,138 @@ export async function getPurchaseHistory(filters: {
   });
   return res.data;
 }
+
+// ─── External Processing Delivery Types & APIs ────────────────────────────────
+
+export interface ExternalProcessingCompany {
+  id: number;
+  name: string;
+  address: string | null;
+  contact: string | null;
+  is_active: number;
+  created_at: string;
+}
+
+export interface CreateCompanyPayload {
+  name: string;
+  address?: string | null;
+  contact?: string | null;
+}
+
+export interface ExternalProcessingDelivery {
+  id: number;
+  delivery_reference: string;
+  product_id: number;
+  product_name: string;
+  unit: string;
+  unit_abbreviation: string;
+  quantity: number;
+  company_id: number;
+  company_name: string;
+  delivery_date: string;
+  delivered_by: string | null;
+  remarks: string | null;
+  created_at: string;
+  recorded_by_name: string;
+}
+
+export interface RecordDeliveryPayload {
+  product_id: number;
+  quantity: number;
+  company_id?: number | null;
+  company_name?: string;
+  delivery_date: string;
+  delivered_by?: string | null;
+  remarks?: string | null;
+}
+
+export interface RecordDeliveryResult {
+  message: string;
+  id: number;
+  delivery_reference: string;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  company: string;
+  delivery_date: string;
+  delivered_by: string | null;
+  remarks: string | null;
+  previous_stock: number;
+  remaining_stock: number;
+}
+
+export async function getEprCompanies(): Promise<ExternalProcessingCompany[]> {
+  const res = await axios.get<ExternalProcessingCompany[]>(
+    "/api/external-processing/companies",
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function updateEprCompany(id: number, payload: CreateCompanyPayload): Promise<ExternalProcessingCompany> {
+  const res = await axios.put<ExternalProcessingCompany>(
+    `/api/external-processing/companies/${id}`,
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function deleteEprCompany(id: number): Promise<{ message: string }> {
+  const res = await axios.delete<{ message: string }>(
+    `/api/external-processing/companies/${id}`,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function createEprCompany(payload: CreateCompanyPayload): Promise<ExternalProcessingCompany> {
+  const res = await axios.post<ExternalProcessingCompany>(
+    "/api/external-processing/companies",
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function recordEprDelivery(payload: RecordDeliveryPayload): Promise<RecordDeliveryResult> {
+  const res = await axios.post<RecordDeliveryResult>(
+    "/api/external-processing/deliveries",
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function getEprDeliveries(filters: {
+  product_id?: number;
+  company_id?: number;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<ExternalProcessingDelivery[]> {
+  const params: Record<string, string> = {};
+  if (filters.product_id) params.product_id = String(filters.product_id);
+  if (filters.company_id) params.company_id = String(filters.company_id);
+  if (filters.date_from)  params.date_from  = filters.date_from;
+  if (filters.date_to)    params.date_to    = filters.date_to;
+  if (filters.search)     params.search     = filters.search;
+  if (filters.limit)      params.limit      = String(filters.limit);
+  if (filters.offset)     params.offset     = String(filters.offset);
+
+  const res = await axios.get<ExternalProcessingDelivery[]>(
+    "/api/external-processing/deliveries",
+    { headers: authHeaders(), params }
+  );
+  return res.data;
+}
+
+export async function getEprDelivery(id: number): Promise<ExternalProcessingDelivery> {
+  const res = await axios.get<ExternalProcessingDelivery>(
+    `/api/external-processing/deliveries/${id}`,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, Bell, ChevronDown, LogOut, PackageX } from "lucide-react";
+import { Menu, Bell, ChevronDown, LogOut, PackageX, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -9,7 +9,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAuth } from "@/shared/contexts/AuthContext";
-import { useReturnNotifications } from "@/shared/hooks/useReturnNotifications";
+import { useReturnNotifications, useVoidRequestNotifications } from "@/shared/hooks/useReturnNotifications";
 import { useLocation } from "wouter";
 
 interface TopNavProps {
@@ -22,6 +22,7 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
   const { notifications, unreadCount, clearAll } = useReturnNotifications();
+  const { notifications: voidNotifications, unreadCount: voidUnreadCount, clearAll: clearAllVoid } = useVoidRequestNotifications();
 
   useEffect(() => {
     const tick = () => {
@@ -63,7 +64,75 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
           <span className="text-xs text-gray-400">{date}</span>
         </div>
 
-        {/* Notifications bell */}
+        {/* Void request notifications bell */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="relative h-9 w-9 p-0 text-gray-500 hover:text-gray-900"
+            >
+              <Ban className={`h-5 w-5 ${voidUnreadCount > 0 ? "text-red-500" : ""}`} />
+              {voidUnreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+                  {voidUnreadCount > 99 ? "99+" : voidUnreadCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">Void Requests</span>
+              {voidUnreadCount > 0 && (
+                <button onClick={clearAllVoid} className="text-xs text-blue-600 hover:text-blue-800">Clear all</button>
+              )}
+            </div>
+            {voidNotifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400 gap-2">
+                <Ban className="h-8 w-8" />
+                <p className="text-sm">No pending void requests</p>
+              </div>
+            ) : (
+              <ul className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                {voidNotifications.map((n) => (
+                  <li
+                    key={`${n.void_id}-${n.created_at}`}
+                    className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => { clearAllVoid(); setLocation("/void-requests"); }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 h-8 w-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                        <Ban className="h-4 w-4 text-red-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{n.invoice_number}</p>
+                        <p className="text-xs text-gray-600 truncate">From: <span className="font-medium">{n.cashier_name}</span></p>
+                        <p className="text-xs text-gray-500 truncate">Customer: {n.customer_name}</p>
+                        <p className="text-xs text-gray-500 truncate">Amount: ₱{Number(n.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">Reason: {n.reason}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(n.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {voidNotifications.length > 0 && (
+              <div className="border-t border-gray-100 px-4 py-2.5">
+                <button
+                  className="w-full text-xs text-center text-blue-600 hover:text-blue-800 font-medium"
+                  onClick={() => { clearAllVoid(); setLocation("/void-requests"); }}
+                >
+                  View all void requests →
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Return notifications bell */}
         <Popover>
           <PopoverTrigger asChild>
             <Button

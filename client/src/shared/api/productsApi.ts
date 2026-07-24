@@ -28,6 +28,7 @@ export interface Unit {
 
 export type TaxType = "VATABLE" | "VAT_EXEMPT" | "ZERO_RATED" | "NON_TAXABLE";
 export type PricingType = "FIXED_PRICE" | "MARKET_BASED";
+export type ProductUsage = "RETAIL_PRODUCT" | "RAW_MATERIAL_COMMODITY" | "BOTH";
 
 export interface ProductRecord {
   id: number;
@@ -53,6 +54,7 @@ export interface ProductRecord {
   damaged_stock: number;
   tax_type: TaxType;
   pricing_type: PricingType;
+  product_usage: ProductUsage;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -75,13 +77,14 @@ export interface CreateProductPayload {
   category_id: number;
   supplier_id?: number | null;
   unit_id: number;
-  cost_price: number;
-  selling_price: number;
-  reorder_level: number;
+  cost_price?: number;       // not required for MARKET_BASED
+  selling_price?: number;    // not required for MARKET_BASED
+  reorder_level?: number;
   is_returnable?: boolean;
   status?: "Active" | "Inactive";
   tax_type?: TaxType;
   pricing_type?: PricingType;
+  product_usage?: ProductUsage;
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload>;
