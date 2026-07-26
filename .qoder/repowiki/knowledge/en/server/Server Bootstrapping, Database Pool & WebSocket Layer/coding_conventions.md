@@ -1,0 +1,4 @@
+- Environment variables are read directly from `process.env` at module scope and validated immediately, failing fast with a descriptive `Error` rather than using a config object.
+- Route modules are mounted as Express routers under a consistent `/api/<feature>` prefix pattern, keeping URL namespaces flat and predictable.
+- WebSocket notification payloads are defined as TypeScript interfaces with a literal `type` discriminator field, enabling type-safe message handling across the broadcast functions.
+- Client tracking uses in-memory `Set` and `Map<userId, Set<WebSocket>>` structures keyed by user identity, with cleanup handlers removing sockets on `close` events.

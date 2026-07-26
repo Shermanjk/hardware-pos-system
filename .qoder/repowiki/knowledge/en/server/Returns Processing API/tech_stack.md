@@ -1,0 +1,1 @@
+Express Router with TypeScript, Zod schemas for request validation, mysql2/promise for parameterized SQL queries, and WebSocket broadcasting for live admin-cashier coordination.

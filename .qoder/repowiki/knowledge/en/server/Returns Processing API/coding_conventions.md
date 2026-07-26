@@ -1,0 +1,6 @@
+- Every route handler chains `authenticate` then `requireRole(...)` middleware before the async handler body.
+- Request bodies are validated with Zod `.safeParse()` and errors are normalized into `{ field, message }` arrays returned as 400 responses.
+- Database mutations acquire a connection via `pool.getConnection()`, wrap logic in `beginTransaction()`/`commit()` with a `try/catch/finally` block that rolls back on error and always calls `conn.release()`.
+- State transitions check current row status using `SELECT ... FOR UPDATE` within a transaction to prevent concurrent modifications, returning 422 for illegal transitions.
+- All user actions are recorded through `logAuditEvent` with consistent fields: `action`, `performedById`, `performedByUsername`, `entityType`, `entityId`, and `newValues`.
+- Real-time notifications are sent via dedicated functions (`broadcastReturnRequest`, `sendReturnDecision`) rather than direct socket calls.

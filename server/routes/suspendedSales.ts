@@ -229,9 +229,24 @@ router.put(
     }
 
     const { customer_name, customer_address, customer_tin, cart_items, label } = parsed.data;
-
+    const conn = await pool.getConnection();
     try {
-      const [result] = await pool.execute<any>(
+      await conn.beginTransaction();
+
+      // Row-lock the suspended sale to prevent concurrent update/complete/discard
+      const [rows] = await conn.execute<any[]>(
+        `SELECT id FROM suspended_sales
+         WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'
+         FOR UPDATE`,
+        [id, req.user!.id]
+      );
+      if (rows.length === 0) {
+        await conn.rollback();
+        res.status(404).json({ message: "Suspended sale not found or already completed." });
+        return;
+      }
+
+      const [result] = await conn.execute<any>(
         `UPDATE suspended_sales 
          SET customer_name = ?, customer_address = ?, customer_tin = ?, cart_data = ?, label = ?, updated_at = NOW()
          WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'`,
@@ -247,14 +262,19 @@ router.put(
       );
 
       if (result.affectedRows === 0) {
+        await conn.rollback();
         res.status(404).json({ message: "Suspended sale not found or already completed." });
         return;
       }
 
+      await conn.commit();
       res.status(200).json({ message: "Suspended sale updated." });
     } catch (err) {
+      await conn.rollback();
       console.error("[PUT /api/suspended-sales/:id] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred." });
+    } finally {
+      conn.release();
     }
   }
 );
@@ -266,10 +286,25 @@ router.delete(
   requireRole("Cashier", "Admin"),
   async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-
+    const conn = await pool.getConnection();
     try {
+      await conn.beginTransaction();
+
+      // Row-lock to prevent race conditions
+      const [rows] = await conn.execute<any[]>(
+        `SELECT id FROM suspended_sales
+         WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'
+         FOR UPDATE`,
+        [id, req.user!.id]
+      );
+      if (rows.length === 0) {
+        await conn.rollback();
+        res.status(404).json({ message: "Suspended sale not found or already completed." });
+        return;
+      }
+
       // Mark as cancelled instead of deleting to keep audit trail
-      const [result] = await pool.execute<any>(
+      const [result] = await conn.execute<any>(
         `UPDATE suspended_sales 
          SET status = 'CANCELLED', updated_at = NOW()
          WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'`,
@@ -277,32 +312,39 @@ router.delete(
       );
 
       if (result.affectedRows === 0) {
+        await conn.rollback();
         res.status(404).json({ message: "Suspended sale not found or already completed." });
         return;
       }
 
+      await conn.commit();
       res.status(200).json({ message: "Suspended sale discarded." });
     } catch (err) {
+      await conn.rollback();
       console.error("[DELETE /api/suspended-sales/:id] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred." });
+    } finally {
+      conn.release();
     }
   }
 );
 
 // ─── POST /api/suspended-sales/:id/complete — Convert to completed sale ───────
+// Follows the same power-outage-safe order of operations as POST /api/sales
 router.post(
   "/:id/complete",
   authenticate,
   requireRole("Cashier", "Admin"),
   async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { cash_tendered, change_amount } = req.body;
+    const cash_tendered = Number(req.body.cash_tendered ?? 0);
+    const change_amount = req.body.change_amount !== undefined ? Number(req.body.change_amount) : undefined;
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      // Get suspended sale
+      // 0. Get suspended sale with row-lock
       const [rows] = await conn.execute<any[]>(
         `SELECT id, cart_data, customer_name, customer_address, customer_tin
          FROM suspended_sales
@@ -322,142 +364,200 @@ router.post(
         ? JSON.parse(suspended.cart_data) 
         : suspended.cart_data;
 
-      // Calculate totals from cart items (backend authoritative)
-      let subtotal = 0;
-      let vatAmount = 0;
+      // 1. Read tax_rate and vat_registered from store_settings (authoritative)
+      const [settingsRows] = await conn.execute<any[]>(
+        `SELECT tax_rate, vat_registered FROM store_settings WHERE id = 1 LIMIT 1`
+      );
+      const dbTaxRate   = Number(settingsRows[0]?.tax_rate ?? 12);
+      const dbVatActive = settingsRows[0]?.vat_registered === true || settingsRows[0]?.vat_registered === 1;
 
+      // 2. Validate product_ids exist and fetch authoritative DB product data
+      //    Also lock product rows and check stock BEFORE any writes
+      const productData: Record<number, {
+        name: string; tax_type: string; selling_price: number; quantity: number;
+      }> = {};
       for (const item of cartItems) {
-        const lineSubtotal = Number(item.subtotal);
-        const taxType = item.tax_type || "VATABLE";
-        
-        if (taxType === "VATABLE") {
-          const taxableAmt = Math.round((lineSubtotal / 1.12) * 100) / 100;
-          const vatAmt = Math.round((lineSubtotal - taxableAmt) * 100) / 100;
-          subtotal += taxableAmt;
-          vatAmount += vatAmt;
-        } else {
-          subtotal += lineSubtotal;
+        const pid = Number(item.product_id);
+        if (!Number.isInteger(pid) || pid <= 0) {
+          await conn.rollback();
+          res.status(400).json({ message: `Invalid product ID in suspended cart.` });
+          return;
         }
+        const qty = Number(item.quantity);
+        const [prodRows] = await conn.execute<any[]>(
+          `SELECT quantity, product_name AS name, tax_type, selling_price
+           FROM products WHERE id = ? FOR UPDATE`,
+          [pid]
+        );
+        const product = prodRows[0];
+        if (!product) {
+          await conn.rollback();
+          res.status(404).json({ message: `Product ID ${pid} no longer exists.` });
+          return;
+        }
+        if (Number(product.quantity) < qty) {
+          await conn.rollback();
+          res.status(409).json({
+            message: `Insufficient stock for product: ${product.name}.`,
+          });
+          return;
+        }
+        productData[pid] = {
+          name: product.name,
+          tax_type: product.tax_type ?? "VATABLE",
+          selling_price: Number(product.selling_price),
+          quantity: Number(product.quantity),
+        };
       }
 
-      const totalAmount = Math.round((subtotal + vatAmount) * 100) / 100;
-      const changeAmount = change_amount !== undefined 
-        ? Number(change_amount) 
-        : Math.round((Number(cash_tendered || 0) - totalAmount) * 100) / 100;
+      // 3. Recalculate ALL totals from authoritative DB product data
+      //    (never trust the cart JSON — prices/tax settings may have changed)
+      type CalcItem = {
+        product_id: number; quantity: number;
+        unit_price: number; line_subtotal: number;
+        tax_type: string; tax_rate: number;
+        taxable_amount: number; vat_amount: number;
+      };
+      const calcItems: CalcItem[] = cartItems.map((item: any) => {
+        const p           = productData[item.product_id];
+        const unit_price  = p.selling_price;
+        const quantity    = Number(item.quantity);
+        const line_subtotal = Math.round(unit_price * quantity * 100) / 100;
+        const taxType     = p.tax_type;
+        const isVatable   = taxType === "VATABLE" && dbVatActive;
+        const taxRate     = isVatable ? dbTaxRate : 0;
+        const taxDivisor  = 1 + (taxRate / 100);
+        const taxableAmt  = isVatable
+          ? Math.round((line_subtotal / taxDivisor) * 100) / 100
+          : line_subtotal;
+        const vatAmt      = isVatable
+          ? Math.round((line_subtotal - taxableAmt) * 100) / 100
+          : 0;
+        return {
+          product_id: item.product_id, quantity,
+          unit_price, line_subtotal,
+          tax_type: taxType, tax_rate: taxRate,
+          taxable_amount: taxableAmt, vat_amount: vatAmt,
+        };
+      });
 
-      // Generate invoice number
-      const invoiceSeqRows = await conn.execute<any[]>(
-        `SELECT id, current_number FROM invoice_sequences WHERE prefix = 'INV' LIMIT 1 FOR UPDATE`
+      const calc_total_amount = Math.round(
+        calcItems.reduce((s, i) => s + i.line_subtotal, 0) * 100
+      ) / 100;
+      const calc_vat_amount = Math.round(
+        calcItems.reduce((s, i) => s + i.vat_amount, 0) * 100
+      ) / 100;
+      const calc_subtotal = Math.round((calc_total_amount - calc_vat_amount) * 100) / 100;
+      const calc_change   = change_amount !== undefined
+        ? change_amount
+        : Math.round((cash_tendered - calc_total_amount) * 100) / 100;
+
+      // 4. Generate invoice number (concurrency-safe, row-locked sequence)
+      const [invSeqRows] = await conn.execute<any[]>(
+        `SELECT id, prefix, current_number FROM invoice_sequences WHERE prefix = 'INV' LIMIT 1 FOR UPDATE`
       );
-      const nextInvNum = (invoiceSeqRows[0][0]?.current_number || 0) + 1;
+      if (!invSeqRows[0]) {
+        await conn.rollback();
+        res.status(500).json({ message: "Invoice sequence not found. Run migration 010." });
+        return;
+      }
+      const nextInvNum = Number(invSeqRows[0].current_number) + 1;
       await conn.execute(
         `UPDATE invoice_sequences SET current_number = ?, updated_at = NOW() WHERE id = ?`,
-        [nextInvNum, invoiceSeqRows[0][0]?.id]
+        [nextInvNum, invSeqRows[0].id]
       );
-      const invoiceNumber = `INV-${String(nextInvNum).padStart(6, "0")}`;
+      const invoice_number = `${invSeqRows[0].prefix}-${String(nextInvNum).padStart(6, "0")}`;
 
-      // Insert sale header
-      await conn.execute(
+      // 5. Insert sale header (payment_status = 'pending') — all backend-calculated values
+      const [saleHeaderResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount,
+            payment_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
         [
-          invoiceNumber,
+          invoice_number,
           suspended.customer_name || "Walk-in Customer",
           suspended.customer_address || null,
           suspended.customer_tin || null,
           req.user!.id,
-          subtotal,
-          vatAmount,
-          totalAmount,
-          cash_tendered || 0,
-          changeAmount >= 0 ? changeAmount : 0,
+          calc_subtotal,
+          calc_vat_amount,
+          calc_total_amount,
+          cash_tendered,
+          calc_change >= 0 ? calc_change : 0,
         ]
       );
+      const sale_id: number = saleHeaderResult.insertId;
 
-      const [saleResult] = await conn.execute<any>(
-        `SELECT LAST_INSERT_ID() AS sale_id`
-      );
-      const saleId = saleResult[0].sale_id;
-
-      // Insert sale items and deduct inventory
-      for (const item of cartItems) {
-        const lineSubtotal = Number(item.subtotal);
-        const taxType = item.tax_type || "VATABLE";
-        const isVatable = taxType === "VATABLE";
-        const taxRate = isVatable ? 12 : 0;
-        const taxableAmt = isVatable ? Math.round((lineSubtotal / 1.12) * 100) / 100 : lineSubtotal;
-        const vatAmt = isVatable ? Math.round((lineSubtotal - taxableAmt) * 100) / 100 : 0;
-
-        // Insert sale item
+      // 6. Insert sale items + deduct inventory + write inventory log
+      for (const ci of calcItems) {
         await conn.execute(
           `INSERT INTO sale_items
              (sale_id, product_id, quantity, unit_price, subtotal,
               tax_type, tax_rate, taxable_amount, vat_amount)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            saleId,
-            item.product_id,
-            item.quantity,
-            item.unitPrice,
-            lineSubtotal,
-            taxType,
-            taxRate,
-            taxableAmt,
-            vatAmt,
-          ]
+          [sale_id, ci.product_id, ci.quantity, ci.unit_price, ci.line_subtotal,
+           ci.tax_type, ci.tax_rate, ci.taxable_amount, ci.vat_amount]
         );
-
-        // Check stock and deduct
-        const [productRows] = await conn.execute<any[]>(
-          `SELECT quantity, product_name FROM products WHERE id = ? FOR UPDATE`,
-          [item.product_id]
-        );
-
-        if (!productRows[0] || productRows[0].quantity < item.quantity) {
-          await conn.rollback();
-          res.status(409).json({ 
-            message: `Insufficient stock for product: ${item.name || `ID ${item.product_id}`}` 
-          });
-          return;
-        }
-
         await conn.execute(
           `UPDATE products SET quantity = quantity - ? WHERE id = ?`,
-          [item.quantity, item.product_id]
+          [ci.quantity, ci.product_id]
         );
-
-        // Inventory log
         await conn.execute(
           `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
            VALUES (?, 'Sale', 'sale', ?, ?, ?)`,
-          [item.product_id, -item.quantity, invoiceNumber, req.user!.id]
+          [ci.product_id, -ci.quantity, invoice_number, req.user!.id]
         );
       }
 
-      // Mark suspended sale as completed
+      // 7. Mark suspended sale as COMPLETED
       await conn.execute(
         `UPDATE suspended_sales SET status = 'COMPLETED', updated_at = NOW() WHERE id = ?`,
         [suspended.id]
       );
 
+      // 8. COMMIT — all-or-nothing
       await conn.commit();
 
+      // 9. Post-commit: flip payment_status to 'completed'
+      try {
+        await pool.execute(
+          `UPDATE sales SET payment_status = 'completed' WHERE id = ? AND payment_status = 'pending'`,
+          [sale_id]
+        );
+      } catch (updateErr) {
+        console.warn(`[SUSPENDED-COMPLETE] Failed to update payment_status for sale ${sale_id}:`, updateErr);
+      }
+
+      // 10. Audit log (non-fatal, outside transaction)
+      import("../utils/auditLogger.js")
+        .then(({ logAuditEvent }) => logAuditEvent({
+          action: "SALE_COMPLETED",
+          performedById: req.user!.id,
+          performedByUsername: req.user!.username,
+          entityType: "sales",
+          entityId: sale_id,
+          newValues: { invoice_number, total_amount: calc_total_amount, customer_name: suspended.customer_name || "Walk-in Customer", source: "suspended_sale" },
+        }))
+        .catch((e) => console.error("[auditLogger] import failed:", e));
+
       res.status(201).json({
-        invoice_number: invoiceNumber,
-        id: saleId,
-        subtotal,
-        vat_amount: vatAmount,
-        total_amount: totalAmount,
-        change_amount: changeAmount >= 0 ? changeAmount : 0,
+        invoice_number,
+        id: sale_id,
+        subtotal:      calc_subtotal,
+        vat_amount:    calc_vat_amount,
+        total_amount:  calc_total_amount,
+        change_amount: calc_change >= 0 ? calc_change : 0,
+        payment_status: "completed",
+        receipt_printed: false,
         suspended_order_id: id,
-        items: cartItems.map((item: any) => ({
-          product_id: item.product_id,
-          tax_type: item.tax_type || "VATABLE",
-          taxable_amount: (item.taxable_amount || 0),
-          vat_amount: (item.vat_amount || 0),
-          line_subtotal: item.subtotal,
+        items: calcItems.map((ci) => ({
+          product_id:     ci.product_id,
+          tax_type:       ci.tax_type,
+          taxable_amount: ci.taxable_amount,
+          vat_amount:     ci.vat_amount,
+          line_subtotal:  ci.line_subtotal,
         })),
       });
     } catch (err) {

@@ -8,11 +8,12 @@ Module._resolveFilename = function(request, ...args) {
 const { app, BrowserWindow } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 let serverProcess;
 let windowCreated = false;
 
-function createWindow() {
+function createWindow(url) {
   if (windowCreated) return;
   windowCreated = true;
 
@@ -25,7 +26,7 @@ function createWindow() {
     title: 'Isra Hardware POS',
   });
 
-  win.loadURL('http://localhost:3001');
+  win.loadURL(url);
   win.setMenuBarVisibility(false);
 }
 
@@ -34,36 +35,76 @@ app.whenReady().then(() => {
     ? path.join(process.resourcesPath, 'app.asar.unpacked')
     : path.join(__dirname, '..');
 
-  const logFile = require('fs').createWriteStream(path.join(appRoot, 'app.log'), { flags: 'a' });
+  const logPath = path.join(appRoot, 'app.log');
+  const logFile = fs.createWriteStream(logPath, { flags: 'a' });
+
   logFile.write(`[${new Date().toISOString()}] appRoot: ${appRoot}\n`);
+  logFile.write(`[${new Date().toISOString()}] __dirname: ${__dirname}\n`);
 
-  serverProcess = spawn('node', ['server-dist/index.js'], {
-    cwd: appRoot,
-    env: { ...process.env, NODE_ENV: 'production' },
-    stdio: ['ignore', logFile, logFile],
+  const serverDistPath = path.join(appRoot, 'server-dist', 'index.js');
+  logFile.write(`[${new Date().toISOString()}] server-dist/index.js exists: ${fs.existsSync(serverDistPath)}\n`);
+
+  // Start the backend server using system Node.js
+  try {
+    serverProcess = spawn('node', ['server-dist/index.js'], {
+      cwd: appRoot,
+      env: { ...process.env, NODE_ENV: 'production' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    serverProcess.stdout.on('data', (data) => {
+      logFile.write(`[${new Date().toISOString()}] Server stdout: ${data}\n`);
+    });
+
+    serverProcess.stderr.on('data', (data) => {
+      logFile.write(`[${new Date().toISOString()}] Server stderr: ${data}\n`);
+    });
+
+    serverProcess.on('error', (err) => {
+      logFile.write(`[${new Date().toISOString()}] Server error: ${err.message}\n`);
+    });
+
+    serverProcess.on('exit', (code, signal) => {
+      logFile.write(`[${new Date().toISOString()}] Server exited code=${code} signal=${signal}\n`);
+    });
+
+    logFile.write(`[${new Date().toISOString()}] Backend server spawned, waiting for port 3001...\n`);
+  } catch (spawnError) {
+    logFile.write(`[${new Date().toISOString()}] spawn() error: ${spawnError.message}\n`);
+  }
+
+  // Wait for backend to be ready, then open window
+  waitForPort(3001, logPath).then(() => {
+    logFile.write(`[${new Date().toISOString()}] Server ready, creating window\n`);
+    createWindow('http://localhost:3001');
+  }).catch((err) => {
+    logFile.write(`[${new Date().toISOString()}] Server not ready: ${err.message}\n`);
+    createWindow('http://localhost:3001');
   });
-
-  serverProcess.on('error', (err) => {
-    logFile.write(`[${new Date().toISOString()}] Server error: ${err.message}\n`);
-  });
-
-  serverProcess.on('exit', (code) => {
-    logFile.write(`[${new Date().toISOString()}] Server exited with code: ${code}\n`);
-  });
-
-  waitForServer(3001, createWindow);
 });
 
-function waitForServer(port, callback, retries = 20) {
+function waitForPort(port, logPath, retries = 40) {
   const net = require('net');
-  const client = new net.Socket();
-  client.connect(port, '127.0.0.1', () => {
-    client.destroy();
-    callback();
-  });
-  client.on('error', () => {
-    client.destroy();
-    if (retries > 0) setTimeout(() => waitForServer(port, callback, retries - 1), 500);
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    function tryConnect() {
+      attempts++;
+      const client = new net.Socket();
+      client.connect(port, '127.0.0.1', () => {
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Port ${port} ready after ${attempts} attempts\n`);
+        client.destroy();
+        resolve();
+      });
+      client.on('error', () => {
+        client.destroy();
+        if (attempts < retries) {
+          setTimeout(tryConnect, 500);
+        } else {
+          reject(new Error(`Port ${port} not ready after ${retries} attempts`));
+        }
+      });
+    }
+    tryConnect();
   });
 }
 

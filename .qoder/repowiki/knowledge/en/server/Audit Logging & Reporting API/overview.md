@@ -1,0 +1,1 @@
+Express routes that expose admin-only endpoints for paginated audit-log retrieval and comprehensive sales/inventory/VAT reporting, backed by a fire-and-forget audit logger that persists events to the audit_logs table.

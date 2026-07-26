@@ -111,10 +111,23 @@ async function generateBarcode(conn: PoolConnection): Promise<string> {
 // ─── GET /api/products ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { search, category_id, supplier_id, status } = req.query;
+    const { search, category_id, supplier_id, status, product_status } = req.query;
 
+    // Implicitly filter to Active products UNLESS explicitly overridden.
+    // `product_status = "all"` shows every record regardless of p.status.
+    // `product_status = "Inactive"` or `product_status = "Active"` filter exactly.
     let where = "WHERE 1=1";
     const params: any[] = [];
+
+    const productStatusVal = typeof product_status === "string" ? product_status.trim() : "";
+    if (productStatusVal === "all") {
+      // no-op: include Active + Inactive
+    } else if (productStatusVal === "Inactive" || productStatusVal === "Active") {
+      where += " AND p.status = ?";
+      params.push(productStatusVal);
+    } else {
+      where += " AND p.status = 'Active'";
+    }
 
     if (search) {
       where += " AND (p.product_name LIKE ? OR p.barcode LIKE ?)";
@@ -340,25 +353,41 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
+    // ── Step 1: Row-lock + capture PREVIOUS values BEFORE any update ─────────
     const [existing] = await conn.execute<any[]>(
-      "SELECT id FROM products WHERE id = ? LIMIT 1", [id]
+      `SELECT ${PRODUCT_COLS}, p.selling_price AS prev_selling_price, p.cost_price AS prev_cost_price
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       LEFT JOIN suppliers  s ON s.id = p.supplier_id
+       LEFT JOIN units      u ON u.id = p.unit_id
+       WHERE p.id = ? LIMIT 1 FOR UPDATE`,
+      [id]
     );
     if ((existing as any[]).length === 0) {
+      await conn.rollback();
       res.status(404).json({ message: "Product not found." });
       return;
     }
+    const prevSnapshot = (existing as any[])[0];
+    const prevSellingPrice = prevSnapshot.prev_selling_price;
+    const prevCostPrice    = prevSnapshot.prev_cost_price;
 
+    // ── Step 2: Barcode uniqueness check ─────────────────────────────────────
     if (data.barcode) {
       const [barcodeCheck] = await conn.execute<any[]>(
         "SELECT id FROM products WHERE barcode = ? AND id != ? LIMIT 1",
         [data.barcode, id]
       );
       if ((barcodeCheck as any[]).length > 0) {
+        await conn.rollback();
         res.status(409).json({ message: "A product with this barcode already exists." });
         return;
       }
     }
 
+    // ── Step 3: Build dynamic UPDATE clause ──────────────────────────────────
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -394,6 +423,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       values
     );
 
+    // ── Step 4: Fetch UPDATED joined record for the response ─────────────────
     const [updated] = await conn.execute<any[]>(
       `SELECT ${PRODUCT_COLS}
        FROM products p
@@ -404,22 +434,35 @@ router.put("/:id", async (req: Request, res: Response) => {
       [id]
     );
 
-    // Detect price change for specific audit action
-    const [prevRows] = await conn.execute<any[]>("SELECT selling_price, cost_price FROM products WHERE id = ? LIMIT 1", [id]);
-    const prev = prevRows[0];
-    const isPriceChange = data.selling_price !== undefined || data.cost_price !== undefined;
-    await logAuditEvent({
+    await conn.commit();
+
+    // ── Step 5: Audit log (outside TXN, never blocks) — uses BEFORE-image
+    const newSellingPrice = data.selling_price !== undefined ? data.selling_price : prevSellingPrice;
+    const newCostPrice    = data.cost_price    !== undefined ? data.cost_price    : prevCostPrice;
+    const isPriceChange =
+      (data.selling_price !== undefined && Number(data.selling_price) !== Number(prevSellingPrice)) ||
+      (data.cost_price    !== undefined && Number(data.cost_price)    !== Number(prevCostPrice));
+
+    logAuditEvent({
       action: isPriceChange ? "PRODUCT_PRICE_CHANGED" : "PRODUCT_UPDATED",
       performedById: req.user!.id,
       performedByUsername: req.user!.username,
       entityType: "products",
       entityId: id,
-      previousValues: isPriceChange ? { selling_price: prev?.selling_price, cost_price: prev?.cost_price } : undefined,
-      newValues: data as Record<string, unknown>,
-    });
+      previousValues: {
+        ...(isPriceChange ? {
+          selling_price: prevSellingPrice,
+          cost_price:    prevCostPrice,
+        } : {}),
+      } as Record<string, unknown>,
+      newValues: isPriceChange
+        ? { ...data, selling_price: newSellingPrice, cost_price: newCostPrice } as Record<string, unknown>
+        : data as Record<string, unknown>,
+    }).catch((e) => console.error("[products/PUT /:id] auditLogger failed:", e));
 
     res.status(200).json((updated as any[])[0]);
   } catch (err) {
+    await conn.rollback();
     console.error("[products/PUT /:id]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
   } finally {

@@ -1,0 +1,1 @@
+Requires a `.env` file with `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `JWT_SECRET` before the module can be imported (the pool constructor throws otherwise). The server listens on port `3001` by default or whatever `PORT` is set to. Static SPA assets must exist under `server/public/` for the catch-all route to serve `index.html`.

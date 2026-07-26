@@ -164,9 +164,10 @@ router.post(
       // Fetch cashier name + invoice/customer for the broadcast
       const [saleRows] = await conn.execute<any[]>(
         `SELECT s.invoice_number, s.customer_name, u.full_name AS cashier_name
-         FROM sales s JOIN users u ON u.id = ?
+         FROM sales s
+         JOIN users u ON u.id = s.cashier_id
          WHERE s.id = ? LIMIT 1`,
-        [req.user!.id, sale_id]
+        [sale_id]
       );
       const saleRow = saleRows[0];
       broadcastReturnRequest({
@@ -234,7 +235,15 @@ router.get(
   authenticate,
   requireRole("Admin"),
   async (req: Request, res: Response): Promise<void> => {
-    const { status, date_from, date_to } = req.query as Record<string, string | undefined>;
+    const {
+      status,
+      resolution,
+      date_from,
+      date_to,
+      return_number,
+      invoice_number,
+      cashier_id,
+    } = req.query as Record<string, string | undefined>;
 
     try {
       const conditions: string[] = [];
@@ -244,6 +253,18 @@ router.get(
         conditions.push("r.status = ?");
         params.push(status);
       }
+      if (resolution && ["refund", "replacement"].includes(resolution)) {
+        conditions.push("r.resolution = ?");
+        params.push(resolution);
+      }
+      if (return_number) {
+        conditions.push("r.return_number LIKE ?");
+        params.push(`%${return_number}%`);
+      }
+      if (invoice_number) {
+        conditions.push("s.invoice_number LIKE ?");
+        params.push(`%${invoice_number}%`);
+      }
       if (date_from) {
         conditions.push("DATE(r.created_at) >= ?");
         params.push(date_from);
@@ -251,6 +272,10 @@ router.get(
       if (date_to) {
         conditions.push("DATE(r.created_at) <= ?");
         params.push(date_to);
+      }
+      if (cashier_id && /^\d+$/.test(cashier_id)) {
+        conditions.push("r.processed_by = ?");
+        params.push(parseInt(cashier_id, 10));
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -499,43 +524,46 @@ router.patch(
 
     const { resolution, item_condition } = parsed.data;
 
-    // Fetch return with its items (no connection yet — pool query)
-    const [returnRows] = await pool.execute<any[]>(
-      `SELECT r.id, r.return_number, r.status, r.resolution
-       FROM returns r
-       WHERE r.id = ? LIMIT 1`,
-      [id]
-    );
-    const returnRow = returnRows[0];
-    if (!returnRow) {
-      res.status(404).json({ message: "Return not found." });
-      return;
-    }
-    if (returnRow.status !== "approved") {
-      res.status(422).json({ message: "Return must be approved before resolution." });
-      return;
-    }
-    if (returnRow.resolution !== null) {
-      res.status(422).json({ message: "This return has already been resolved." });
-      return;
-    }
-
-    // Fetch return items
-    const [itemRows] = await pool.execute<any[]>(
-      `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
-       FROM return_items ri
-       JOIN products p ON p.id = ri.product_id
-       WHERE ri.return_id = ?`,
-      [id]
-    );
-
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
+      // Fetch return with row-level lock to prevent concurrent resolution
+      const [returnRows] = await conn.execute<any[]>(
+        `SELECT r.id, r.return_number, r.status, r.resolution
+         FROM returns r
+         WHERE r.id = ? LIMIT 1 FOR UPDATE`,
+        [id]
+      );
+      const returnRow = returnRows[0];
+      if (!returnRow) {
+        await conn.rollback();
+        res.status(404).json({ message: "Return not found." });
+        return;
+      }
+      if (returnRow.status !== "approved") {
+        await conn.rollback();
+        res.status(422).json({ message: "Return must be approved before resolution." });
+        return;
+      }
+      if (returnRow.resolution !== null) {
+        await conn.rollback();
+        res.status(422).json({ message: "This return has already been resolved." });
+        return;
+      }
+
+      // Fetch return items inside the transaction
+      const [itemRows] = await conn.execute<any[]>(
+        `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
+         FROM return_items ri
+         JOIN products p ON p.id = ri.product_id
+         WHERE ri.return_id = ?`,
+        [id]
+      );
+
+      let refund_amount = 0;
       if (resolution === "refund") {
-        // ── Refund path ──────────────────────────────────────────────────────
-        let refund_amount = 0;
+        // Refund path
 
         for (const item of itemRows) {
           refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
@@ -566,21 +594,6 @@ router.patch(
            WHERE id = ?`,
           [item_condition, refund_amount.toFixed(2), id]
         );
-
-        await conn.execute(
-          `INSERT INTO activity_logs (user_id, action, reference)
-           VALUES (?, 'return_refund', ?)`,
-          [req.user!.id, returnRow.return_number]
-        );
-
-        await logAuditEvent({
-          action: "REFUND_PROCESSED",
-          performedById: req.user!.id,
-          performedByUsername: req.user!.username,
-          entityType: "returns",
-          entityId: id,
-          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition },
-        });
       } else {
         // ── Replacement path ─────────────────────────────────────────────────
         // Check stock availability first
@@ -590,12 +603,12 @@ router.patch(
             [item.product_id]
           );
           const stock = stockRows[0];
-          if (!stock || stock.quantity === 0) {
+          if (!stock || Number(stock.quantity) < Number(item.quantity_returned)) {
             await conn.rollback();
             res
               .status(409)
               .json({
-                message: `Replacement cannot be processed — no available stock for: ${item.product_name}.`,
+                message: `Replacement cannot be processed — insufficient stock for: ${item.product_name}. Available: ${stock ? Number(stock.quantity) : 0}, Required: ${item.quantity_returned}.`,
               });
             return;
           }
@@ -640,8 +653,28 @@ router.patch(
            WHERE id = ?`,
           [item_condition, id]
         );
+      }
 
-        await conn.execute(
+      await conn.commit();
+
+      // Move activity_logs and audit logging outside transaction
+      if (resolution === "refund") {
+        await pool.execute(
+          `INSERT INTO activity_logs (user_id, action, reference)
+           VALUES (?, 'return_refund', ?)`,
+          [req.user!.id, returnRow.return_number]
+        );
+
+        await logAuditEvent({
+          action: "REFUND_PROCESSED",
+          performedById: req.user!.id,
+          performedByUsername: req.user!.username,
+          entityType: "returns",
+          entityId: id,
+          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition },
+        });
+      } else {
+        await pool.execute(
           `INSERT INTO activity_logs (user_id, action, reference)
            VALUES (?, 'return_replacement', ?)`,
           [req.user!.id, returnRow.return_number]
@@ -656,8 +689,6 @@ router.patch(
           newValues: { return_number: returnRow.return_number, item_condition },
         });
       }
-
-      await conn.commit();
 
       // Return full resolved return
       const finalReturn = await fetchReturnSummary(conn, id);

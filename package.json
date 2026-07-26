@@ -15,11 +15,11 @@
     "electron:build": "pnpm build && electron-builder"
   },
   "main": "electron/main.cjs",
-  "build": {
+    "build": {
     "appId": "com.israhardware.pos",
     "productName": "Isra Hardware POS",
-    "files": ["server-dist/**/*", "electron/**/*", "client/public/**/*"],
-    "asarUnpack": ["server-dist/**/*", "client/public/**/*"],
+    "files": [".env", "server-dist/**/*", "electron/**/*", "client/public/**/*"],
+    "asarUnpack": [".env", "server-dist/**/*", "client/public/**/*"],
     "win": {
       "target": "nsis"
     },

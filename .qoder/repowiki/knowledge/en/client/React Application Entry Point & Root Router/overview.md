@@ -1,0 +1,1 @@
+Bootstraps the React SPA by mounting the root App component into the HTML shell, then wires up global providers (theme, auth, tooltips) and a role-based router that dispatches to Admin, Clerk, and Cashier modules.

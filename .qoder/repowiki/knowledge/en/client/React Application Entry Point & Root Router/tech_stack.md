@@ -1,0 +1,1 @@
+React 18 with `react-dom/client` `createRoot` API, `wouter` for client-side routing (`Route`/`Switch`), `sonner` for toast notifications, and a custom theme/auth context system via React Context.

@@ -1,0 +1,5 @@
+- Every route file creates an Express `Router()`, applies `authenticate` globally via `router.use(authenticate)`, and adds role-based guards (`requireAdmin` inline or `requireRole("Admin")`) before defining handlers.
+- Database access goes exclusively through `pool.execute<any[]>(...)` with positional `?` placeholders — no string concatenation of user input.
+- All numeric fields returned from the database are wrapped in `COALESCE(..., 0)` and later coerced with `Number()` to guarantee non-null numbers in the response.
+- Error handling follows a try/catch around each handler body that logs with a `[module/path]` prefix and responds with a generic `{ message: "An unexpected error occurred." }` 500 JSON.
+- Audit event actions are declared as a single discriminated union (`AuditAction`) rather than free strings, and callers construct an `AuditEventParams` object with all optional fields defaulting to `null` when omitted.

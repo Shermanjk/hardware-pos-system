@@ -1,0 +1,95 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: main
+nodes_managed: true
+exported_at: "2026-07-26T12:00:13Z"
+modules:
+    client:
+        dir_name: client
+        title: client
+        scope:
+            - client/
+        source_files: []
+        children:
+            - client/app_entry
+        depends_on: []
+        related_to: []
+    client/app_entry:
+        dir_name: React Application Entry Point & Root Router
+        title: React Application Entry Point & Root Router
+        scope:
+            - client/src/App.tsx
+            - client/src/main.tsx
+            - client/index.html
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    migrations:
+        dir_name: migrations
+        title: migrations
+        scope:
+            - migrations/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    server:
+        dir_name: server
+        title: server
+        scope:
+            - server/
+        source_files: []
+        children:
+            - server/audit_reporting
+            - server/core
+            - server/products_catalog
+            - server/returns_processing
+        depends_on: []
+        related_to: []
+    server/audit_reporting:
+        dir_name: Audit Logging & Reporting API
+        title: Audit Logging & Reporting API
+        scope:
+            - server/routes/auditLogs.ts
+            - server/routes/reports.ts
+            - server/utils/auditLogger.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    server/core:
+        dir_name: Server Bootstrapping, Database Pool & WebSocket Layer
+        title: Server Bootstrapping, Database Pool & WebSocket Layer
+        scope:
+            - server/index.ts
+            - server/db.ts
+            - server/ws.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    server/products_catalog:
+        dir_name: Products, Categories, Units & Suppliers REST API
+        title: Products, Categories, Units & Suppliers REST API
+        scope:
+            - server/routes/products.ts
+            - server/routes/categories.ts
+            - server/routes/units.ts
+            - server/routes/suppliers.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    server/returns_processing:
+        dir_name: Returns Processing API
+        title: Returns Processing API
+        scope:
+            - server/routes/returns.ts
+            - server/utils/validateReturn.ts
+            - server/utils/returnNumber.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

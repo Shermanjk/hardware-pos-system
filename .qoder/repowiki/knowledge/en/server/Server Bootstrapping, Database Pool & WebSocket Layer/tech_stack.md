@@ -1,0 +1,1 @@
+Node.js with TypeScript, Express for HTTP routing, `mysql2/promise` for pooled MySQL connections, `ws` for WebSocket communication, and `jsonwebtoken` for JWT verification on WebSocket connections.

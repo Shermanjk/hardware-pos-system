@@ -430,8 +430,8 @@ router.post("/deliveries", async (req: Request, res: Response) => {
 router.get("/deliveries", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
-  const limit  = Math.max(1, parseInt((req.query.limit  as string) || "50",  10));
-  const offset = Math.max(0, parseInt((req.query.offset as string) || "0",   10));
+  const limit  = Math.min(1000, Math.max(1, parseInt((req.query.limit  as string) || "50", 10)));
+  const offset = Math.max(0, parseInt((req.query.offset as string) || "0",  10));
   const { product_id, company_id, date_from, date_to, search } = req.query;
 
   let where = "WHERE 1=1";
@@ -459,6 +459,9 @@ router.get("/deliveries", async (req: Request, res: Response) => {
     params.push(s, s, s);
   }
 
+  // Append LIMIT/OFFSET as parameterized values (best practice)
+  params.push(limit, offset);
+
   try {
     const [rows] = await pool.execute<any[]>(`
       SELECT
@@ -483,7 +486,7 @@ router.get("/deliveries", async (req: Request, res: Response) => {
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       ${where}
       ORDER BY epd.delivery_date DESC, epd.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
 
     res.status(200).json(rows.map((r: any) => ({

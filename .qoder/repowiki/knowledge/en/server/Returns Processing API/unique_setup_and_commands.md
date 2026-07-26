@@ -1,0 +1,1 @@
+No special build or setup steps; the module is consumed by mounting the default export router in the main Express app. Depends on the `invoice_sequences` table for atomic return number generation and requires the `returns`, `return_items`, `inventory_logs`, and `activity_logs` tables to exist.

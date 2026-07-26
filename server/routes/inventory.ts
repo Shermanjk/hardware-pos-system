@@ -56,10 +56,20 @@ router.get("/", async (req: Request, res: Response) => {
   if (!requireAdminOrClerk(req, res)) return;
 
   try {
-    const { search, category_id, status } = req.query;
+    const { search, category_id, status, product_status } = req.query;
 
-    let where = "WHERE p.status = 'Active'";
+    // Default: show only Active products. Allow override via product_status=all or product_status=Inactive
+    let where = "";
     const params: any[] = [];
+    const productStatusVal = typeof product_status === "string" ? product_status.trim() : "";
+    if (productStatusVal === "all") {
+      where = "WHERE 1=1";
+    } else if (productStatusVal === "Inactive" || productStatusVal === "Active") {
+      where = "WHERE p.status = ?";
+      params.push(productStatusVal);
+    } else {
+      where = "WHERE p.status = 'Active'";
+    }
 
     if (search) {
       where += " AND (p.product_name LIKE ? OR p.barcode LIKE ?)";
@@ -124,8 +134,8 @@ router.get("/logs", async (req: Request, res: Response) => {
   if (!requireAdminOrClerk(req, res)) return;
 
   try {
-    const limit  = Math.max(1, parseInt((req.query.limit  as string) || "50",  10));
-    const offset = Math.max(0, parseInt((req.query.offset as string) || "0",   10));
+    const limit  = Math.min(1000, Math.max(1,  parseInt((req.query.limit  as string) || "50", 10)));
+    const offset = Math.max(0, parseInt((req.query.offset as string) || "0",  10));
     const { product_id } = req.query;
 
     let where = "WHERE 1=1";
@@ -135,6 +145,9 @@ router.get("/logs", async (req: Request, res: Response) => {
       where += " AND il.product_id = ?";
       params.push(parseInt(product_id as string, 10));
     }
+
+    // Append LIMIT/OFFSET as parameterized values (best practice, avoids any interpolation path)
+    params.push(limit, offset);
 
     const [rows] = await pool.execute<any[]>(`
       SELECT
@@ -155,7 +168,7 @@ router.get("/logs", async (req: Request, res: Response) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
 
     res.status(200).json(rows);

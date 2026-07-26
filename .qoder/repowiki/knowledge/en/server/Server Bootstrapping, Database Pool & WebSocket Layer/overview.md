@@ -1,0 +1,1 @@
+Express HTTP server entrypoint that mounts all API routes and serves static files, a shared mysql2 connection pool, and a role-based WebSocket channel for real-time return/void request notifications between cashiers and admins.

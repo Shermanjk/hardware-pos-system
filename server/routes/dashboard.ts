@@ -60,7 +60,8 @@ router.get("/", async (_req: Request, res: Response) => {
       SELECT
         COUNT(*)                                                                AS total_products,
         SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END)                          AS out_of_stock,
-        SUM(CASE WHEN quantity > 0 AND quantity <= reorder_level THEN 1 ELSE 0 END) AS low_stock
+        SUM(CASE WHEN quantity > 0 AND quantity <= FLOOR(reorder_level * 0.5) THEN 1 ELSE 0 END) AS critical,
+        SUM(CASE WHEN quantity > FLOOR(reorder_level * 0.5) AND quantity <= reorder_level THEN 1 ELSE 0 END) AS low_stock
       FROM products
       WHERE status = 'Active'
     `);
@@ -155,6 +156,7 @@ router.get("/", async (_req: Request, res: Response) => {
         monthly_revenue:    Number(monthRows[0].monthly_revenue),
         total_products:     Number(productRows[0].total_products),
         out_of_stock:       Number(productRows[0].out_of_stock),
+        critical:           Number(productRows[0].critical),
         low_stock:          Number(productRows[0].low_stock),
         total_suppliers:    Number(supplierRows[0].total_suppliers),
         pending_returns:    Number(returnsRows[0].pending_returns),

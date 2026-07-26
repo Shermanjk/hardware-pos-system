@@ -1,0 +1,1 @@
+The app expects a Vite-compatible dev server that serves `client/index.html` and resolves `/src/main.tsx` as the module entry; no additional bootstrap script is needed beyond running the project's dev/build command.

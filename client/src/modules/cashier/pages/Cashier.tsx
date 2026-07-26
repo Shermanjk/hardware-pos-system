@@ -166,7 +166,7 @@ export default function Cashier() {
         unitPrice: Number(item.unitPrice),
         subtotal: Number(item.subtotal),
         tax_type: item.tax_type as any,
-        tax_rate: item.tax_type === "VATABLE" ? 12 : 0,
+        tax_rate: item.tax_type === "VATABLE" ? taxRate : 0,
         taxable_amount: item.taxable_amount,
         vat_amount: item.vat_amount,
       }));
@@ -198,7 +198,7 @@ export default function Cashier() {
       unitPrice: item.unitPrice,
       subtotal: item.subtotal,
       tax_type: item.tax_type || "VATABLE",
-      tax_rate: item.tax_rate || 12,
+      tax_rate: item.tax_rate || taxRate,
       taxable_amount: item.taxable_amount || 0,
       vat_amount: item.vat_amount || 0,
     }));
@@ -236,7 +236,7 @@ export default function Cashier() {
       unitPrice: item.unitPrice,
       subtotal: item.subtotal,
       tax_type: item.tax_type || "VATABLE",
-      tax_rate: item.tax_rate || 12,
+      tax_rate: item.tax_rate || taxRate,
       taxable_amount: item.taxable_amount || 0,
       vat_amount: item.vat_amount || 0,
     })),

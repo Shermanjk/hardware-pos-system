@@ -1,0 +1,1 @@
+Express router and validation utilities that handle the full return lifecycle: creating return requests, admin approval/rejection, and cashier resolution via refund or replacement with inventory updates.

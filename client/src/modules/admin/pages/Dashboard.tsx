@@ -23,6 +23,7 @@ interface DashboardData {
     monthly_revenue:    number;
     total_products:     number;
     out_of_stock:       number;
+    critical:           number;
     low_stock:          number;
     total_suppliers:    number;
     pending_returns:    number;
@@ -196,12 +197,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={AlertCircle}  label="Out of Stock"      value={(kpis?.out_of_stock ?? 0).toString()}
           sub="Need immediate restock" color="text-red-600" bg="bg-red-50" loading={loading} href="/reorder-alerts" />
+        <KpiCard icon={AlertTriangle} label="Critical Stock"    value={(kpis?.critical ?? 0).toString()}
+          sub="Below 50% reorder level" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/reorder-alerts" />
         <KpiCard icon={TrendingDown} label="Low Stock"         value={(kpis?.low_stock ?? 0).toString()}
           sub="At or below reorder level" color="text-amber-600" bg="bg-amber-50" loading={loading} href="/reorder-alerts" />
         <KpiCard icon={RotateCcw}    label="Pending Returns"   value={(kpis?.pending_returns ?? 0).toString()}
           sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/returns" />
-        <KpiCard icon={ShoppingCart} label="Today's Orders"    value={(kpis?.today_transactions ?? 0).toString()}
-          color="text-indigo-600" bg="bg-indigo-50" loading={loading} href="/sales" />
       </div>
 
       {/* Requires Attention Section - Database-backed pending items */}

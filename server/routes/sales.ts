@@ -788,11 +788,19 @@ router.get(
   authenticate,
   requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
-    const { invoice_number, customer_name, date_from, date_to } = req.query as Record<string, string | undefined>;
+    const {
+      invoice_number,
+      customer_name,
+      date_from,
+      date_to,
+      cashier_id,
+      void_status,
+      payment_status,
+    } = req.query as Record<string, string | undefined>;
 
     try {
       const conditions: string[] = [];
-      const params: string[] = [];
+      const params: (string | number)[] = [];
 
       if (invoice_number) {
         conditions.push("s.invoice_number LIKE ?");
@@ -810,6 +818,18 @@ router.get(
         conditions.push("DATE(s.created_at) <= ?");
         params.push(date_to);
       }
+      if (cashier_id && /^\d+$/.test(cashier_id)) {
+        conditions.push("s.cashier_id = ?");
+        params.push(parseInt(cashier_id, 10));
+      }
+      if (void_status && ["active", "void_requested", "voided"].includes(void_status)) {
+        conditions.push("s.void_status = ?");
+        params.push(void_status);
+      }
+      if (payment_status && ["pending", "completed"].includes(payment_status)) {
+        conditions.push("s.payment_status = ?");
+        params.push(payment_status);
+      }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -821,7 +841,8 @@ router.get(
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
          ${where}
-         ORDER BY s.created_at DESC`,
+         ORDER BY s.created_at DESC
+         LIMIT 200`,
         params
       );
 
@@ -854,32 +875,36 @@ router.get(
         [req.user!.id]
       );
 
-      // Attach sale items for each void request
-      const result = await Promise.all(
-        (rows as any[]).map(async (row) => {
-          const [items] = await pool.execute<any[]>(
-            `SELECT si.quantity, si.unit_price, si.subtotal,
-                    p.product_name,
-                    COALESCE(u.abbreviation, '') AS unit
-             FROM sale_items si
-             JOIN products p ON p.id = si.product_id
-             LEFT JOIN units u ON u.id = p.unit_id
-             WHERE si.sale_id = ?`,
-            [row.sale_id]
-          );
-          return {
-            ...row,
-            total_amount: Number(row.total_amount),
-            items: (items as any[]).map((i) => ({
-              product_name: i.product_name,
-              unit: i.unit,
-              quantity: Number(i.quantity),
-              unit_price: Number(i.unit_price),
-              subtotal: Number(i.subtotal),
-            })),
-          };
-        })
+      // Fetch all items in one query instead of N+1
+      const saleIds = (rows as any[]).map(r => r.sale_id);
+      const [allItems] = await pool.execute<any[]>(
+        `SELECT si.sale_id, si.quantity, si.unit_price, si.subtotal,
+                p.product_name,
+                COALESCE(u.abbreviation, '') AS unit
+         FROM sale_items si
+         JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
+         WHERE si.sale_id IN (${saleIds.length ? saleIds.map(() => '?').join(',') : '0'})`,
+        saleIds
       );
+
+      const itemsBySaleId: Record<number, any[]> = {};
+      for (const item of allItems) {
+        if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
+        itemsBySaleId[item.sale_id].push({
+          product_name: item.product_name,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+          subtotal: Number(item.subtotal),
+        });
+      }
+
+      const result = (rows as any[]).map(row => ({
+        ...row,
+        total_amount: Number(row.total_amount),
+        items: itemsBySaleId[row.sale_id] || [],
+      }));
 
       res.status(200).json(result);
     } catch (err) {
@@ -907,34 +932,40 @@ router.get(
          JOIN sales s  ON s.id  = sv.sale_id
          JOIN users u1 ON u1.id = sv.requested_by
          LEFT JOIN users u2 ON u2.id = sv.approved_by
-         ORDER BY sv.created_at DESC`
+         ORDER BY sv.created_at DESC
+         LIMIT 100`
       );
 
-      const result = await Promise.all(
-        (rows as any[]).map(async (row) => {
-          const [items] = await pool.execute<any[]>(
-            `SELECT si.quantity, si.unit_price, si.subtotal,
-                    p.product_name,
-                    COALESCE(u.abbreviation, '') AS unit
-             FROM sale_items si
-             JOIN products p ON p.id = si.product_id
-             LEFT JOIN units u ON u.id = p.unit_id
-             WHERE si.sale_id = ?`,
-            [row.sale_id]
-          );
-          return {
-            ...row,
-            total_amount: Number(row.total_amount),
-            items: (items as any[]).map((i) => ({
-              product_name: i.product_name,
-              unit: i.unit,
-              quantity: Number(i.quantity),
-              unit_price: Number(i.unit_price),
-              subtotal: Number(i.subtotal),
-            })),
-          };
-        })
+      // Fetch all items in one query instead of N+1
+      const saleIds = (rows as any[]).map(r => r.sale_id);
+      const [allItems] = await pool.execute<any[]>(
+        `SELECT si.sale_id, si.quantity, si.unit_price, si.subtotal,
+                p.product_name,
+                COALESCE(u.abbreviation, '') AS unit
+         FROM sale_items si
+         JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
+         WHERE si.sale_id IN (${saleIds.length ? saleIds.map(() => '?').join(',') : '0'})`,
+        saleIds
       );
+
+      const itemsBySaleId: Record<number, any[]> = {};
+      for (const item of allItems) {
+        if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
+        itemsBySaleId[item.sale_id].push({
+          product_name: item.product_name,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+          subtotal: Number(item.subtotal),
+        });
+      }
+
+      const result = (rows as any[]).map(row => ({
+        ...row,
+        total_amount: Number(row.total_amount),
+        items: itemsBySaleId[row.sale_id] || [],
+      }));
 
       res.status(200).json(result);
     } catch (err) {

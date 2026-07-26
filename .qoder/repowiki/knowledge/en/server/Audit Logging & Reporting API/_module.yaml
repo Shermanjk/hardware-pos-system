@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: server/audit_reporting
+title: Audit Logging & Reporting API
+scope:
+    - server/routes/auditLogs.ts
+    - server/routes/reports.ts
+    - server/utils/auditLogger.ts
+source_files: []
+depends_on: []
+related_to: []

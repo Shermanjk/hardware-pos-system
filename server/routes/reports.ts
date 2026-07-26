@@ -62,8 +62,7 @@ router.get("/", async (req: Request, res: Response) => {
         p.product_name,
         COALESCE(c.category_name, '—')  AS category,
         SUM(si.quantity)                AS units_sold,
-        COALESCE(SUM(si.subtotal), 0)   AS revenue,
-        si.unit_price
+        COALESCE(SUM(si.subtotal), 0)   AS revenue
       FROM sale_items si
       JOIN products  p ON p.id = si.product_id
       JOIN sales     s ON s.id = si.sale_id
@@ -72,7 +71,7 @@ router.get("/", async (req: Request, res: Response) => {
         AND s.void_status != 'voided'
         ${categoryFilter}
         ${cashierFilter.replace('s.', 's.')}
-      GROUP BY si.product_id, p.product_name, p.barcode, c.category_name, si.unit_price
+      GROUP BY si.product_id, p.product_name, p.barcode, c.category_name
       ORDER BY units_sold DESC
       LIMIT 20
     `, [date_from, date_to, ...categoryParams, ...cashierParams]);

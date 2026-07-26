@@ -1,0 +1,4 @@
+- Routing is declared declaratively with `wouter`'s `<Switch>` containing `<Route path="..." component={...} />` entries, with a fallback `<Route component={NotFound} />` at the end of each router.
+- Protected routes are consistently wrapped with `<ProtectedRoute allowedRoles={[...]}>` followed by `<PasswordChangeGuard>` before rendering the actual page component.
+- Cross-cutting concerns are applied as nested provider components around the entire router tree (ErrorBoundary → ThemeProvider → AuthProvider → TooltipProvider → Toaster → Router).
+- Module-scoped routers are extracted into dedicated functions (`ClerkRouter`, `AdminRouter`) that return a layout wrapper containing their own `<Switch>`.

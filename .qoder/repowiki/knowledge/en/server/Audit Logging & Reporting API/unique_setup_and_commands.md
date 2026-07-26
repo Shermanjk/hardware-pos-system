@@ -1,0 +1,1 @@
+No build or test commands are specific to this module; it relies on the project's existing Express server startup. The audit logs table (`audit_logs`) must exist with columns `action`, `performed_by_id`, `performed_by_username`, `target_user_id`, `target_username`, `entity_type`, `entity_id`, `previous_values`, `new_values`, `reason`, `metadata` before the routes will function.

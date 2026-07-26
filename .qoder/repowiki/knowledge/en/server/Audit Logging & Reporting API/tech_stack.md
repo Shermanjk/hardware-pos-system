@@ -1,0 +1,1 @@
+Express Router with TypeScript, MySQL via a shared `pool.execute` interface, Zod for query-parameter validation, and a typed `AuditAction` union used as the canonical action vocabulary across the system.

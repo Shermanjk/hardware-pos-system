@@ -53,7 +53,10 @@ async function startServer() {
   app.use("/api/suspended-sales", suspendedSalesRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
-  const staticPath = path.resolve(__dirname, "public");
+  // When bundled to server-dist/index.js, static files are at ../dist/public
+  const staticPath = fs.existsSync(path.resolve(__dirname, "../dist/public"))
+    ? path.resolve(__dirname, "../dist/public")
+    : path.resolve(__dirname, "public");
   if (fs.existsSync(staticPath)) {
     app.use(express.static(staticPath));
     app.get("*", (_req, res) => {

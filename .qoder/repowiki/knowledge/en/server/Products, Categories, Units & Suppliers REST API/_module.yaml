@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: server/products_catalog
+title: Products, Categories, Units & Suppliers REST API
+scope:
+    - server/routes/products.ts
+    - server/routes/categories.ts
+    - server/routes/units.ts
+    - server/routes/suppliers.ts
+source_files: []
+depends_on: []
+related_to: []

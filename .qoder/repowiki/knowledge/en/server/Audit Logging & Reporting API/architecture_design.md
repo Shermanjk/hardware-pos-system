@@ -1,0 +1,6 @@
+Three cohesive files form two concerns:
+- `server/utils/auditLogger.ts` is a pure utility that defines the `AuditAction` union type and `AuditEventParams` interface, then writes rows into the `audit_logs` table via the shared `pool`. Errors are caught and swallowed so audit failures never bubble up or roll back the caller's transaction.
+- `server/routes/auditLogs.ts` exposes `GET /api/audit-logs` behind `authenticate` + an inline `requireAdmin` guard; it validates pagination with a Zod schema and returns `{ entries, total, page, pageSize }` ordered by `created_at DESC`.
+- `server/routes/reports.ts` exposes `GET /api/reports` behind `authenticate` + `requireRole("Admin")`, aggregates multiple SQL queries (summary KPIs, daily breakdown, top products, per-cashier totals, VAT classification, inventory stock levels, and filter dropdowns) and returns a single JSON envelope keyed by `period`, `summary`, `daily_sales`, `top_products`, `by_cashier`, `vat_summary`, `inventory`, `low_stock`, `filters`, and `generated_at`.
+
+Dependency direction is one-way: routes depend on `../db.js` and `../middleware/*`; the audit logger depends only on `../db.js`. There is no cross-import between the two route files.

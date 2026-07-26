@@ -415,14 +415,6 @@ router.post("/purchase", async (req: Request, res: Response) => {
     const purchaseId: number = purchaseResult.insertId;
     await conn.commit();
 
-    console.log("[DEBUG] Commodity purchase submitted:", {
-      id: purchaseId,
-      product_id,
-      status: purchaseStatus,
-      quantity,
-      final_amount,
-    });
-
     // 7. Audit log for submission
     await logAuditEvent({
       action: "COMMODITY_PURCHASE_SUBMITTED",
@@ -482,14 +474,11 @@ router.post("/purchase", async (req: Request, res: Response) => {
 router.get("/purchases/pending", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
-  console.log("[DEBUG] Admin fetching pending commodity purchases...");
-
   try {
     // First check if status column has PENDING_APPROVAL values at all
     const [countCheck] = await pool.execute<any[]>(`
       SELECT status, COUNT(*) as cnt FROM commodity_purchases GROUP BY status
     `);
-    console.log("[DEBUG] Status counts:", countCheck);
 
     const [rows] = await pool.execute<any[]>(`
       SELECT
@@ -523,8 +512,6 @@ router.get("/purchases/pending", async (req: Request, res: Response) => {
       WHERE cp.status = 'PENDING_APPROVAL'
       ORDER BY cp.created_at ASC
     `);
-
-    console.log("[DEBUG] Found pending purchases:", rows.length);
 
     res.status(200).json(rows.map((r) => ({
       ...r,
@@ -816,7 +803,7 @@ router.get("/purchases/:id/payments", async (req: Request, res: Response) => {
 router.get("/purchases", async (req: Request, res: Response) => {
   if (!requireAdminOrClerk(req, res)) return;
 
-  const limit  = Math.max(1, parseInt((req.query.limit  as string) || "50", 10));
+  const limit  = Math.min(1000, Math.max(1, parseInt((req.query.limit  as string) || "50", 10)));
   const offset = Math.max(0, parseInt((req.query.offset as string) || "0",  10));
   const { product_id, date_from, date_to, payment_status, status } = req.query;
 
@@ -843,6 +830,9 @@ router.get("/purchases", async (req: Request, res: Response) => {
     where += " AND cp.status = ?";
     params.push(status);
   }
+
+  // Append LIMIT/OFFSET as parameterized values (best practice, avoids any interpolation path)
+  params.push(limit, offset);
 
   try {
     const [rows] = await pool.execute<any[]>(`
@@ -889,7 +879,7 @@ router.get("/purchases", async (req: Request, res: Response) => {
       LEFT JOIN users prep ON prep.id = cp.prepared_by
       ${where}
       ORDER BY cp.transaction_date DESC, cp.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
 
     res.status(200).json(rows.map((r) => ({
@@ -925,9 +915,9 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
   try {
     await conn.beginTransaction();
 
-    // 1. Lock the purchase row
+    // 1. Lock the purchase row — including payable_quantity for correct stock increment
     const [purchaseRows] = await conn.execute<any[]>(
-      "SELECT id, status, product_id, quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
+      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
       [purchaseId]
     );
     if (purchaseRows.length === 0) {
@@ -972,8 +962,12 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
       WHERE id = ?
     `, [req.user!.id, purchaseId]);
 
-    // 6. Increase inventory quantity exactly once
-    const newQty = Math.round((Number(product.current_qty) + Number(purchase.quantity)) * 1000) / 1000;
+    // 6. Increase inventory by the PAYABLE quantity (gross quantity - deducted_quantity)
+    //    Use payable_quantity if set, otherwise fall back to quantity for legacy records.
+    const payableQty = Number(purchase.payable_quantity ?? null) > 0 && Number(purchase.payable_quantity) <= Number(purchase.quantity)
+      ? Number(purchase.payable_quantity)
+      : Number(purchase.quantity);
+    const newQty = Math.round((Number(product.current_qty) + payableQty) * 1000) / 1000;
     await conn.execute(
       "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
       [newQty, purchase.product_id]
@@ -987,7 +981,7 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
       VALUES (?, 'Stock In', 'Commodity Purchase Approved', ?, ?, ?, ?, ?, ?)
     `, [
       purchase.product_id,
-      purchase.quantity,
+      payableQty,
       product.current_qty,
       newQty,
       `CP-${purchaseId}`,
@@ -1007,8 +1001,10 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
       newValues: {
         product_id: purchase.product_id,
         product_name: product.product_name,
-        quantity_added: Number(purchase.quantity),
-        new_stock_quantity: newQty,
+        quantity_received_gross: Number(purchase.quantity),
+        deducted_quantity:     Number(purchase.deducted_quantity ?? 0),
+        quantity_added:        payableQty,
+        new_stock_quantity:    newQty,
       },
     });
 
@@ -1017,6 +1013,8 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
       id: purchaseId,
       status: "APPROVED",
       new_stock_quantity: newQty,
+      payable_quantity:   payableQty,
+      deducted_quantity:  Number(purchase.deducted_quantity ?? 0),
     });
   } catch (err) {
     await conn.rollback();

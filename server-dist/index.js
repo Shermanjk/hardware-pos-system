@@ -1387,7 +1387,8 @@ router4.get(
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
          ${where}
-         ORDER BY s.created_at DESC`,
+         ORDER BY s.created_at DESC
+         LIMIT 200`,
         params
       );
       res.status(200).json(rows);
@@ -1416,31 +1417,33 @@ router4.get(
          LIMIT 50`,
         [req.user.id]
       );
-      const result = await Promise.all(
-        rows.map(async (row) => {
-          const [items] = await pool.execute(
-            `SELECT si.quantity, si.unit_price, si.subtotal,
-                    p.product_name,
-                    COALESCE(u.abbreviation, '') AS unit
-             FROM sale_items si
-             JOIN products p ON p.id = si.product_id
-             LEFT JOIN units u ON u.id = p.unit_id
-             WHERE si.sale_id = ?`,
-            [row.sale_id]
-          );
-          return {
-            ...row,
-            total_amount: Number(row.total_amount),
-            items: items.map((i) => ({
-              product_name: i.product_name,
-              unit: i.unit,
-              quantity: Number(i.quantity),
-              unit_price: Number(i.unit_price),
-              subtotal: Number(i.subtotal)
-            }))
-          };
-        })
+      const saleIds = rows.map((r) => r.sale_id);
+      const [allItems] = await pool.execute(
+        `SELECT si.sale_id, si.quantity, si.unit_price, si.subtotal,
+                p.product_name,
+                COALESCE(u.abbreviation, '') AS unit
+         FROM sale_items si
+         JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
+         WHERE si.sale_id IN (${saleIds.length ? saleIds.map(() => "?").join(",") : "0"})`,
+        saleIds
       );
+      const itemsBySaleId = {};
+      for (const item of allItems) {
+        if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
+        itemsBySaleId[item.sale_id].push({
+          product_name: item.product_name,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+          subtotal: Number(item.subtotal)
+        });
+      }
+      const result = rows.map((row) => ({
+        ...row,
+        total_amount: Number(row.total_amount),
+        items: itemsBySaleId[row.sale_id] || []
+      }));
       res.status(200).json(result);
     } catch (err) {
       console.error("[GET /api/sales/my-void-requests] Error:", err);
@@ -1465,33 +1468,36 @@ router4.get(
          JOIN sales s  ON s.id  = sv.sale_id
          JOIN users u1 ON u1.id = sv.requested_by
          LEFT JOIN users u2 ON u2.id = sv.approved_by
-         ORDER BY sv.created_at DESC`
+         ORDER BY sv.created_at DESC
+         LIMIT 100`
       );
-      const result = await Promise.all(
-        rows.map(async (row) => {
-          const [items] = await pool.execute(
-            `SELECT si.quantity, si.unit_price, si.subtotal,
-                    p.product_name,
-                    COALESCE(u.abbreviation, '') AS unit
-             FROM sale_items si
-             JOIN products p ON p.id = si.product_id
-             LEFT JOIN units u ON u.id = p.unit_id
-             WHERE si.sale_id = ?`,
-            [row.sale_id]
-          );
-          return {
-            ...row,
-            total_amount: Number(row.total_amount),
-            items: items.map((i) => ({
-              product_name: i.product_name,
-              unit: i.unit,
-              quantity: Number(i.quantity),
-              unit_price: Number(i.unit_price),
-              subtotal: Number(i.subtotal)
-            }))
-          };
-        })
+      const saleIds = rows.map((r) => r.sale_id);
+      const [allItems] = await pool.execute(
+        `SELECT si.sale_id, si.quantity, si.unit_price, si.subtotal,
+                p.product_name,
+                COALESCE(u.abbreviation, '') AS unit
+         FROM sale_items si
+         JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
+         WHERE si.sale_id IN (${saleIds.length ? saleIds.map(() => "?").join(",") : "0"})`,
+        saleIds
       );
+      const itemsBySaleId = {};
+      for (const item of allItems) {
+        if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
+        itemsBySaleId[item.sale_id].push({
+          product_name: item.product_name,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+          subtotal: Number(item.subtotal)
+        });
+      }
+      const result = rows.map((row) => ({
+        ...row,
+        total_amount: Number(row.total_amount),
+        items: itemsBySaleId[row.sale_id] || []
+      }));
       res.status(200).json(result);
     } catch (err) {
       console.error("[GET /api/sales/void-requests] Error:", err);
@@ -1776,9 +1782,10 @@ router5.post(
       });
       const [saleRows] = await conn.execute(
         `SELECT s.invoice_number, s.customer_name, u.full_name AS cashier_name
-         FROM sales s JOIN users u ON u.id = ?
+         FROM sales s
+         JOIN users u ON u.id = s.cashier_id
          WHERE s.id = ? LIMIT 1`,
-        [req.user.id, sale_id]
+        [sale_id]
       );
       const saleRow = saleRows[0];
       broadcastReturnRequest({
@@ -2068,37 +2075,40 @@ router5.patch(
       return;
     }
     const { resolution, item_condition } = parsed.data;
-    const [returnRows] = await pool.execute(
-      `SELECT r.id, r.return_number, r.status, r.resolution
-       FROM returns r
-       WHERE r.id = ? LIMIT 1`,
-      [id]
-    );
-    const returnRow = returnRows[0];
-    if (!returnRow) {
-      res.status(404).json({ message: "Return not found." });
-      return;
-    }
-    if (returnRow.status !== "approved") {
-      res.status(422).json({ message: "Return must be approved before resolution." });
-      return;
-    }
-    if (returnRow.resolution !== null) {
-      res.status(422).json({ message: "This return has already been resolved." });
-      return;
-    }
-    const [itemRows] = await pool.execute(
-      `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
-       FROM return_items ri
-       JOIN products p ON p.id = ri.product_id
-       WHERE ri.return_id = ?`,
-      [id]
-    );
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      const [returnRows] = await conn.execute(
+        `SELECT r.id, r.return_number, r.status, r.resolution
+         FROM returns r
+         WHERE r.id = ? LIMIT 1 FOR UPDATE`,
+        [id]
+      );
+      const returnRow = returnRows[0];
+      if (!returnRow) {
+        await conn.rollback();
+        res.status(404).json({ message: "Return not found." });
+        return;
+      }
+      if (returnRow.status !== "approved") {
+        await conn.rollback();
+        res.status(422).json({ message: "Return must be approved before resolution." });
+        return;
+      }
+      if (returnRow.resolution !== null) {
+        await conn.rollback();
+        res.status(422).json({ message: "This return has already been resolved." });
+        return;
+      }
+      const [itemRows] = await conn.execute(
+        `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
+         FROM return_items ri
+         JOIN products p ON p.id = ri.product_id
+         WHERE ri.return_id = ?`,
+        [id]
+      );
+      let refund_amount = 0;
       if (resolution === "refund") {
-        let refund_amount = 0;
         for (const item of itemRows) {
           refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
           if (item_condition === "good") {
@@ -2124,19 +2134,6 @@ router5.patch(
            WHERE id = ?`,
           [item_condition, refund_amount.toFixed(2), id]
         );
-        await conn.execute(
-          `INSERT INTO activity_logs (user_id, action, reference)
-           VALUES (?, 'return_refund', ?)`,
-          [req.user.id, returnRow.return_number]
-        );
-        await logAuditEvent({
-          action: "REFUND_PROCESSED",
-          performedById: req.user.id,
-          performedByUsername: req.user.username,
-          entityType: "returns",
-          entityId: id,
-          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition }
-        });
       } else {
         for (const item of itemRows) {
           const [stockRows] = await conn.execute(
@@ -2144,10 +2141,10 @@ router5.patch(
             [item.product_id]
           );
           const stock = stockRows[0];
-          if (!stock || stock.quantity === 0) {
+          if (!stock || Number(stock.quantity) < Number(item.quantity_returned)) {
             await conn.rollback();
             res.status(409).json({
-              message: `Replacement cannot be processed \u2014 no available stock for: ${item.product_name}.`
+              message: `Replacement cannot be processed \u2014 insufficient stock for: ${item.product_name}. Available: ${stock ? Number(stock.quantity) : 0}, Required: ${item.quantity_returned}.`
             });
             return;
           }
@@ -2185,7 +2182,24 @@ router5.patch(
            WHERE id = ?`,
           [item_condition, id]
         );
-        await conn.execute(
+      }
+      await conn.commit();
+      if (resolution === "refund") {
+        await pool.execute(
+          `INSERT INTO activity_logs (user_id, action, reference)
+           VALUES (?, 'return_refund', ?)`,
+          [req.user.id, returnRow.return_number]
+        );
+        await logAuditEvent({
+          action: "REFUND_PROCESSED",
+          performedById: req.user.id,
+          performedByUsername: req.user.username,
+          entityType: "returns",
+          entityId: id,
+          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition }
+        });
+      } else {
+        await pool.execute(
           `INSERT INTO activity_logs (user_id, action, reference)
            VALUES (?, 'return_replacement', ?)`,
           [req.user.id, returnRow.return_number]
@@ -2199,7 +2213,6 @@ router5.patch(
           newValues: { return_number: returnRow.return_number, item_condition }
         });
       }
-      await conn.commit();
       const finalReturn = await fetchReturnSummary(conn, id);
       const finalItems = await fetchReturnItems(conn, id);
       res.status(200).json({ ...finalReturn, items: finalItems });
@@ -3319,7 +3332,8 @@ router12.get("/", async (_req, res) => {
       SELECT
         COUNT(*)                                                                AS total_products,
         SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END)                          AS out_of_stock,
-        SUM(CASE WHEN quantity > 0 AND quantity <= reorder_level THEN 1 ELSE 0 END) AS low_stock
+        SUM(CASE WHEN quantity > 0 AND quantity <= FLOOR(reorder_level * 0.5) THEN 1 ELSE 0 END) AS critical,
+        SUM(CASE WHEN quantity > FLOOR(reorder_level * 0.5) AND quantity <= reorder_level THEN 1 ELSE 0 END) AS low_stock
       FROM products
       WHERE status = 'Active'
     `);
@@ -3399,6 +3413,7 @@ router12.get("/", async (_req, res) => {
         monthly_revenue: Number(monthRows[0].monthly_revenue),
         total_products: Number(productRows[0].total_products),
         out_of_stock: Number(productRows[0].out_of_stock),
+        critical: Number(productRows[0].critical),
         low_stock: Number(productRows[0].low_stock),
         total_suppliers: Number(supplierRows[0].total_suppliers),
         pending_returns: Number(returnsRows[0].pending_returns)
@@ -3468,8 +3483,7 @@ router13.get("/", async (req, res) => {
         p.product_name,
         COALESCE(c.category_name, '\u2014')  AS category,
         SUM(si.quantity)                AS units_sold,
-        COALESCE(SUM(si.subtotal), 0)   AS revenue,
-        si.unit_price
+        COALESCE(SUM(si.subtotal), 0)   AS revenue
       FROM sale_items si
       JOIN products  p ON p.id = si.product_id
       JOIN sales     s ON s.id = si.sale_id
@@ -3478,7 +3492,7 @@ router13.get("/", async (req, res) => {
         AND s.void_status != 'voided'
         ${categoryFilter}
         ${cashierFilter.replace("s.", "s.")}
-      GROUP BY si.product_id, p.product_name, p.barcode, c.category_name, si.unit_price
+      GROUP BY si.product_id, p.product_name, p.barcode, c.category_name
       ORDER BY units_sold DESC
       LIMIT 20
     `, [date_from, date_to, ...categoryParams, ...cashierParams]);
@@ -4069,13 +4083,6 @@ router15.post("/purchase", async (req, res) => {
     ]);
     const purchaseId = purchaseResult.insertId;
     await conn.commit();
-    console.log("[DEBUG] Commodity purchase submitted:", {
-      id: purchaseId,
-      product_id,
-      status: purchaseStatus,
-      quantity,
-      final_amount
-    });
     await logAuditEvent({
       action: "COMMODITY_PURCHASE_SUBMITTED",
       performedById: req.user.id,
@@ -4130,12 +4137,10 @@ router15.post("/purchase", async (req, res) => {
 });
 router15.get("/purchases/pending", async (req, res) => {
   if (!requireAdmin7(req, res)) return;
-  console.log("[DEBUG] Admin fetching pending commodity purchases...");
   try {
     const [countCheck] = await pool.execute(`
       SELECT status, COUNT(*) as cnt FROM commodity_purchases GROUP BY status
     `);
-    console.log("[DEBUG] Status counts:", countCheck);
     const [rows] = await pool.execute(`
       SELECT
         cp.id,
@@ -4168,7 +4173,6 @@ router15.get("/purchases/pending", async (req, res) => {
       WHERE cp.status = 'PENDING_APPROVAL'
       ORDER BY cp.created_at ASC
     `);
-    console.log("[DEBUG] Found pending purchases:", rows.length);
     res.status(200).json(rows.map((r) => ({
       ...r,
       quantity: Number(r.quantity),
@@ -5591,7 +5595,7 @@ async function startServer() {
   app.use("/api/commodity-prices", commodityPrices_default);
   app.use("/api/external-processing", externalProcessing_default);
   app.use("/api/suspended-sales", suspendedSales_default);
-  const staticPath = path.resolve(__dirname, "public");
+  const staticPath = fs.existsSync(path.resolve(__dirname, "../dist/public")) ? path.resolve(__dirname, "../dist/public") : path.resolve(__dirname, "public");
   if (fs.existsSync(staticPath)) {
     app.use(express.static(staticPath));
     app.get("*", (_req, res) => {
