@@ -634,7 +634,7 @@ export default function ExternalProcessing() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [showManageCompanies, setShowManageCompanies] = useState(false);
 
-  const TabButton = ({ tab, icon: Icon, label }: { tab: TabType; icon: any; label: string }) => (
+  const TabButton = ({ tab, icon: Icon, label }: { tab: TabType; icon: React.ElementType; label: string }) => (
     <button
       onClick={() => setActiveTab(tab)}
       className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${

@@ -12,6 +12,8 @@ export type AuditAction =
   // ── Sales ───────────────────────────────────────────────────────────────────
   | "SALE_CREATED"
   | "SALE_COMPLETED"
+  | "SALE_PAYMENT_STATUS_FIXED"
+  | "RECEIPT_REPRINTED"
   // ── Void / cancellation ─────────────────────────────────────────────────────
   | "SALE_VOID_REQUESTED"
   | "SALE_VOIDED"

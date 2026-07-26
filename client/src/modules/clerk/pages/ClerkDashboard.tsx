@@ -149,7 +149,8 @@ export default function ClerkDashboard() {
           }))
         );
       } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to fetch dashboard data:", message.replace(/[\r\n\t]/g, " "));
       } finally {
         setLoading(false);
       }

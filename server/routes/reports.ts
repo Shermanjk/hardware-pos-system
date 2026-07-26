@@ -7,13 +7,21 @@ const router = Router();
 router.use(authenticate);
 router.use(requireRole("Admin"));
 
-// ─── GET /api/reports — full report data with date range ──────────────────────
+// ─── GET /api/reports — full report data with date range & filters ───────────
 router.get("/", async (req: Request, res: Response) => {
   try {
     const {
       date_from = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
       date_to   = new Date().toISOString().slice(0, 10),
+      report_type = "full",
+      category_id,
+      cashier_id,
     } = req.query as Record<string, string>;
+
+    const categoryFilter = category_id ? "AND p.category_id = ?" : "";
+    const categoryParams = category_id ? [Number(category_id)] : [];
+    const cashierFilter = cashier_id ? "AND s.cashier_id = ?" : "";
+    const cashierParams = cashier_id ? [Number(cashier_id)] : [];
 
     // ── 1. Summary KPIs — exclude voided sales ───────────────────────────────
     const [summaryRows] = await pool.execute<any[]>(`
@@ -28,7 +36,8 @@ router.get("/", async (req: Request, res: Response) => {
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
         AND void_status != 'voided'
-    `, [date_from, date_to]);
+        ${cashierFilter}
+    `, [date_from, date_to, ...cashierParams]);
 
     // ── 2. Daily sales breakdown — exclude voided ────────────────────────────
     const [dailyRows] = await pool.execute<any[]>(`
@@ -41,9 +50,10 @@ router.get("/", async (req: Request, res: Response) => {
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
         AND void_status != 'voided'
+        ${cashierFilter}
       GROUP BY DATE(created_at)
       ORDER BY sale_date ASC
-    `, [date_from, date_to]);
+    `, [date_from, date_to, ...cashierParams]);
 
     // ── 3. Top products — exclude voided sales ───────────────────────────────
     const [topProductRows] = await pool.execute<any[]>(`
@@ -60,27 +70,30 @@ router.get("/", async (req: Request, res: Response) => {
       LEFT JOIN categories c ON c.id = p.category_id
       WHERE DATE(s.created_at) BETWEEN ? AND ?
         AND s.void_status != 'voided'
+        ${categoryFilter}
+        ${cashierFilter.replace('s.', 's.')}
       GROUP BY si.product_id, p.product_name, p.barcode, c.category_name, si.unit_price
       ORDER BY units_sold DESC
       LIMIT 20
-    `, [date_from, date_to]);
+    `, [date_from, date_to, ...categoryParams, ...cashierParams]);
 
     // ── 4. Sales per cashier — exclude voided ────────────────────────────────
     const [cashierRows] = await pool.execute<any[]>(`
       SELECT
         u.full_name                       AS cashier,
+        u.id                              AS cashier_id,
         COUNT(s.id)                       AS transactions,
         COALESCE(SUM(s.total_amount), 0)  AS revenue
       FROM sales s
       JOIN users u ON u.id = s.cashier_id
       WHERE DATE(s.created_at) BETWEEN ? AND ?
         AND s.void_status != 'voided'
+        ${cashierFilter}
       GROUP BY s.cashier_id, u.full_name
       ORDER BY revenue DESC
-    `, [date_from, date_to]);
+    `, [date_from, date_to, ...cashierParams]);
 
-    // ── 5. VAT Classification Summary (Implementation 5) ────────────────────
-    // Summarizes from sale_items.tax_type — historical values are preserved.
+    // ── 5. VAT Classification Summary ────────────────────────────────────────
     const [vatSummaryRows] = await pool.execute<any[]>(`
       SELECT
         si.tax_type,
@@ -91,10 +104,10 @@ router.get("/", async (req: Request, res: Response) => {
       JOIN sales s ON s.id = si.sale_id
       WHERE DATE(s.created_at) BETWEEN ? AND ?
         AND s.void_status != 'voided'
+        ${cashierFilter.replace('s.', 's.')}
       GROUP BY si.tax_type
-    `, [date_from, date_to]);
+    `, [date_from, date_to, ...cashierParams]);
 
-    // Build structured VAT summary
     const vatMap: Record<string, { taxable_sales: number; vat_amount: number; gross_amount: number }> = {
       VATABLE:     { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
       VAT_EXEMPT:  { taxable_sales: 0, vat_amount: 0, gross_amount: 0 },
@@ -147,12 +160,32 @@ router.get("/", async (req: Request, res: Response) => {
       LEFT JOIN suppliers  s ON s.id = p.supplier_id
       LEFT JOIN units      u ON u.id = p.unit_id
       WHERE p.status = 'Active'
+        ${categoryFilter.replace('p.', 'p.')}
       ORDER BY p.product_name ASC
-    `);
+    `, [...categoryParams]);
 
     const lowStockRows = (inventoryRows as any[]).filter(
       (r) => r.stock_status !== "In Stock"
     );
+
+    // ── 7. Get available cashiers for filter dropdown ────────────────────────
+    const [cashierListRows] = await pool.execute<any[]>(`
+      SELECT DISTINCT u.id, u.full_name
+      FROM sales s
+      JOIN users u ON u.id = s.cashier_id
+      WHERE DATE(s.created_at) BETWEEN ? AND ?
+        AND s.void_status != 'voided'
+      ORDER BY u.full_name ASC
+    `, [date_from, date_to]);
+
+    // ── 8. Get available categories for filter dropdown ──────────────────────
+    const [categoryListRows] = await pool.execute<any[]>(`
+      SELECT DISTINCT c.id, c.category_name
+      FROM products p
+      JOIN categories c ON c.id = p.category_id
+      WHERE p.status = 'Active'
+      ORDER BY c.category_name ASC
+    `);
 
     res.status(200).json({
       period:       { date_from, date_to },
@@ -163,6 +196,10 @@ router.get("/", async (req: Request, res: Response) => {
       vat_summary,
       inventory:    inventoryRows,
       low_stock:    lowStockRows,
+      filters: {
+        cashiers: cashierListRows,
+        categories: categoryListRows,
+      },
       generated_at: new Date().toISOString(),
     });
   } catch (err) {

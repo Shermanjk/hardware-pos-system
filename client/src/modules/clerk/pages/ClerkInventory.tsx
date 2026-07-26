@@ -271,7 +271,8 @@ export default function ClerkInventory() {
         setCategories(["all", ...categoriesData.map(c => c.category_name)]);
         setSuppliers(["all", ...suppliersData.map(s => s.supplier_name)]);
       } catch (err) {
-        console.error("Failed to fetch inventory:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to fetch inventory:", message.replace(/[\r\n\t]/g, " "));
         toast.error("Failed to load inventory");
       } finally {
         setLoading(false);

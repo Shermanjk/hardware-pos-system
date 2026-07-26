@@ -131,7 +131,8 @@ export default function ClerkStockCount() {
           }))
         );
       } catch (err) {
-        console.error(err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to load products:", message.replace(/[\r\n\t]/g, " "));
         toast.error("Failed to load products");
       } finally {
         setLoading(false);
@@ -204,7 +205,8 @@ export default function ClerkStockCount() {
         })
       );
     } catch (err) {
-      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to save stock count:", message.replace(/[\r\n\t]/g, " "));
       toast.error("Failed to save stock count");
     }
   };

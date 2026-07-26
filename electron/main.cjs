@@ -30,20 +30,42 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  serverProcess = spawn('node', ['dist/index.js'], {
-    cwd: path.join(__dirname, '..'),
+  const appRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked')
+    : path.join(__dirname, '..');
+
+  const logFile = require('fs').createWriteStream(path.join(appRoot, 'app.log'), { flags: 'a' });
+  logFile.write(`[${new Date().toISOString()}] appRoot: ${appRoot}\n`);
+
+  serverProcess = spawn('node', ['server-dist/index.js'], {
+    cwd: appRoot,
     env: { ...process.env, NODE_ENV: 'production' },
-    stdio: 'ignore',
+    stdio: ['ignore', logFile, logFile],
   });
 
-  serverProcess.on('error', () => {});
+  serverProcess.on('error', (err) => {
+    logFile.write(`[${new Date().toISOString()}] Server error: ${err.message}\n`);
+  });
 
   serverProcess.on('exit', (code) => {
-    if (code !== 0) createWindow();
+    logFile.write(`[${new Date().toISOString()}] Server exited with code: ${code}\n`);
   });
 
-  setTimeout(createWindow, 2000);
+  waitForServer(3001, createWindow);
 });
+
+function waitForServer(port, callback, retries = 20) {
+  const net = require('net');
+  const client = new net.Socket();
+  client.connect(port, '127.0.0.1', () => {
+    client.destroy();
+    callback();
+  });
+  client.on('error', () => {
+    client.destroy();
+    if (retries > 0) setTimeout(() => waitForServer(port, callback, retries - 1), 500);
+  });
+}
 
 app.on('window-all-closed', () => {
   if (serverProcess) serverProcess.kill();

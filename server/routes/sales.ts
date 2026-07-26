@@ -21,6 +21,10 @@ const createSaleSchema = z.object({
   total_amount:     z.number().min(0),
   cash_tendered:    z.number().positive(),
   change_amount:    z.number().min(0),
+  // client_transaction_id provides idempotency — if the same key is sent twice,
+  // the second request returns the existing sale instead of creating a duplicate.
+  // This prevents duplicate sales after network retry, browser refresh, or power outage.
+  client_transaction_id: z.string().min(1).optional(),
   items: z.array(z.object({
     product_id: z.number().int().positive(),
     quantity:   z.number().int().positive(),
@@ -44,6 +48,27 @@ const voidDecisionSchema = z.object({
 });
 
 // ─── POST / — Save a completed sale ──────────────────────────────────────────
+// CRITICAL ORDER OF OPERATIONS (power-outage safe):
+//   1. Validate input
+//   2. Check idempotency (client_transaction_id) — return existing sale if duplicate
+//   3. Begin DB transaction
+//   4. Lock product rows (SELECT ... FOR UPDATE)
+//   5. Check stock availability
+//   6. Calculate all values from DB (never trust frontend)
+//   7. Generate invoice number (concurrency-safe, row-locked)
+//   8. Insert sale row (payment_status = 'pending')
+//   9. Insert sale_items
+//  10. Deduct inventory
+//  11. Log inventory changes
+//  12. COMMIT transaction (all-or-nothing)
+//  13. Update payment_status to 'completed' (separate transaction)
+//  14. Return success to client
+//  15. Client prints receipt
+//  16. Client calls PATCH /:id/mark-receipt-printed to mark receipt_printed = 1
+//
+// The receipt printer is NOT the source of truth. The database is.
+// If power fails after COMMIT but before receipt prints, the sale is still valid.
+// The cashier can reprint the receipt after restart.
 router.post(
   "/",
   authenticate,
@@ -61,13 +86,71 @@ router.post(
 
     const {
       customer_name, customer_address, customer_tin,
-      subtotal, vat_amount, total_amount,
-      cash_tendered, change_amount, items,
+      cash_tendered, items,
     } = parsed.data;
+
+    // ── IDEMPOTENCY CHECK ─────────────────────────────────────────────────────
+    // If client_transaction_id is provided, check if a sale with this key already exists.
+    // This prevents duplicate sales from retried requests after network failure,
+    // browser refresh, or power outage recovery.
+    const clientTxnId = parsed.data.client_transaction_id;
+    if (clientTxnId) {
+      try {
+        const [existing] = await pool.execute<any[]>(
+          `SELECT id, invoice_number, subtotal, vat_amount, total_amount, change_amount,
+                  payment_status, receipt_printed
+           FROM sales WHERE client_transaction_id = ? LIMIT 1`,
+          [clientTxnId]
+        );
+        if (existing.length > 0) {
+          const sale = existing[0];
+          // Return the existing sale — this is a safe retry, not a duplicate
+          console.log(`[IDEMPOTENCY] Duplicate client_transaction_id: ${clientTxnId}, returning existing sale ${sale.invoice_number}`);
+          
+          // Fetch the items for this sale
+          const [itemRows] = await pool.execute<any[]>(
+            `SELECT product_id, tax_type, taxable_amount, vat_amount, subtotal AS line_subtotal
+             FROM sale_items WHERE sale_id = ?`,
+            [sale.id]
+          );
+
+          res.status(200).json({
+            id: sale.id,
+            invoice_number: sale.invoice_number,
+            subtotal: Number(sale.subtotal),
+            vat_amount: Number(sale.vat_amount),
+            total_amount: Number(sale.total_amount),
+            change_amount: Number(sale.change_amount),
+            payment_status: sale.payment_status,
+            receipt_printed: sale.receipt_printed === 1 || sale.receipt_printed === true,
+            items: itemRows.map((r: any) => ({
+              product_id: r.product_id,
+              tax_type: r.tax_type,
+              taxable_amount: Number(r.taxable_amount),
+              vat_amount: Number(r.vat_amount),
+              line_subtotal: Number(r.line_subtotal),
+            })),
+            // Flag to indicate this is a duplicate/idempotent response
+            _idempotent: true,
+          });
+          return;
+        }
+      } catch (err) {
+        // If the column doesn't exist yet (pre-migration), just continue
+        console.warn("[IDEMPOTENCY] Check failed (column may not exist yet):", err);
+      }
+    }
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      // ── 0. Read tax_rate from store_settings ───────────────────────────────────
+      const [settingsRows] = await conn.execute<any[]>(
+        `SELECT tax_rate, vat_registered FROM store_settings WHERE id = 1 LIMIT 1`
+      );
+      const dbTaxRate   = Number(settingsRows[0]?.tax_rate ?? 12);
+      const dbVatActive = settingsRows[0]?.vat_registered === true || settingsRows[0]?.vat_registered === 1;
 
       // ── 1. Fetch DB product data + check stock (row-level lock) ───────────────
       const productData: Record<number, {
@@ -105,10 +188,11 @@ router.post(
         const unit_price  = p.selling_price;
         const line_subtotal = Math.round(unit_price * item.quantity * 100) / 100;
         const taxType     = p.tax_type;
-        const isVatable   = taxType === "VATABLE";
-        const taxRate     = isVatable ? 12 : 0;
+        const isVatable   = taxType === "VATABLE" && dbVatActive;
+        const taxRate     = isVatable ? dbTaxRate : 0;
+        const taxDivisor  = 1 + (taxRate / 100);
         const taxableAmt  = isVatable
-          ? Math.round((line_subtotal / 1.12) * 100) / 100
+          ? Math.round((line_subtotal / taxDivisor) * 100) / 100
           : line_subtotal;
         const vatAmt      = isVatable
           ? Math.round((line_subtotal - taxableAmt) * 100) / 100
@@ -135,11 +219,14 @@ router.post(
       const invoice_number = await generateInvoiceNumber(conn);
 
       // ── 5. Insert the sale row using backend-calculated totals ────────────────
+      // payment_status starts as 'pending' — it will be updated to 'completed'
+      // after the transaction commits successfully.
       const [saleResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount,
+            payment_status, client_transaction_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [
           invoice_number,
           customer_name,
@@ -151,6 +238,7 @@ router.post(
           calc_total_amount,
           cash_tendered,
           calc_change >= 0 ? calc_change : 0,
+          clientTxnId ?? null,
         ]
       );
       const sale_id: number = saleResult.insertId;
@@ -180,9 +268,27 @@ router.post(
         );
       }
 
+      // ── 7. COMMIT — all-or-nothing ───────────────────────────────────────────
+      // If power fails here, the entire transaction is rolled back.
+      // No sale, no inventory deduction, no invoice number consumed.
       await conn.commit();
 
-      // ── 7. Audit log (non-fatal, outside transaction) ─────────────────────────
+      // ── 8. Update payment_status to 'completed' (post-commit) ─────────────────
+      // This is done in a separate, simple UPDATE so that if the sale row exists
+      // with payment_status='pending', we know the transaction committed but
+      // something failed after (e.g., response not sent, receipt not printed).
+      try {
+        await pool.execute(
+          `UPDATE sales SET payment_status = 'completed' WHERE id = ? AND payment_status = 'pending'`,
+          [sale_id]
+        );
+      } catch (updateErr) {
+        // Non-fatal: the sale is still valid, just the status flag failed.
+        // The recovery endpoint can fix this later.
+        console.warn(`[SALES] Failed to update payment_status for sale ${sale_id}:`, updateErr);
+      }
+
+      // ── 9. Audit log (non-fatal, outside transaction) ─────────────────────────
       await logAuditEvent({
         action: "SALE_COMPLETED",
         performedById: req.user!.id,
@@ -199,6 +305,8 @@ router.post(
         vat_amount:    calc_vat_amount,
         total_amount:  calc_total_amount,
         change_amount: calc_change >= 0 ? calc_change : 0,
+        payment_status: "completed",
+        receipt_printed: false,
         // Per-item tax snapshot — used by the receipt for authoritative VAT breakdown
         items: calcItems.map((ci) => ({
           product_id:     ci.product_id,
@@ -212,6 +320,182 @@ router.post(
       await conn.rollback();
       console.error("[POST /api/sales] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
+// ─── PATCH /:id/mark-receipt-printed — Mark receipt as printed ───────────────
+// Called by the client AFTER the receipt has been successfully printed.
+// This is a separate call so that a printer failure does not affect the sale.
+router.patch(
+  "/:id/mark-receipt-printed",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const saleId = Number(req.params.id);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      res.status(400).json({ message: "Invalid sale ID." });
+      return;
+    }
+
+    try {
+      const [result] = await pool.execute<any>(
+        `UPDATE sales SET receipt_printed = 1 WHERE id = ? AND receipt_printed = 0`,
+        [saleId]
+      );
+
+      if (result.affectedRows === 0) {
+        // Either the sale doesn't exist or it was already marked as printed
+        const [check] = await pool.execute<any[]>(
+          `SELECT id, receipt_printed FROM sales WHERE id = ? LIMIT 1`,
+          [saleId]
+        );
+        if (check.length === 0) {
+          res.status(404).json({ message: "Sale not found." });
+          return;
+        }
+        // Already printed — this is fine, idempotent
+        res.status(200).json({ message: "Receipt already marked as printed.", receipt_printed: true });
+        return;
+      }
+
+      res.status(200).json({ message: "Receipt marked as printed.", receipt_printed: true });
+    } catch (err) {
+      console.error("[PATCH /api/sales/:id/mark-receipt-printed] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
+// ─── GET /recovery/pending — Find sales with pending payment_status ──────────
+// Used after system restart to find sales that may need recovery.
+router.get(
+  "/recovery/pending",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      // Find sales where payment_status is still 'pending' (transaction committed
+      // but the post-commit update failed)
+      const [pendingSales] = await pool.execute<any[]>(
+        `SELECT s.id, s.invoice_number, s.customer_name, s.total_amount,
+                s.cash_tendered, s.change_amount, s.payment_status, s.receipt_printed,
+                s.created_at, u.full_name AS cashier_name
+         FROM sales s
+         JOIN users u ON u.id = s.cashier_id
+         WHERE s.payment_status = 'pending'
+         ORDER BY s.created_at DESC
+         LIMIT 50`
+      );
+
+      // Also find sales where payment is completed but receipt not printed
+      const [unprintedSales] = await pool.execute<any[]>(
+        `SELECT s.id, s.invoice_number, s.customer_name, s.total_amount,
+                s.cash_tendered, s.change_amount, s.payment_status, s.receipt_printed,
+                s.created_at, u.full_name AS cashier_name
+         FROM sales s
+         JOIN users u ON u.id = s.cashier_id
+         WHERE s.payment_status = 'completed' AND s.receipt_printed = 0
+         ORDER BY s.created_at DESC
+         LIMIT 50`
+      );
+
+      res.status(200).json({
+        pending_payment: pendingSales.map((r: any) => ({
+          ...r,
+          total_amount: Number(r.total_amount),
+          cash_tendered: Number(r.cash_tendered),
+          change_amount: Number(r.change_amount),
+        })),
+        completed_unprinted: unprintedSales.map((r: any) => ({
+          ...r,
+          total_amount: Number(r.total_amount),
+          cash_tendered: Number(r.cash_tendered),
+          change_amount: Number(r.change_amount),
+        })),
+      });
+    } catch (err) {
+      console.error("[GET /api/sales/recovery/pending] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
+// ─── PATCH /recovery/:id/fix-payment-status — Fix a stuck sale ───────────────
+// After verifying that a sale with payment_status='pending' actually committed
+// (has sale_items, inventory was deducted), an admin can fix the status.
+router.patch(
+  "/recovery/:id/fix-payment-status",
+  authenticate,
+  requireRole("Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const saleId = Number(req.params.id);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      res.status(400).json({ message: "Invalid sale ID." });
+      return;
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Lock the sale row
+      const [saleRows] = await conn.execute<any[]>(
+        `SELECT id, invoice_number, payment_status, total_amount
+         FROM sales WHERE id = ? FOR UPDATE`,
+        [saleId]
+      );
+      if (saleRows.length === 0) {
+        await conn.rollback();
+        res.status(404).json({ message: "Sale not found." });
+        return;
+      }
+
+      const sale = saleRows[0];
+      if (sale.payment_status !== "pending") {
+        await conn.rollback();
+        res.status(422).json({ message: `Sale ${sale.invoice_number} already has payment_status: ${sale.payment_status}` });
+        return;
+      }
+
+      // Verify that sale_items exist (sale was fully committed)
+      const [itemCheck] = await conn.execute<any[]>(
+        `SELECT COUNT(*) AS cnt FROM sale_items WHERE sale_id = ?`,
+        [saleId]
+      );
+      if (itemCheck[0].cnt === 0) {
+        await conn.rollback();
+        res.status(422).json({ message: "Sale has no items. This sale was not fully committed. Consider deleting it." });
+        return;
+      }
+
+      // Fix the payment status
+      await conn.execute(
+        `UPDATE sales SET payment_status = 'completed' WHERE id = ?`,
+        [saleId]
+      );
+
+      await conn.commit();
+
+      await logAuditEvent({
+        action: "SALE_PAYMENT_STATUS_FIXED",
+        performedById: req.user!.id,
+        performedByUsername: req.user!.username,
+        entityType: "sales",
+        entityId: saleId,
+        newValues: { invoice_number: sale.invoice_number, payment_status: "completed" },
+      });
+
+      res.status(200).json({
+        message: `Sale ${sale.invoice_number} payment status fixed to 'completed'.`,
+        invoice_number: sale.invoice_number,
+      });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[PATCH /api/sales/recovery/:id/fix-payment-status] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
     } finally {
       conn.release();
     }
@@ -498,6 +782,57 @@ router.patch(
   }
 );
 
+// ─── GET / — List / search sales ─────────────────────────────────────────────
+router.get(
+  "/",
+  authenticate,
+  requireRole("Admin", "Cashier"),
+  async (req: Request, res: Response): Promise<void> => {
+    const { invoice_number, customer_name, date_from, date_to } = req.query as Record<string, string | undefined>;
+
+    try {
+      const conditions: string[] = [];
+      const params: string[] = [];
+
+      if (invoice_number) {
+        conditions.push("s.invoice_number LIKE ?");
+        params.push(`%${invoice_number}%`);
+      }
+      if (customer_name) {
+        conditions.push("s.customer_name LIKE ?");
+        params.push(`%${customer_name}%`);
+      }
+      if (date_from) {
+        conditions.push("DATE(s.created_at) >= ?");
+        params.push(date_from);
+      }
+      if (date_to) {
+        conditions.push("DATE(s.created_at) <= ?");
+        params.push(date_to);
+      }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const [rows] = await pool.execute<any[]>(
+        `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
+                s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
+                s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
+                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
+         FROM sales s
+         JOIN users u ON u.id = s.cashier_id
+         ${where}
+         ORDER BY s.created_at DESC`,
+        params
+      );
+
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/sales] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    }
+  }
+);
+
 // ─── GET /my-void-requests — Cashier: list their own void requests ───────────
 router.get(
   "/my-void-requests",
@@ -622,7 +957,7 @@ router.get(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
                 s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
-                s.change_amount, s.void_status, s.created_at
+                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
          WHERE s.invoice_number = ?
@@ -662,6 +997,8 @@ router.get(
         total_amount:  Number(sale.total_amount),
         cash_tendered: Number(sale.cash_tendered),
         change_amount: Number(sale.change_amount),
+        payment_status: sale.payment_status,
+        receipt_printed: sale.receipt_printed === 1 || sale.receipt_printed === true,
         items: itemRows.map((r: any) => ({
           ...r,
           unit_price:      Number(r.unit_price),
@@ -674,57 +1011,6 @@ router.get(
       });
     } catch (err) {
       console.error("[GET /api/sales/:invoiceNumber] Error:", err);
-      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
-    }
-  }
-);
-
-// ─── GET / — List / search sales ─────────────────────────────────────────────
-router.get(
-  "/",
-  authenticate,
-  requireRole("Admin", "Cashier"),
-  async (req: Request, res: Response): Promise<void> => {
-    const { invoice_number, customer_name, date_from, date_to } = req.query as Record<string, string | undefined>;
-
-    try {
-      const conditions: string[] = [];
-      const params: string[] = [];
-
-      if (invoice_number) {
-        conditions.push("s.invoice_number LIKE ?");
-        params.push(`%${invoice_number}%`);
-      }
-      if (customer_name) {
-        conditions.push("s.customer_name LIKE ?");
-        params.push(`%${customer_name}%`);
-      }
-      if (date_from) {
-        conditions.push("DATE(s.created_at) >= ?");
-        params.push(date_from);
-      }
-      if (date_to) {
-        conditions.push("DATE(s.created_at) <= ?");
-        params.push(date_to);
-      }
-
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
-      const [rows] = await pool.execute<any[]>(
-        `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
-                s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
-                s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
-                s.change_amount, s.void_status, s.created_at
-         FROM sales s
-         JOIN users u ON u.id = s.cashier_id
-         ${where}
-         ORDER BY s.created_at DESC`,
-        params
-      );
-
-      res.status(200).json(rows);
-    } catch (err) {
-      console.error("[GET /api/sales] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     }
   }

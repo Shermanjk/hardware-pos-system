@@ -50,7 +50,7 @@ async function startServer() {
   app.use("/api/settings",  settingsRoutes);
   app.use("/api/commodity-prices", commodityPricesRoutes);
   app.use("/api/external-processing", externalProcessingRoutes);
-app.use("/api/suspended-sales", suspendedSalesRoutes);
+  app.use("/api/suspended-sales", suspendedSalesRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   const staticPath = path.resolve(__dirname, "public");

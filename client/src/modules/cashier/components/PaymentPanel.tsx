@@ -71,6 +71,11 @@ export default function PaymentPanel({
                   ? "border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-200 text-green-700"
                   : "border-gray-400 bg-white focus:border-blue-500 focus:ring-blue-100 text-gray-900"
                 }`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && cartLength > 0 && cashCents >= totalCents && customerName.trim()) {
+                  onProcessPayment();
+                }
+              }}
             />
           </div>
 

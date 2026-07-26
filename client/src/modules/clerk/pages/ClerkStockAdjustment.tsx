@@ -141,7 +141,8 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
       onClose();
       onSaved();
     } catch (err) {
-      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Failed to save adjustment:", message.replace(/[\r\n\t]/g, " "));
       toast.error("Failed to save adjustment");
     } finally {
       setLoading(false);
@@ -386,7 +387,8 @@ export default function ClerkStockAdjustment() {
         const adjustmentLogs = data.filter(log => log.transaction_type === "Adjustment");
         setLogs(adjustmentLogs);
       } catch (err) {
-        console.error(err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to load logs:", message.replace(/[\r\n\t]/g, " "));
         toast.error("Failed to load logs");
       } finally {
         setLoadingLogs(false);

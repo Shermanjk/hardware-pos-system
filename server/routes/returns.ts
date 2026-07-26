@@ -331,17 +331,21 @@ router.patch(
 
     const conn = await pool.getConnection();
     try {
-      // Fetch current return
+      await conn.beginTransaction();
+
+      // Fetch current return with row lock
       const [rows] = await conn.execute<any[]>(
-        `SELECT id, status FROM returns WHERE id = ? LIMIT 1`,
+        `SELECT id, status FROM returns WHERE id = ? LIMIT 1 FOR UPDATE`,
         [id]
       );
       const returnRow = rows[0];
       if (!returnRow) {
+        await conn.rollback();
         res.status(404).json({ message: "Return not found." });
         return;
       }
       if (returnRow.status !== "pending") {
+        await conn.rollback();
         res.status(422).json({ message: "Only pending returns can be approved." });
         return;
       }
@@ -350,6 +354,8 @@ router.patch(
         `UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
         [req.user!.id, id]
       );
+
+      await conn.commit();
 
       const updated = await fetchReturnSummary(conn, id);
 
@@ -376,6 +382,7 @@ router.patch(
 
       res.status(200).json(updated);
     } catch (err) {
+      await conn.rollback();
       console.error("[PATCH /api/returns/:id/approve] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     } finally {
@@ -408,16 +415,20 @@ router.patch(
 
     const conn = await pool.getConnection();
     try {
+      await conn.beginTransaction();
+
       const [rows] = await conn.execute<any[]>(
-        `SELECT id, status FROM returns WHERE id = ? LIMIT 1`,
+        `SELECT id, status FROM returns WHERE id = ? LIMIT 1 FOR UPDATE`,
         [id]
       );
       const returnRow = rows[0];
       if (!returnRow) {
+        await conn.rollback();
         res.status(404).json({ message: "Return not found." });
         return;
       }
       if (returnRow.status !== "pending") {
+        await conn.rollback();
         res.status(422).json({ message: "Only pending returns can be rejected." });
         return;
       }
@@ -426,6 +437,8 @@ router.patch(
         `UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ? WHERE id = ?`,
         [req.user!.id, parsed.data.return_reason, id]
       );
+
+      await conn.commit();
 
       const updated = await fetchReturnSummary(conn, id);
 
@@ -453,6 +466,7 @@ router.patch(
 
       res.status(200).json(updated);
     } catch (err) {
+      await conn.rollback();
       console.error("[PATCH /api/returns/:id/reject] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     } finally {

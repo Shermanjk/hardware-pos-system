@@ -269,7 +269,8 @@ export default function ClerkBarcodePrinting() {
         const data = await getProducts();
         setProducts(data);
       } catch (err) {
-        console.error(err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("Failed to load products:", message.replace(/[\r\n\t]/g, " "));
         toast.error("Failed to load products");
       } finally {
         setLoading(false);

@@ -35,6 +35,8 @@ export interface Sale {
   cash_tendered: number;
   change_amount: number;
   void_status: "active" | "void_requested" | "voided";
+  payment_status: "pending" | "completed" | "failed";
+  receipt_printed: number | boolean;
   created_at: string;
   items: SaleItem[];
 }
@@ -46,6 +48,8 @@ export interface SaleSummary {
   cashier_name: string;
   total_amount: number;
   void_status: "active" | "void_requested" | "voided";
+  payment_status: "pending" | "completed" | "failed";
+  receipt_printed: number | boolean;
   created_at: string;
 }
 
@@ -58,6 +62,7 @@ export interface CreateSalePayload {
   total_amount: number;
   cash_tendered: number;
   change_amount: number;
+  client_transaction_id?: string;
   items: Array<{
     product_id: number;
     quantity: number;
@@ -82,7 +87,24 @@ export interface CreateSaleResult {
   vat_amount:     number;
   total_amount:   number;
   change_amount:  number;
+  payment_status: "pending" | "completed" | "failed";
+  receipt_printed: boolean;
   items:          SaleItemSnapshot[];
+  _idempotent?:   boolean;  // true if this was a duplicate request
+}
+
+export interface RecoveryStatus {
+  pending_payment: SaleSummary[];
+  completed_unprinted: SaleSummary[];
+}
+
+// ─── ID generation ────────────────────────────────────────────────────────────
+// Generate a unique client transaction ID for idempotency.
+// This prevents duplicate sales when retrying after network failure or crash.
+export function generateClientTransactionId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 10);
+  return `TXN-${timestamp}-${random}`;
 }
 
 // ─── API functions ────────────────────────────────────────────────────────────
@@ -106,6 +128,14 @@ export async function createSale(payload: CreateSalePayload): Promise<CreateSale
   return response.data;
 }
 
+export async function markReceiptPrinted(saleId: number): Promise<void> {
+  await axios.patch(
+    `/api/sales/${saleId}/mark-receipt-printed`,
+    {},
+    { headers: authHeaders() }
+  );
+}
+
 export async function getSaleByInvoice(invoiceNumber: string): Promise<Sale> {
   const response = await axios.get<Sale>(
     `/api/sales/${encodeURIComponent(invoiceNumber)}`,
@@ -124,5 +154,21 @@ export async function searchSales(params: {
     headers: authHeaders(),
     params,
   });
+  return response.data;
+}
+
+export async function getRecoveryStatus(): Promise<RecoveryStatus> {
+  const response = await axios.get<RecoveryStatus>("/api/sales/recovery/pending", {
+    headers: authHeaders(),
+  });
+  return response.data;
+}
+
+export async function fixPaymentStatus(saleId: number): Promise<{ message: string; invoice_number: string }> {
+  const response = await axios.patch<{ message: string; invoice_number: string }>(
+    `/api/sales/recovery/${saleId}/fix-payment-status`,
+    {},
+    { headers: authHeaders() }
+  );
   return response.data;
 }

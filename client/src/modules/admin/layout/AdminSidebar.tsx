@@ -134,7 +134,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
     if (activeGroup && !expandedGroups.includes(activeGroup)) {
       setExpandedGroups((prev) => [...prev, activeGroup]);
     }
-  }, [activeGroup]);
+  }, [activeGroup, expandedGroups]);
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) =>

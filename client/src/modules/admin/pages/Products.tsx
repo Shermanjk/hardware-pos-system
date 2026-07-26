@@ -826,10 +826,10 @@ export default function Products() {
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
   const [printTarget,  setPrintTarget]  = useState<ProductRecord | null>(null);
 
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "info" } | null>(null);
+  const [bannerToast, setBannerToast] = useState<{ msg: string; type: "success" | "info" } | null>(null);
   const showToast = (msg: string, type: "success" | "info" = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+    setBannerToast({ msg, type });
+    setTimeout(() => setBannerToast(null), 3500);
   };
 
   // Load reference data
@@ -894,13 +894,13 @@ export default function Products() {
   return (
     <div className="space-y-5">
       {/* Toast */}
-      {toast && (
+      {bannerToast && (
         <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border
-          ${toast.type === "success"
+          ${bannerToast.type === "success"
             ? "bg-emerald-600 text-white border-emerald-700"
             : "bg-blue-600 text-white border-blue-700"}`}>
-          {toast.msg}
-          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100">
+          {bannerToast.msg}
+          <button onClick={() => setBannerToast(null)} className="ml-1 opacity-70 hover:opacity-100">
             <X className="h-4 w-4" />
           </button>
         </div>

@@ -85,7 +85,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
       setShowApproveModal(null);
       onRefresh();
       load();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(extractError(err));
       setShowApproveModal(null);
     } finally {
@@ -103,7 +103,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
       setRejectReason("");
       onRefresh();
       load();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(extractError(err));
     } finally {
       setRejectingId(null);
@@ -528,7 +528,7 @@ function MarketBasedWithTabs({
   useEffect(() => { loadProducts(); }, [loadProducts, refreshKey]);
   useEffect(() => { if (activeTab === "history") loadHistory(); }, [activeTab, loadHistory, refreshKey]);
 
-  const TabButton = ({ tab, icon: Icon, label }: { tab: TabType; icon: any; label: string }) => (
+  const TabButton = ({ tab, icon: Icon, label }: { tab: TabType; icon: React.ElementType; label: string }) => (
     <button
       onClick={() => setActiveTab(tab)}
       className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
@@ -796,3 +796,4 @@ export default function CommodityPrices() {
     </div>
   );
 }
+

@@ -143,7 +143,9 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(`CASHIER: ${cashierName}`);
   ln(rule("-"));
   ln();
-  ln(center("Thank you for your business!"));
+  ln(center("Thank you for your business."));
+  ln(center("We sincerely appreciate your trust"));
+  ln(center("and look forward to serving you again."));
   ln();
   ln(center(`This is your ${documentType}.`));
   ln(center('"This document is not valid for claiming input taxes."'));
