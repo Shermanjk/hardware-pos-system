@@ -5,6 +5,7 @@ import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
 import { toast } from "sonner";
 import { toCentavos, fmtCents } from "../utils/money";
 import type { CartItem } from "../utils/receipt";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 interface CartPanelProps {
   cartItems: CartItem[];
@@ -183,7 +184,7 @@ export default function CartPanel({
                       <>
                         <p className="text-sm font-bold text-blue-600">₱{Number(product.selling_price).toFixed(2)}</p>
                         <p className={`text-xs ${product.quantity <= 0 ? "text-red-500 font-semibold" : "text-gray-400"}`}>
-                          {product.quantity <= 0 ? "Out of stock" : `Stock: ${product.quantity} ${product.unit_abbreviation}`}
+                          {product.quantity <= 0 ? "Out of stock" : `Stock: ${formatQuantity(product.quantity, product.unit_abbreviation, product.quantity_type)}`}
                         </p>
                       </>
                     )}

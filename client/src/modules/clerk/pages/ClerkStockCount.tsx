@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getInventory, getInventoryLogs, submitStockAdjustment } from "@/shared/api/inventoryApi";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CountRow {
@@ -22,6 +23,8 @@ interface CountRow {
   productName: string;
   category: string;
   unit: string;
+  unit_abbreviation?: string;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   systemQty: number;
   physicalCount: string; // string so input can be blank
   remarks: string;
@@ -53,7 +56,7 @@ function DiffCell({ system, physical }: { system: number; physical: string }) {
 // ─── System Qty cell with inline movement breakdown ──────────────────────────
 interface Breakdown { stockIn: number; sold: number; adjustments: number; }
 
-function SystemQtyCell({ productId, systemQty }: { productId: number; systemQty: number }) {
+function SystemQtyCell({ productId, systemQty, unit, quantityType }: { productId: number; systemQty: number; unit?: string; quantityType?: "WHOLE_UNIT" | "WEIGHTED" }) {
   const [data, setData] = useState<Breakdown | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -76,7 +79,15 @@ function SystemQtyCell({ productId, systemQty }: { productId: number; systemQty:
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="font-bold text-gray-900 text-lg leading-none">{systemQty}</span>
+      {(() => {
+        const parts = formatQuantityParts(systemQty, unit, quantityType);
+        return (
+          <div className="flex items-center gap-0.5">
+            <span className="font-bold text-gray-900 text-lg leading-none">{parts.number}</span>
+            {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+          </div>
+        );
+      })()}
       {loading ? (
         <div className="flex items-center gap-1 text-gray-300">
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -125,6 +136,8 @@ export default function ClerkStockCount() {
             productName: p.product_name,
             category: p.category,
             unit: p.unit,
+            unit_abbreviation: p.unit_abbreviation,
+            quantity_type: p.quantity_type,
             systemQty: p.quantity,
             physicalCount: "",
             remarks: "",
@@ -405,7 +418,7 @@ export default function ClerkStockCount() {
 
                       {/* System Qty + breakdown */}
                       <td className="py-3.5 px-4">
-                        <SystemQtyCell productId={row.productId} systemQty={row.systemQty} />
+                        <SystemQtyCell productId={row.productId} systemQty={row.systemQty} unit={row.unit_abbreviation} quantityType={row.quantity_type} />
                       </td>
 
                       {/* Physical count input */}

@@ -12,6 +12,8 @@ export interface VoidRequestItem {
   product_name: string;
   unit: string;
   quantity: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_abbreviation?: string;
   unit_price: number;
   subtotal: number;
 }
@@ -38,6 +40,8 @@ export interface MyVoidRequestItem {
   product_name: string;
   unit: string;
   quantity: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_abbreviation?: string;
   unit_price: number;
   subtotal: number;
 }

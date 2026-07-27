@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { searchSales, getSaleByInvoice } from "@/shared/api/salesApi";
 import type { SaleSummary, Sale } from "@/shared/api/salesApi";
 import axios from "axios";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,17 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                         <p className="font-medium text-gray-900">{item.product_name}</p>
                         {item.barcode && <p className="font-mono text-xs text-gray-400">{item.barcode}</p>}
                       </td>
-                      <td className="py-2.5 px-4 text-center font-semibold text-gray-800">{item.quantity}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        {(() => {
+                          const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                          return (
+                            <div className="flex items-center justify-center gap-0.5">
+                              <span className="font-semibold text-gray-800">{parts.number}</span>
+                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-2.5 px-4 text-right text-gray-600">{fmt(item.unit_price)}</td>
                       <td className="py-2.5 px-4 text-right font-semibold text-gray-900">{fmt(item.subtotal)}</td>
                     </tr>

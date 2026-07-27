@@ -16,6 +16,7 @@ import type {
   CreateProductPayload, UpdateProductPayload, StockStatus, TaxType, PricingType, ProductUsage,
 } from "@/shared/api/productsApi";
 import axios from "axios";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -712,7 +713,15 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
                 ? <span className="text-amber-600 font-medium text-xs">Managed via Commodity Prices</span>
                 : `₱${Number(product.selling_price).toFixed(2)}`}
             </div>
-            <div><span className="font-medium text-gray-500">Stock:</span> <span className="font-bold text-gray-900">{product.quantity}</span></div>
+            <div><span className="font-medium text-gray-500">Stock:</span> {(() => {
+              const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+              return (
+                <span className="font-bold text-gray-900">
+                  {parts.number}
+                  {parts.unit && <span className="text-xs text-gray-500 ml-0.5">{parts.unit}</span>}
+                </span>
+              );
+            })()}</div>
             <div><span className="font-medium text-gray-500">Damaged:</span> {product.damaged_stock}</div>
             <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>
             <div><span className="font-medium text-gray-500">Status:</span> {product.status}</div>
@@ -1076,12 +1085,20 @@ export default function Products() {
                         <span className="text-sm font-bold text-gray-900">₱{Number(product.selling_price).toFixed(2)}</span>
                       </td>
                       <td className="py-3.5 px-5 text-center">
-                        <span className={`text-sm font-bold tabular-nums ${
-                          product.quantity === 0 ? "text-red-600" :
-                          product.quantity <= product.reorder_level ? "text-amber-600" :
-                          "text-gray-900"}`}>
-                          {product.quantity}
-                        </span>
+                        {(() => {
+                          const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+                          return (
+                            <div className="flex items-center justify-center gap-0.5">
+                              <span className={`text-base font-bold tabular-nums ${
+                                product.quantity === 0 ? "text-red-600" :
+                                product.quantity <= product.reorder_level ? "text-amber-600" :
+                                "text-gray-900"}`}>
+                                {parts.number}
+                              </span>
+                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-5 text-center text-sm text-gray-500">{product.reorder_level}</td>
                       <td className="py-3.5 px-5 text-center">{statusBadge(stockStatus)}</td>

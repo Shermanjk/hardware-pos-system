@@ -15,6 +15,8 @@ export interface ReturnItem {
   product_id: number;
   product_name: string;
   quantity_returned: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_abbreviation?: string;
   unit_price: number;
 }
 

@@ -47,6 +47,7 @@ export interface ProductRecord {
   cost_price: number;
   selling_price: number;
   quantity: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   reorder_level: number;
   image: string | null;
   status: "Active" | "Inactive";
@@ -199,6 +200,7 @@ export interface CashierProduct {
   quantity: number;       // current stock
   unit: string;
   unit_abbreviation: string;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   is_returnable: boolean;
   tax_type: TaxType;
   pricing_type: PricingType;

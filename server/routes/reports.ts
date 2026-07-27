@@ -62,7 +62,11 @@ router.get("/", async (req: Request, res: Response) => {
         p.product_name,
         COALESCE(c.category_name, '—')  AS category,
         SUM(si.quantity)                AS units_sold,
-        COALESCE(SUM(si.subtotal), 0)   AS revenue
+        COALESCE(SUM(si.subtotal), 0)   AS revenue,
+        CASE
+          WHEN SUM(si.quantity) > 0 THEN COALESCE(SUM(si.subtotal), 0) / SUM(si.quantity)
+          ELSE 0
+        END                             AS unit_price
       FROM sale_items si
       JOIN products  p ON p.id = si.product_id
       JOIN sales     s ON s.id = si.sale_id

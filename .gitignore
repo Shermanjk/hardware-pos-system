@@ -4,8 +4,31 @@
 
 # Build outputs
 dist/
+dist2/
 build/
 *.dist
+
+# Electron build artifacts
+dist/win-unpacked/
+dist/*.exe
+dist/*.dmg
+dist/*.AppImage
+dist/*.snap
+dist/*.deb
+dist/*.rpm
+dist/*.zip
+dist/*.tar.gz
+dist/*.asar
+dist2/win-unpacked/
+dist2/*.exe
+dist2/*.dmg
+dist2/*.AppImage
+dist2/*.snap
+dist2/*.deb
+dist2/*.rpm
+dist2/*.zip
+dist2/*.tar.gz
+dist2/*.asar
 
 # Environment variables
 .env

@@ -11,6 +11,7 @@ import {
 } from "@/shared/api/inventoryApi";
 import { getCategories, type Category, deriveStatus } from "@/shared/api/productsApi";
 import axios from "axios";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -165,11 +166,18 @@ function StockTable({
                     </span>
                   </td>
                   <td className="py-3.5 px-5 text-center">
-                    <span className={`text-lg font-bold tabular-nums ${
-                      item.quantity === 0 ? "text-red-600" :
-                      item.quantity <= item.reorder_level ? "text-amber-600" : "text-gray-900"
-                    }`}>{item.quantity}</span>
-                    <span className="text-xs text-gray-400 ml-1">{item.unit_abbreviation}</span>
+                    {(() => {
+                      const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                      return (
+                        <div className="flex items-center justify-center gap-0.5">
+                          <span className={`text-base font-bold tabular-nums ${
+                            item.quantity === 0 ? "text-red-600" :
+                            item.quantity <= item.reorder_level ? "text-amber-600" : "text-gray-900"
+                          }`}>{parts.number}</span>
+                          {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-3.5 px-5 text-center text-sm text-gray-500">{item.reorder_level}</td>
                   <td className="py-3.5 px-5 text-center">

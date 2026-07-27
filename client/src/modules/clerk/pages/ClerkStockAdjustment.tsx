@@ -20,6 +20,7 @@ import {
   getProducts, lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
 import { submitStockAdjustment, getInventoryLogs } from "@/shared/api/inventoryApi";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Adjustment type config ───────────────────────────────────────────────────
 const ADJUSTMENT_TYPES = [
@@ -216,7 +217,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                               <p className="text-xs text-gray-400 font-mono">{p.barcode}</p>
                             </div>
                             <span className="ml-3 text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">
-                              {p.quantity} {p.unit_abbreviation}
+                              {formatQuantity(p.quantity, p.unit_abbreviation, p.quantity_type)}
                             </span>
                           </button>
                         ))}
@@ -238,7 +239,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                       <p className="font-bold text-gray-900 text-sm">{selectedProduct.product_name}</p>
                       <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
                       <p className="text-xs mt-1">
-                        Current stock: <strong className="text-blue-700 text-sm">{selectedProduct.quantity}</strong>
+                        Current stock: <strong className="text-blue-700 text-sm">{formatQuantity(selectedProduct.quantity, selectedProduct.unit_abbreviation, selectedProduct.quantity_type)}</strong>
                       </p>
                     </div>
                   </div>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { getVoidRequests, approveVoid, rejectVoid } from "@/shared/api/voidApi";
 import type { VoidRequest } from "@/shared/api/voidApi";
 import { toast } from "sonner";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -133,7 +134,17 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
                     {req.items.map((item, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="py-2 px-3 font-medium text-gray-900">{item.product_name}</td>
-                        <td className="py-2 px-3 text-center text-gray-600">{item.quantity}{item.unit ? ` ${item.unit}` : ""}</td>
+                        <td className="py-2 px-3 text-center">
+                          {(() => {
+                            const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                            return (
+                              <div className="flex items-center justify-center gap-0.5">
+                                <span className="text-gray-600">{parts.number}</span>
+                                {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td className="py-2 px-3 text-right text-gray-600 tabular-nums">{fmtPeso(item.unit_price)}</td>
                         <td className="py-2 px-3 text-right font-semibold text-gray-900 tabular-nums">{fmtPeso(item.subtotal)}</td>
                       </tr>

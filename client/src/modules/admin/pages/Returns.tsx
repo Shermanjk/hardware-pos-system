@@ -18,6 +18,7 @@ import { searchSales, getSaleByInvoice } from "@/shared/api/salesApi";
 import type { SaleSummary, Sale } from "@/shared/api/salesApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { toast } from "sonner";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { useReturnNotifications } from "@/shared/hooks/useReturnNotifications";
 
@@ -250,7 +251,17 @@ function ReturnDetailDialog({ id, onClose, onRefresh }: ReturnDetailDialogProps)
                   {ret.items.map((item: ReturnItem) => (
                     <tr key={item.id} className="hover:bg-gray-50">
                       <td className="py-2.5 px-4 font-medium text-gray-900">{item.product_name}</td>
-                      <td className="py-2.5 px-4 text-center font-semibold text-gray-800">{item.quantity_returned}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        {(() => {
+                          const parts = formatQuantityParts(item.quantity_returned, item.unit_abbreviation, item.quantity_type);
+                          return (
+                            <div className="flex items-center justify-center gap-0.5">
+                              <span className="font-semibold text-gray-800">{parts.number}</span>
+                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-2.5 px-4 text-right text-gray-600">{fmtPeso(item.unit_price)}</td>
                       <td className="py-2.5 px-4 text-right font-semibold text-gray-900">{fmtPeso(item.unit_price * item.quantity_returned)}</td>
                     </tr>
@@ -664,7 +675,17 @@ function SaleDetailModal({ sale, onClose, onInitiateReturn }: {
                         <p className="font-medium text-gray-900">{item.product_name}</p>
                         {item.barcode && <p className="font-mono text-xs text-gray-400">{item.barcode}</p>}
                       </td>
-                      <td className="py-2.5 px-4 text-center font-semibold">{item.quantity}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        {(() => {
+                          const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                          return (
+                            <div className="flex items-center justify-center gap-0.5">
+                              <span className="font-semibold">{parts.number}</span>
+                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-2.5 px-4 text-right text-gray-600">{fmtPeso(item.unit_price)}</td>
                       <td className="py-2.5 px-4 text-right font-semibold">{fmtPeso(item.subtotal)}</td>
                       <td className="py-2.5 px-4 text-center">

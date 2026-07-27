@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getProducts, getCategories, getSuppliers, lookupProduct, deriveStatus, type ProductRecord } from "@/shared/api/productsApi";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 const PAGE_SIZE = 10;
 
@@ -600,19 +601,27 @@ export default function ClerkInventory() {
                       <span className="text-xs font-medium text-gray-600">{product.unit}</span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={`font-bold text-base tabular-nums ${
-                          product.quantity === 0
-                            ? "text-gray-400"
-                            : product.quantity <= product.reorder_level * 0.5
-                            ? "text-red-600"
-                            : product.quantity <= product.reorder_level
-                            ? "text-amber-600"
-                            : "text-gray-900"
-                        }`}
-                      >
-                        {product.quantity}
-                      </span>
+                      {(() => {
+                        const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+                        return (
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span
+                              className={`font-bold text-base tabular-nums ${
+                                product.quantity === 0
+                                  ? "text-gray-400"
+                                  : product.quantity <= product.reorder_level * 0.5
+                                  ? "text-red-600"
+                                  : product.quantity <= product.reorder_level
+                                  ? "text-amber-600"
+                                  : "text-gray-900"
+                              }`}
+                            >
+                              {parts.number}
+                            </span>
+                            {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-3.5 px-4 text-center text-sm text-gray-500 tabular-nums">{product.reorder_level}</td>
                     <td className="py-3.5 px-4">{statusBadge(product.quantity, product.reorder_level)}</td>

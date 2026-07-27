@@ -26,6 +26,7 @@ import {
   getCurrentPrice, submitCommodityPurchase, getPurchaseHistory,
   type CommodityCurrentPrice, type CommodityPurchase,
 } from "@/shared/api/commodityApi";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -332,7 +333,7 @@ function CommodityPurchaseCard({
           <p className="text-xs text-gray-500 mt-0.5">
             <span className="font-mono">{product.barcode}</span>
             {" · "}{product.unit}
-            {" · "}<span className="font-medium">Current stock: {product.quantity}</span>
+            {" · "}<span className="font-medium">Current stock: {formatQuantity(product.quantity, product.unit_abbreviation, product.quantity_type)}</span>
           </p>
         </div>
       </div>
@@ -723,7 +724,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
                           <p className="text-xs text-gray-400 mt-0.5">
                             <span className="font-mono">{r.barcode}</span>
                             {" · "}{r.unit}
-                            {" · "}Stock: <span className="font-medium text-gray-600">{r.quantity}</span>
+                            {" · "}Stock: <span className="font-medium text-gray-600">{formatQuantity(r.quantity, r.unit_abbreviation, r.quantity_type)}</span>
                           </p>
                         </div>
                       </button>
@@ -765,7 +766,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
               <p className="text-xs text-gray-500 mt-0.5">
                 <span className="font-mono">{matched.barcode}</span>
                 {" · "}{matched.unit}
-                {" · "}<span className="font-medium">Current stock: {matched.quantity}</span>
+                {" · "}<span className="font-medium">Current stock: {formatQuantity(matched.quantity, matched.unit_abbreviation, matched.quantity_type)}</span>
               </p>
             </div>
           </div>

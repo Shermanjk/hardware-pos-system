@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { getInventory, type InventoryItem } from "@/shared/api/inventoryApi";
 import { getCategories, deriveStatus } from "@/shared/api/productsApi";
 import type { Category } from "@/shared/api/productsApi";
+import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 type SortField = "shortage" | "productName" | "quantity" | "reorderLevel";
 type SortDir   = "asc" | "desc";
@@ -351,13 +352,20 @@ export default function ClerkLowStock() {
                         <span className="truncate block">{product.supplier}</span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`font-bold text-lg ${
-                          product.quantity === 0 ? "text-gray-400" :
-                          isCritical ? "text-red-600" : "text-amber-600"
-                        }`}>
-                          {product.quantity}
-                        </span>
-                        <span className="text-xs text-gray-400 ml-1">{product.unit}</span>
+                        {(() => {
+                          const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+                          return (
+                            <div className="flex items-center gap-0.5">
+                              <span className={`font-bold text-base ${
+                                product.quantity === 0 ? "text-gray-400" :
+                                isCritical ? "text-red-600" : "text-amber-600"
+                              }`}>
+                                {parts.number}
+                              </span>
+                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 text-gray-600 text-sm font-medium">{product.reorder_level}</td>
                       <td className="py-3.5 px-4">

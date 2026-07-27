@@ -16,6 +16,8 @@ export interface SaleItem {
   barcode: string | null;
   is_returnable: number;
   quantity: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_abbreviation?: string;
   unit_price: number;
   subtotal: number;
   quantity_returned: number;

@@ -26,6 +26,7 @@ export interface InventoryItem {
   unit: string;
   unit_abbreviation: string;
   quantity: number;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   reorder_level: number;
   damaged_stock: number;
   cost_price: number;
