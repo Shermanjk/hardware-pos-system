@@ -1,3 +1,94 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// server/db.ts
+import mysql from "mysql2/promise";
+var DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, pool;
+var init_db = __esm({
+  "server/db.ts"() {
+    "use strict";
+    DB_HOST = process.env.DB_HOST;
+    DB_PORT = process.env.DB_PORT;
+    DB_USER = process.env.DB_USER;
+    DB_PASSWORD = process.env.DB_PASSWORD;
+    DB_NAME = process.env.DB_NAME;
+    if (!DB_HOST || !DB_USER || DB_PASSWORD === void 0 || !DB_NAME) {
+      throw new Error(
+        "Missing required database environment variables: DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME must all be set in .env"
+      );
+    }
+    pool = mysql.createPool({
+      host: DB_HOST,
+      port: DB_PORT ? Number(DB_PORT) : 3306,
+      user: DB_USER,
+      password: DB_PASSWORD,
+      database: DB_NAME,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    });
+  }
+});
+
+// server/utils/auditLogger.ts
+var auditLogger_exports = {};
+__export(auditLogger_exports, {
+  logAuditEvent: () => logAuditEvent
+});
+async function logAuditEvent(params) {
+  const {
+    action,
+    performedById,
+    performedByUsername,
+    targetUserId = null,
+    targetUsername = null,
+    entityType = null,
+    entityId = null,
+    previousValues = null,
+    newValues = null,
+    reason = null,
+    metadata = null
+  } = params;
+  try {
+    await pool.execute(
+      `INSERT INTO audit_logs
+         (action, performed_by_id, performed_by_username,
+          target_user_id, target_username,
+          entity_type, entity_id,
+          previous_values, new_values, reason, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        action,
+        performedById,
+        performedByUsername,
+        targetUserId,
+        targetUsername,
+        entityType,
+        entityId,
+        previousValues !== null ? JSON.stringify(previousValues) : null,
+        newValues !== null ? JSON.stringify(newValues) : null,
+        reason,
+        metadata !== null ? JSON.stringify(metadata) : null
+      ]
+    );
+  } catch (err) {
+    console.error("[auditLogger] Failed to write audit log:", err);
+  }
+}
+var init_auditLogger = __esm({
+  "server/utils/auditLogger.ts"() {
+    "use strict";
+    init_db();
+  }
+});
+
 // server/index.ts
 import "dotenv/config";
 import express from "express";
@@ -76,35 +167,11 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 
 // server/routes/auth.ts
+init_db();
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt2 from "jsonwebtoken";
 import { z } from "zod";
-
-// server/db.ts
-import mysql from "mysql2/promise";
-var DB_HOST = process.env.DB_HOST;
-var DB_PORT = process.env.DB_PORT;
-var DB_USER = process.env.DB_USER;
-var DB_PASSWORD = process.env.DB_PASSWORD;
-var DB_NAME = process.env.DB_NAME;
-if (!DB_HOST || !DB_USER || DB_PASSWORD === void 0 || !DB_NAME) {
-  throw new Error(
-    "Missing required database environment variables: DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME must all be set in .env"
-  );
-}
-var pool = mysql.createPool({
-  host: DB_HOST,
-  port: DB_PORT ? Number(DB_PORT) : 3306,
-  user: DB_USER,
-  password: DB_PASSWORD,
-  database: DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
-
-// server/routes/auth.ts
 var router = Router();
 var loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -182,6 +249,7 @@ router.post("/login", async (req, res) => {
 var auth_default = router;
 
 // server/routes/users.ts
+init_db();
 import { Router as Router2 } from "express";
 import bcrypt2 from "bcryptjs";
 import jwt4 from "jsonwebtoken";
@@ -245,49 +313,8 @@ function generateTempPassword() {
   return secureShuffle([...required, ...remaining]).join("");
 }
 
-// server/utils/auditLogger.ts
-async function logAuditEvent(params) {
-  const {
-    action,
-    performedById,
-    performedByUsername,
-    targetUserId = null,
-    targetUsername = null,
-    entityType = null,
-    entityId = null,
-    previousValues = null,
-    newValues = null,
-    reason = null,
-    metadata = null
-  } = params;
-  try {
-    await pool.execute(
-      `INSERT INTO audit_logs
-         (action, performed_by_id, performed_by_username,
-          target_user_id, target_username,
-          entity_type, entity_id,
-          previous_values, new_values, reason, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        action,
-        performedById,
-        performedByUsername,
-        targetUserId,
-        targetUsername,
-        entityType,
-        entityId,
-        previousValues !== null ? JSON.stringify(previousValues) : null,
-        newValues !== null ? JSON.stringify(newValues) : null,
-        reason,
-        metadata !== null ? JSON.stringify(metadata) : null
-      ]
-    );
-  } catch (err) {
-    console.error("[auditLogger] Failed to write audit log:", err);
-  }
-}
-
 // server/routes/users.ts
+init_auditLogger();
 var router2 = Router2();
 router2.use(authenticate);
 function requireAdmin(req, res) {
@@ -622,6 +649,7 @@ router2.post("/:id/change-password", async (req, res) => {
 var users_default = router2;
 
 // server/routes/auditLogs.ts
+init_db();
 import { Router as Router3 } from "express";
 import { z as z3 } from "zod";
 var router3 = Router3();
@@ -668,6 +696,7 @@ router3.get("/", async (req, res) => {
 var auditLogs_default = router3;
 
 // server/routes/sales.ts
+init_db();
 import { Router as Router4 } from "express";
 
 // server/middleware/requireRole.ts
@@ -714,6 +743,7 @@ async function generateReturnNumber(conn) {
 }
 
 // server/routes/sales.ts
+init_auditLogger();
 import { z as z4 } from "zod";
 var router4 = Router4();
 var createSaleSchema = z4.object({
@@ -1358,7 +1388,15 @@ router4.get(
   authenticate,
   requireRole("Admin", "Cashier"),
   async (req, res) => {
-    const { invoice_number, customer_name, date_from, date_to } = req.query;
+    const {
+      invoice_number,
+      customer_name,
+      date_from,
+      date_to,
+      cashier_id,
+      void_status,
+      payment_status
+    } = req.query;
     try {
       const conditions = [];
       const params = [];
@@ -1377,6 +1415,18 @@ router4.get(
       if (date_to) {
         conditions.push("DATE(s.created_at) <= ?");
         params.push(date_to);
+      }
+      if (cashier_id && /^\d+$/.test(cashier_id)) {
+        conditions.push("s.cashier_id = ?");
+        params.push(parseInt(cashier_id, 10));
+      }
+      if (void_status && ["active", "void_requested", "voided"].includes(void_status)) {
+        conditions.push("s.void_status = ?");
+        params.push(void_status);
+      }
+      if (payment_status && ["pending", "completed"].includes(payment_status)) {
+        conditions.push("s.payment_status = ?");
+        params.push(payment_status);
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const [rows] = await pool.execute(
@@ -1574,6 +1624,7 @@ router4.get(
 var sales_default = router4;
 
 // server/routes/returns.ts
+init_db();
 import { Router as Router5 } from "express";
 import { z as z5 } from "zod";
 
@@ -1654,6 +1705,7 @@ async function validateReturnItems(conn, saleId, items, currentDate) {
 }
 
 // server/routes/returns.ts
+init_auditLogger();
 var router5 = Router5();
 var createReturnSchema = z5.object({
   sale_id: z5.number().int().positive(),
@@ -1848,13 +1900,33 @@ router5.get(
   authenticate,
   requireRole("Admin"),
   async (req, res) => {
-    const { status, date_from, date_to } = req.query;
+    const {
+      status,
+      resolution,
+      date_from,
+      date_to,
+      return_number,
+      invoice_number,
+      cashier_id
+    } = req.query;
     try {
       const conditions = [];
       const params = [];
       if (status) {
         conditions.push("r.status = ?");
         params.push(status);
+      }
+      if (resolution && ["refund", "replacement"].includes(resolution)) {
+        conditions.push("r.resolution = ?");
+        params.push(resolution);
+      }
+      if (return_number) {
+        conditions.push("r.return_number LIKE ?");
+        params.push(`%${return_number}%`);
+      }
+      if (invoice_number) {
+        conditions.push("s.invoice_number LIKE ?");
+        params.push(`%${invoice_number}%`);
       }
       if (date_from) {
         conditions.push("DATE(r.created_at) >= ?");
@@ -1863,6 +1935,10 @@ router5.get(
       if (date_to) {
         conditions.push("DATE(r.created_at) <= ?");
         params.push(date_to);
+      }
+      if (cashier_id && /^\d+$/.test(cashier_id)) {
+        conditions.push("r.processed_by = ?");
+        params.push(parseInt(cashier_id, 10));
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const [rows] = await pool.execute(
@@ -2228,8 +2304,10 @@ router5.patch(
 var returns_default = router5;
 
 // server/routes/products.ts
+init_db();
 import { Router as Router6 } from "express";
 import { z as z6 } from "zod";
+init_auditLogger();
 var router6 = Router6();
 router6.use(authenticate);
 function requireAdmin3(req, res) {
@@ -2315,9 +2393,17 @@ async function generateBarcode(conn) {
 }
 router6.get("/", async (req, res) => {
   try {
-    const { search, category_id, supplier_id, status } = req.query;
+    const { search, category_id, supplier_id, status, product_status } = req.query;
     let where = "WHERE 1=1";
     const params = [];
+    const productStatusVal = typeof product_status === "string" ? product_status.trim() : "";
+    if (productStatusVal === "all") {
+    } else if (productStatusVal === "Inactive" || productStatusVal === "Active") {
+      where += " AND p.status = ?";
+      params.push(productStatusVal);
+    } else {
+      where += " AND p.status = 'Active'";
+    }
     if (search) {
       where += " AND (p.product_name LIKE ? OR p.barcode LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
@@ -2547,20 +2633,31 @@ router6.put("/:id", async (req, res) => {
   }
   const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     const [existing] = await conn.execute(
-      "SELECT id FROM products WHERE id = ? LIMIT 1",
+      `SELECT ${PRODUCT_COLS}, p.selling_price AS prev_selling_price, p.cost_price AS prev_cost_price
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       LEFT JOIN suppliers  s ON s.id = p.supplier_id
+       LEFT JOIN units      u ON u.id = p.unit_id
+       WHERE p.id = ? LIMIT 1 FOR UPDATE`,
       [id]
     );
     if (existing.length === 0) {
+      await conn.rollback();
       res.status(404).json({ message: "Product not found." });
       return;
     }
+    const prevSnapshot = existing[0];
+    const prevSellingPrice = prevSnapshot.prev_selling_price;
+    const prevCostPrice = prevSnapshot.prev_cost_price;
     if (data.barcode) {
       const [barcodeCheck] = await conn.execute(
         "SELECT id FROM products WHERE barcode = ? AND id != ? LIMIT 1",
         [data.barcode, id]
       );
       if (barcodeCheck.length > 0) {
+        await conn.rollback();
         res.status(409).json({ message: "A product with this barcode already exists." });
         return;
       }
@@ -2605,20 +2702,27 @@ router6.put("/:id", async (req, res) => {
        WHERE p.id = ?`,
       [id]
     );
-    const [prevRows] = await conn.execute("SELECT selling_price, cost_price FROM products WHERE id = ? LIMIT 1", [id]);
-    const prev = prevRows[0];
-    const isPriceChange = data.selling_price !== void 0 || data.cost_price !== void 0;
-    await logAuditEvent({
+    await conn.commit();
+    const newSellingPrice = data.selling_price !== void 0 ? data.selling_price : prevSellingPrice;
+    const newCostPrice = data.cost_price !== void 0 ? data.cost_price : prevCostPrice;
+    const isPriceChange = data.selling_price !== void 0 && Number(data.selling_price) !== Number(prevSellingPrice) || data.cost_price !== void 0 && Number(data.cost_price) !== Number(prevCostPrice);
+    logAuditEvent({
       action: isPriceChange ? "PRODUCT_PRICE_CHANGED" : "PRODUCT_UPDATED",
       performedById: req.user.id,
       performedByUsername: req.user.username,
       entityType: "products",
       entityId: id,
-      previousValues: isPriceChange ? { selling_price: prev?.selling_price, cost_price: prev?.cost_price } : void 0,
-      newValues: data
-    });
+      previousValues: {
+        ...isPriceChange ? {
+          selling_price: prevSellingPrice,
+          cost_price: prevCostPrice
+        } : {}
+      },
+      newValues: isPriceChange ? { ...data, selling_price: newSellingPrice, cost_price: newCostPrice } : data
+    }).catch((e) => console.error("[products/PUT /:id] auditLogger failed:", e));
     res.status(200).json(updated[0]);
   } catch (err) {
+    await conn.rollback();
     console.error("[products/PUT /:id]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
   } finally {
@@ -2663,6 +2767,7 @@ router6.delete("/:id", async (req, res) => {
 var products_default = router6;
 
 // server/routes/categories.ts
+init_db();
 import { Router as Router7 } from "express";
 import { z as z7 } from "zod";
 var router7 = Router7();
@@ -2773,6 +2878,7 @@ router7.delete("/:id", async (req, res) => {
 var categories_default = router7;
 
 // server/routes/suppliers.ts
+init_db();
 import { Router as Router8 } from "express";
 import { z as z8 } from "zod";
 var router8 = Router8();
@@ -2900,6 +3006,7 @@ router8.delete("/:id", async (req, res) => {
 var suppliers_default = router8;
 
 // server/routes/units.ts
+init_db();
 import { Router as Router9 } from "express";
 var router9 = Router9();
 router9.use(authenticate);
@@ -2917,8 +3024,10 @@ router9.get("/", async (_req, res) => {
 var units_default = router9;
 
 // server/routes/inventory.ts
+init_db();
 import { Router as Router10 } from "express";
 import { z as z9 } from "zod";
+init_auditLogger();
 var router10 = Router10();
 router10.use(authenticate);
 function requireAdminOrClerk(req, res) {
@@ -2955,9 +3064,18 @@ router10.get("/summary", async (req, res) => {
 router10.get("/", async (req, res) => {
   if (!requireAdminOrClerk(req, res)) return;
   try {
-    const { search, category_id, status } = req.query;
-    let where = "WHERE p.status = 'Active'";
+    const { search, category_id, status, product_status } = req.query;
+    let where = "";
     const params = [];
+    const productStatusVal = typeof product_status === "string" ? product_status.trim() : "";
+    if (productStatusVal === "all") {
+      where = "WHERE 1=1";
+    } else if (productStatusVal === "Inactive" || productStatusVal === "Active") {
+      where = "WHERE p.status = ?";
+      params.push(productStatusVal);
+    } else {
+      where = "WHERE p.status = 'Active'";
+    }
     if (search) {
       where += " AND (p.product_name LIKE ? OR p.barcode LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
@@ -3020,7 +3138,7 @@ router10.get("/", async (req, res) => {
 router10.get("/logs", async (req, res) => {
   if (!requireAdminOrClerk(req, res)) return;
   try {
-    const limit = Math.max(1, parseInt(req.query.limit || "50", 10));
+    const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
     const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
     const { product_id } = req.query;
     let where = "WHERE 1=1";
@@ -3029,6 +3147,7 @@ router10.get("/logs", async (req, res) => {
       where += " AND il.product_id = ?";
       params.push(parseInt(product_id, 10));
     }
+    params.push(limit, offset);
     const [rows] = await pool.execute(`
       SELECT
         il.id,
@@ -3048,7 +3167,7 @@ router10.get("/logs", async (req, res) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
     res.status(200).json(rows);
   } catch (err) {
@@ -3209,6 +3328,7 @@ router10.post("/stock-adjustment", async (req, res) => {
 var inventory_default = router10;
 
 // server/routes/reorderAlerts.ts
+init_db();
 import { Router as Router11 } from "express";
 var router11 = Router11();
 router11.use(authenticate);
@@ -3285,6 +3405,7 @@ router11.get("/summary", async (_req, res) => {
 var reorderAlerts_default = router11;
 
 // server/routes/dashboard.ts
+init_db();
 import { Router as Router12 } from "express";
 var router12 = Router12();
 router12.use(authenticate);
@@ -3432,6 +3553,7 @@ router12.get("/", async (_req, res) => {
 var dashboard_default = router12;
 
 // server/routes/reports.ts
+init_db();
 import { Router as Router13 } from "express";
 var router13 = Router13();
 router13.use(authenticate);
@@ -3483,7 +3605,11 @@ router13.get("/", async (req, res) => {
         p.product_name,
         COALESCE(c.category_name, '\u2014')  AS category,
         SUM(si.quantity)                AS units_sold,
-        COALESCE(SUM(si.subtotal), 0)   AS revenue
+        COALESCE(SUM(si.subtotal), 0)   AS revenue,
+        CASE
+          WHEN SUM(si.quantity) > 0 THEN COALESCE(SUM(si.subtotal), 0) / SUM(si.quantity)
+          ELSE 0
+        END                             AS unit_price
       FROM sale_items si
       JOIN products  p ON p.id = si.product_id
       JOIN sales     s ON s.id = si.sale_id
@@ -3557,6 +3683,7 @@ router13.get("/", async (req, res) => {
         COALESCE(s.supplier_name, '\u2014')  AS supplier,
         COALESCE(u.abbreviation, '')     AS unit,
         p.quantity,
+        p.quantity_type,
         p.reorder_level,
         p.damaged_stock,
         p.cost_price,
@@ -3616,8 +3743,10 @@ router13.get("/", async (req, res) => {
 var reports_default = router13;
 
 // server/routes/settings.ts
+init_db();
 import { Router as Router14 } from "express";
 import { z as z10 } from "zod";
+init_auditLogger();
 var router14 = Router14();
 router14.use(authenticate);
 function requireAdmin6(req, res) {
@@ -3734,8 +3863,10 @@ router14.put("/", async (req, res) => {
 var settings_default = router14;
 
 // server/routes/commodityPrices.ts
+init_db();
 import { Router as Router15 } from "express";
 import { z as z11 } from "zod";
+init_auditLogger();
 var router15 = Router15();
 router15.use(authenticate);
 function requireAdmin7(req, res) {
@@ -4427,7 +4558,7 @@ router15.get("/purchases/:id/payments", async (req, res) => {
 });
 router15.get("/purchases", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
-  const limit = Math.max(1, parseInt(req.query.limit || "50", 10));
+  const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
   const { product_id, date_from, date_to, payment_status, status } = req.query;
   let where = "WHERE 1=1";
@@ -4452,6 +4583,7 @@ router15.get("/purchases", async (req, res) => {
     where += " AND cp.status = ?";
     params.push(status);
   }
+  params.push(limit, offset);
   try {
     const [rows] = await pool.execute(`
       SELECT
@@ -4497,7 +4629,7 @@ router15.get("/purchases", async (req, res) => {
       LEFT JOIN users prep ON prep.id = cp.prepared_by
       ${where}
       ORDER BY cp.transaction_date DESC, cp.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
     res.status(200).json(rows.map((r) => ({
       ...r,
@@ -4532,7 +4664,7 @@ router15.post("/purchases/:id/approve", async (req, res) => {
   try {
     await conn.beginTransaction();
     const [purchaseRows] = await conn.execute(
-      "SELECT id, status, product_id, quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
+      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
       [purchaseId]
     );
     if (purchaseRows.length === 0) {
@@ -4568,7 +4700,8 @@ router15.post("/purchases/:id/approve", async (req, res) => {
           approved_at = NOW()
       WHERE id = ?
     `, [req.user.id, purchaseId]);
-    const newQty = Math.round((Number(product.current_qty) + Number(purchase.quantity)) * 1e3) / 1e3;
+    const payableQty = Number(purchase.payable_quantity ?? null) > 0 && Number(purchase.payable_quantity) <= Number(purchase.quantity) ? Number(purchase.payable_quantity) : Number(purchase.quantity);
+    const newQty = Math.round((Number(product.current_qty) + payableQty) * 1e3) / 1e3;
     await conn.execute(
       "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
       [newQty, purchase.product_id]
@@ -4580,7 +4713,7 @@ router15.post("/purchases/:id/approve", async (req, res) => {
       VALUES (?, 'Stock In', 'Commodity Purchase Approved', ?, ?, ?, ?, ?, ?)
     `, [
       purchase.product_id,
-      purchase.quantity,
+      payableQty,
       product.current_qty,
       newQty,
       `CP-${purchaseId}`,
@@ -4597,7 +4730,9 @@ router15.post("/purchases/:id/approve", async (req, res) => {
       newValues: {
         product_id: purchase.product_id,
         product_name: product.product_name,
-        quantity_added: Number(purchase.quantity),
+        quantity_received_gross: Number(purchase.quantity),
+        deducted_quantity: Number(purchase.deducted_quantity ?? 0),
+        quantity_added: payableQty,
         new_stock_quantity: newQty
       }
     });
@@ -4605,7 +4740,9 @@ router15.post("/purchases/:id/approve", async (req, res) => {
       message: "Purchase approved. Inventory updated.",
       id: purchaseId,
       status: "APPROVED",
-      new_stock_quantity: newQty
+      new_stock_quantity: newQty,
+      payable_quantity: payableQty,
+      deducted_quantity: Number(purchase.deducted_quantity ?? 0)
     });
   } catch (err) {
     await conn.rollback();
@@ -4690,8 +4827,10 @@ router15.post("/purchases/:id/reject", async (req, res) => {
 var commodityPrices_default = router15;
 
 // server/routes/externalProcessing.ts
+init_db();
 import { Router as Router16 } from "express";
 import { z as z12 } from "zod";
+init_auditLogger();
 var router16 = Router16();
 router16.use(authenticate);
 function requireAdmin8(req, res) {
@@ -5066,7 +5205,7 @@ router16.post("/deliveries", async (req, res) => {
 });
 router16.get("/deliveries", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
-  const limit = Math.max(1, parseInt(req.query.limit || "50", 10));
+  const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
   const { product_id, company_id, date_from, date_to, search } = req.query;
   let where = "WHERE 1=1";
@@ -5092,6 +5231,7 @@ router16.get("/deliveries", async (req, res) => {
     const s = `%${search}%`;
     params.push(s, s, s);
   }
+  params.push(limit, offset);
   try {
     const [rows] = await pool.execute(`
       SELECT
@@ -5116,7 +5256,7 @@ router16.get("/deliveries", async (req, res) => {
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       ${where}
       ORDER BY epd.delivery_date DESC, epd.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `, params);
     res.status(200).json(rows.map((r) => ({
       ...r,
@@ -5175,6 +5315,7 @@ router16.get("/deliveries/:id", async (req, res) => {
 var externalProcessing_default = router16;
 
 // server/routes/suspendedSales.ts
+init_db();
 import { Router as Router17 } from "express";
 import { z as z13 } from "zod";
 var router17 = Router17();
@@ -5373,8 +5514,21 @@ router17.put(
       return;
     }
     const { customer_name, customer_address, customer_tin, cart_items, label } = parsed.data;
+    const conn = await pool.getConnection();
     try {
-      const [result] = await pool.execute(
+      await conn.beginTransaction();
+      const [rows] = await conn.execute(
+        `SELECT id FROM suspended_sales
+         WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'
+         FOR UPDATE`,
+        [id, req.user.id]
+      );
+      if (rows.length === 0) {
+        await conn.rollback();
+        res.status(404).json({ message: "Suspended sale not found or already completed." });
+        return;
+      }
+      const [result] = await conn.execute(
         `UPDATE suspended_sales 
          SET customer_name = ?, customer_address = ?, customer_tin = ?, cart_data = ?, label = ?, updated_at = NOW()
          WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'`,
@@ -5389,13 +5543,18 @@ router17.put(
         ]
       );
       if (result.affectedRows === 0) {
+        await conn.rollback();
         res.status(404).json({ message: "Suspended sale not found or already completed." });
         return;
       }
+      await conn.commit();
       res.status(200).json({ message: "Suspended sale updated." });
     } catch (err) {
+      await conn.rollback();
       console.error("[PUT /api/suspended-sales/:id] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred." });
+    } finally {
+      conn.release();
     }
   }
 );
@@ -5405,21 +5564,39 @@ router17.delete(
   requireRole("Cashier", "Admin"),
   async (req, res) => {
     const { id } = req.params;
+    const conn = await pool.getConnection();
     try {
-      const [result] = await pool.execute(
+      await conn.beginTransaction();
+      const [rows] = await conn.execute(
+        `SELECT id FROM suspended_sales
+         WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'
+         FOR UPDATE`,
+        [id, req.user.id]
+      );
+      if (rows.length === 0) {
+        await conn.rollback();
+        res.status(404).json({ message: "Suspended sale not found or already completed." });
+        return;
+      }
+      const [result] = await conn.execute(
         `UPDATE suspended_sales 
          SET status = 'CANCELLED', updated_at = NOW()
          WHERE suspended_order_id = ? AND cashier_id = ? AND status = 'SUSPENDED'`,
         [id, req.user.id]
       );
       if (result.affectedRows === 0) {
+        await conn.rollback();
         res.status(404).json({ message: "Suspended sale not found or already completed." });
         return;
       }
+      await conn.commit();
       res.status(200).json({ message: "Suspended sale discarded." });
     } catch (err) {
+      await conn.rollback();
       console.error("[DELETE /api/suspended-sales/:id] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred." });
+    } finally {
+      conn.release();
     }
   }
 );
@@ -5429,7 +5606,8 @@ router17.post(
   requireRole("Cashier", "Admin"),
   async (req, res) => {
     const { id } = req.params;
-    const { cash_tendered, change_amount } = req.body;
+    const cash_tendered = Number(req.body.cash_tendered ?? 0);
+    const change_amount = req.body.change_amount !== void 0 ? Number(req.body.change_amount) : void 0;
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -5447,96 +5625,135 @@ router17.post(
       }
       const suspended = rows[0];
       const cartItems = typeof suspended.cart_data === "string" ? JSON.parse(suspended.cart_data) : suspended.cart_data;
-      let subtotal = 0;
-      let vatAmount = 0;
-      for (const item of cartItems) {
-        const lineSubtotal = Number(item.subtotal);
-        const taxType = item.tax_type || "VATABLE";
-        if (taxType === "VATABLE") {
-          const taxableAmt = Math.round(lineSubtotal / 1.12 * 100) / 100;
-          const vatAmt = Math.round((lineSubtotal - taxableAmt) * 100) / 100;
-          subtotal += taxableAmt;
-          vatAmount += vatAmt;
-        } else {
-          subtotal += lineSubtotal;
-        }
-      }
-      const totalAmount = Math.round((subtotal + vatAmount) * 100) / 100;
-      const changeAmount = change_amount !== void 0 ? Number(change_amount) : Math.round((Number(cash_tendered || 0) - totalAmount) * 100) / 100;
-      const invoiceSeqRows = await conn.execute(
-        `SELECT id, current_number FROM invoice_sequences WHERE prefix = 'INV' LIMIT 1 FOR UPDATE`
+      const [settingsRows] = await conn.execute(
+        `SELECT tax_rate, vat_registered FROM store_settings WHERE id = 1 LIMIT 1`
       );
-      const nextInvNum = (invoiceSeqRows[0][0]?.current_number || 0) + 1;
+      const dbTaxRate = Number(settingsRows[0]?.tax_rate ?? 12);
+      const dbVatActive = settingsRows[0]?.vat_registered === true || settingsRows[0]?.vat_registered === 1;
+      const productData = {};
+      for (const item of cartItems) {
+        const pid = Number(item.product_id);
+        if (!Number.isInteger(pid) || pid <= 0) {
+          await conn.rollback();
+          res.status(400).json({ message: `Invalid product ID in suspended cart.` });
+          return;
+        }
+        const qty = Number(item.quantity);
+        const [prodRows] = await conn.execute(
+          `SELECT quantity, product_name AS name, tax_type, selling_price
+           FROM products WHERE id = ? FOR UPDATE`,
+          [pid]
+        );
+        const product = prodRows[0];
+        if (!product) {
+          await conn.rollback();
+          res.status(404).json({ message: `Product ID ${pid} no longer exists.` });
+          return;
+        }
+        if (Number(product.quantity) < qty) {
+          await conn.rollback();
+          res.status(409).json({
+            message: `Insufficient stock for product: ${product.name}.`
+          });
+          return;
+        }
+        productData[pid] = {
+          name: product.name,
+          tax_type: product.tax_type ?? "VATABLE",
+          selling_price: Number(product.selling_price),
+          quantity: Number(product.quantity)
+        };
+      }
+      const calcItems = cartItems.map((item) => {
+        const p = productData[item.product_id];
+        const unit_price = p.selling_price;
+        const quantity = Number(item.quantity);
+        const line_subtotal = Math.round(unit_price * quantity * 100) / 100;
+        const taxType = p.tax_type;
+        const isVatable = taxType === "VATABLE" && dbVatActive;
+        const taxRate = isVatable ? dbTaxRate : 0;
+        const taxDivisor = 1 + taxRate / 100;
+        const taxableAmt = isVatable ? Math.round(line_subtotal / taxDivisor * 100) / 100 : line_subtotal;
+        const vatAmt = isVatable ? Math.round((line_subtotal - taxableAmt) * 100) / 100 : 0;
+        return {
+          product_id: item.product_id,
+          quantity,
+          unit_price,
+          line_subtotal,
+          tax_type: taxType,
+          tax_rate: taxRate,
+          taxable_amount: taxableAmt,
+          vat_amount: vatAmt
+        };
+      });
+      const calc_total_amount = Math.round(
+        calcItems.reduce((s, i) => s + i.line_subtotal, 0) * 100
+      ) / 100;
+      const calc_vat_amount = Math.round(
+        calcItems.reduce((s, i) => s + i.vat_amount, 0) * 100
+      ) / 100;
+      const calc_subtotal = Math.round((calc_total_amount - calc_vat_amount) * 100) / 100;
+      const calc_change = change_amount !== void 0 ? change_amount : Math.round((cash_tendered - calc_total_amount) * 100) / 100;
+      const [invSeqRows] = await conn.execute(
+        `SELECT id, prefix, current_number FROM invoice_sequences WHERE prefix = 'INV' LIMIT 1 FOR UPDATE`
+      );
+      if (!invSeqRows[0]) {
+        await conn.rollback();
+        res.status(500).json({ message: "Invoice sequence not found. Run migration 010." });
+        return;
+      }
+      const nextInvNum = Number(invSeqRows[0].current_number) + 1;
       await conn.execute(
         `UPDATE invoice_sequences SET current_number = ?, updated_at = NOW() WHERE id = ?`,
-        [nextInvNum, invoiceSeqRows[0][0]?.id]
+        [nextInvNum, invSeqRows[0].id]
       );
-      const invoiceNumber = `INV-${String(nextInvNum).padStart(6, "0")}`;
-      await conn.execute(
+      const invoice_number = `${invSeqRows[0].prefix}-${String(nextInvNum).padStart(6, "0")}`;
+      const [saleHeaderResult] = await conn.execute(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount,
+            payment_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
         [
-          invoiceNumber,
+          invoice_number,
           suspended.customer_name || "Walk-in Customer",
           suspended.customer_address || null,
           suspended.customer_tin || null,
           req.user.id,
-          subtotal,
-          vatAmount,
-          totalAmount,
-          cash_tendered || 0,
-          changeAmount >= 0 ? changeAmount : 0
+          calc_subtotal,
+          calc_vat_amount,
+          calc_total_amount,
+          cash_tendered,
+          calc_change >= 0 ? calc_change : 0
         ]
       );
-      const [saleResult] = await conn.execute(
-        `SELECT LAST_INSERT_ID() AS sale_id`
-      );
-      const saleId = saleResult[0].sale_id;
-      for (const item of cartItems) {
-        const lineSubtotal = Number(item.subtotal);
-        const taxType = item.tax_type || "VATABLE";
-        const isVatable = taxType === "VATABLE";
-        const taxRate = isVatable ? 12 : 0;
-        const taxableAmt = isVatable ? Math.round(lineSubtotal / 1.12 * 100) / 100 : lineSubtotal;
-        const vatAmt = isVatable ? Math.round((lineSubtotal - taxableAmt) * 100) / 100 : 0;
+      const sale_id = saleHeaderResult.insertId;
+      for (const ci of calcItems) {
         await conn.execute(
           `INSERT INTO sale_items
              (sale_id, product_id, quantity, unit_price, subtotal,
               tax_type, tax_rate, taxable_amount, vat_amount)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            saleId,
-            item.product_id,
-            item.quantity,
-            item.unitPrice,
-            lineSubtotal,
-            taxType,
-            taxRate,
-            taxableAmt,
-            vatAmt
+            sale_id,
+            ci.product_id,
+            ci.quantity,
+            ci.unit_price,
+            ci.line_subtotal,
+            ci.tax_type,
+            ci.tax_rate,
+            ci.taxable_amount,
+            ci.vat_amount
           ]
         );
-        const [productRows] = await conn.execute(
-          `SELECT quantity, product_name FROM products WHERE id = ? FOR UPDATE`,
-          [item.product_id]
-        );
-        if (!productRows[0] || productRows[0].quantity < item.quantity) {
-          await conn.rollback();
-          res.status(409).json({
-            message: `Insufficient stock for product: ${item.name || `ID ${item.product_id}`}`
-          });
-          return;
-        }
         await conn.execute(
           `UPDATE products SET quantity = quantity - ? WHERE id = ?`,
-          [item.quantity, item.product_id]
+          [ci.quantity, ci.product_id]
         );
         await conn.execute(
           `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
            VALUES (?, 'Sale', 'sale', ?, ?, ?)`,
-          [item.product_id, -item.quantity, invoiceNumber, req.user.id]
+          [ci.product_id, -ci.quantity, invoice_number, req.user.id]
         );
       }
       await conn.execute(
@@ -5544,20 +5761,38 @@ router17.post(
         [suspended.id]
       );
       await conn.commit();
+      try {
+        await pool.execute(
+          `UPDATE sales SET payment_status = 'completed' WHERE id = ? AND payment_status = 'pending'`,
+          [sale_id]
+        );
+      } catch (updateErr) {
+        console.warn(`[SUSPENDED-COMPLETE] Failed to update payment_status for sale ${sale_id}:`, updateErr);
+      }
+      Promise.resolve().then(() => (init_auditLogger(), auditLogger_exports)).then(({ logAuditEvent: logAuditEvent2 }) => logAuditEvent2({
+        action: "SALE_COMPLETED",
+        performedById: req.user.id,
+        performedByUsername: req.user.username,
+        entityType: "sales",
+        entityId: sale_id,
+        newValues: { invoice_number, total_amount: calc_total_amount, customer_name: suspended.customer_name || "Walk-in Customer", source: "suspended_sale" }
+      })).catch((e) => console.error("[auditLogger] import failed:", e));
       res.status(201).json({
-        invoice_number: invoiceNumber,
-        id: saleId,
-        subtotal,
-        vat_amount: vatAmount,
-        total_amount: totalAmount,
-        change_amount: changeAmount >= 0 ? changeAmount : 0,
+        invoice_number,
+        id: sale_id,
+        subtotal: calc_subtotal,
+        vat_amount: calc_vat_amount,
+        total_amount: calc_total_amount,
+        change_amount: calc_change >= 0 ? calc_change : 0,
+        payment_status: "completed",
+        receipt_printed: false,
         suspended_order_id: id,
-        items: cartItems.map((item) => ({
-          product_id: item.product_id,
-          tax_type: item.tax_type || "VATABLE",
-          taxable_amount: item.taxable_amount || 0,
-          vat_amount: item.vat_amount || 0,
-          line_subtotal: item.subtotal
+        items: calcItems.map((ci) => ({
+          product_id: ci.product_id,
+          tax_type: ci.tax_type,
+          taxable_amount: ci.taxable_amount,
+          vat_amount: ci.vat_amount,
+          line_subtotal: ci.line_subtotal
         }))
       });
     } catch (err) {

@@ -148,6 +148,7 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(s.supplier_name, '—')  AS supplier,
         COALESCE(u.abbreviation, '')     AS unit,
         p.quantity,
+        p.quantity_type,
         p.reorder_level,
         p.damaged_stock,
         p.cost_price,
