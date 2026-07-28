@@ -229,6 +229,37 @@ router.get(
   }
 );
 
+// ─── GET /my-pending — Cashier: load their pending returns ─────────────
+router.get(
+  "/my-pending",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.status,
+           r.resolution,
+           r.created_at
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         WHERE r.processed_by = ?
+           AND r.status = 'pending'
+         ORDER BY r.created_at DESC`,
+        [req.user!.id]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/my-pending] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
 // ─── Task 5.5 — GET / (Admin only) ───────────────────────────────────────────
 router.get(
   "/",

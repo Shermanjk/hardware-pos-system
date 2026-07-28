@@ -109,7 +109,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
 
           {/* Lookup error */}
           {lookupError && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-red-50 border-2 border-red-300 rounded-lg text-sm text-red-700">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               {lookupError}
             </div>
@@ -117,7 +117,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
 
           {/* Sale summary */}
           {sale && (
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-1.5 text-sm">
+            <div className="p-3 bg-gray-50 border-2 border-gray-300 rounded-lg space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Invoice</span>
                 <span className="font-mono font-semibold text-gray-900">{sale.invoice_number}</span>
@@ -156,7 +156,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
 
           {/* Warning */}
           {sale && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-amber-700 bg-amber-50 border-2 border-amber-300 rounded-lg px-3 py-2">
               This will submit a void request for admin review. The sale will not be voided until an admin approves it.
             </p>
           )}

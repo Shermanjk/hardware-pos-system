@@ -5,17 +5,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { RotateCcw, Loader2, X, Search, Hourglass } from "lucide-react";
 import { toast } from "sonner";
 import { searchSales, getSaleByInvoice, type SaleSummary, type Sale } from "@/shared/api/salesApi";
-import { createReturn, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
+import { createReturn, getReturnById, resolveReturn, getMyPendingReturns, type Return as ReturnFull } from "@/shared/api/returnsApi";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import type { HeldReturn } from "./PendingReturnsPanel";
 
 interface ReturnsPanelProps {
   show: boolean;
   onClose: () => void;
   storeSettings: StoreSettings;
-  onHeldReturn: (hr: { id: string; heldAt: Date; returnId: number; returnNumber: string; invoiceNumber: string; customerName: string }) => void;
+  onHeldReturn: (hr: HeldReturn) => void;
   onProcessResolution: (ret: ReturnFull) => void;
+  onReturnResolved?: (returnId: number) => void;
+  existingHeldReturns?: HeldReturn[];
 }
 
 interface SelectedItem {
@@ -26,7 +29,7 @@ interface SelectedItem {
   barcodeConfirmed: boolean;
 }
 
-export default function ReturnsPanel({ show, onClose, storeSettings, onHeldReturn, onProcessResolution }: ReturnsPanelProps) {
+export default function ReturnsPanel({ show, onClose, storeSettings, onHeldReturn, onProcessResolution, onReturnResolved, existingHeldReturns = [] }: ReturnsPanelProps) {
   const { user } = useAuth();
   const [searchMode, setSearchMode] = useState<"invoice" | "customer" | "date">("invoice");
   const [returnInvoice, setReturnInvoice] = useState("");
@@ -105,9 +108,16 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   };
 
   const handleFetchForResolution = async (returnId: number) => {
-    const ret = await getReturnById(returnId).catch(() => { toast.error("Failed to fetch."); throw new Error("fail"); });
-    if (ret.status !== "approved") { toast.error("Not approved yet."); throw new Error("not_approved"); }
-    setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
+    try {
+      const ret = await getReturnById(returnId);
+      if (ret.status !== "approved") {
+        toast.error("Not approved yet.");
+        return;
+      }
+      setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
+    } catch {
+      toast.error("Failed to fetch return details.");
+    }
   };
 
   const handleResolve = async () => {
@@ -117,6 +127,10 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
       const resolved = await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
       printReturnReceipt({ return_number: resolved.return_number, invoice_number: resolved.invoice_number, customer_name: resolved.customer_name, processed_by_name: user?.full_name ?? "—", resolution: resolved.resolution!, item_condition: resolved.item_condition!, refund_amount: resolved.refund_amount, items: resolved.items.map((i) => ({ product_name: i.product_name, quantity_returned: i.quantity_returned, unit_price: i.unit_price })), resolved_at: resolved.resolved_at ?? undefined, store_name: storeSettings.store_name, store_fb: storeSettings.store_fb, store_phone: storeSettings.store_phone, store_address: storeSettings.store_address, store_tin: storeSettings.business_license, store_vat_registered: storeSettings.vat_registered, currency: storeSettings.currency });
       toast.success(resolution === "refund" ? "Return completed." : "Replacement completed.");
+      // Notify parent to update pending returns
+      if (onReturnResolved) {
+        onReturnResolved(resolved.id);
+      }
       setShowResolution(false); setResolveData(null); setSubmittedReturn(null); resetPanel(); onClose();
     } catch (err: any) { setResolveError(err?.response?.data?.message ?? "Failed to process."); }
     finally { setResolveLoading(false); }
@@ -133,19 +147,42 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {!returnSale && !submittedReturn && (
             <div className="space-y-3">
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+              {/* Pending Returns Section */}
+              {existingHeldReturns.length > 0 && (
+                <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-3 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Hourglass className="h-4 w-4 text-purple-600" />
+                    <h3 className="text-sm font-semibold text-purple-900">Pending Returns</h3>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-xs">{existingHeldReturns.length}</span>
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {existingHeldReturns.map((hr) => (
+                      <button
+                        key={hr.id}
+                        onClick={() => handleFetchForResolution(hr.returnId)}
+                        className="w-full text-left px-2 py-2 bg-white border-2 border-purple-200 rounded hover:bg-purple-100 transition-colors"
+                      >
+                        <p className="text-xs font-semibold text-purple-900">{hr.returnNumber}</p>
+                        <p className="text-xs text-gray-500">{hr.invoiceNumber} · {hr.customerName}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex rounded-lg border-2 border-gray-300 overflow-hidden text-xs font-semibold shadow-sm">
                 {(["invoice", "customer", "date"] as const).map((m) => (
                   <button key={m} onClick={() => { setSearchMode(m); setReturnLookupError(null); setSaleSearchResults([]); }} className={`flex-1 py-2 ${searchMode === m ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{m === "invoice" ? "Invoice #" : m === "customer" ? "Customer" : "Date"}</button>
                 ))}
               </div>
-              {searchMode === "invoice" && (<div className="flex gap-2"><Input value={returnInvoice} onChange={(e) => setReturnInvoice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleReturnLookup()} placeholder="INV-..." className="h-10 text-sm flex-1" autoFocus /><Button size="sm" onClick={handleReturnLookup} disabled={returnLookupLoading || !returnInvoice.trim()}>{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}</Button></div>)}
-              {searchMode === "customer" && (<div className="flex gap-2"><Input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSaleSearch()} placeholder="Customer name…" className="h-10 text-sm flex-1" /><Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || !customerSearch.trim()}>{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
-              {searchMode === "date" && (<div className="space-y-2"><div className="flex gap-2"><div className="flex-1"><label className="text-xs mb-0.5 block">From</label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 text-sm" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">To</label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 text-sm" /></div></div><Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || (!dateFrom && !dateTo)} className="h-9 w-full">{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
+              {searchMode === "invoice" && (<div className="flex gap-2"><Input value={returnInvoice} onChange={(e) => setReturnInvoice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleReturnLookup()} placeholder="INV-..." className="h-10 text-sm flex-1 border-2 border-gray-300" autoFocus /><Button size="sm" onClick={handleReturnLookup} disabled={returnLookupLoading || !returnInvoice.trim()}>{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}</Button></div>)}
+              {searchMode === "customer" && (<div className="flex gap-2"><Input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSaleSearch()} placeholder="Customer name…" className="h-10 text-sm flex-1 border-2 border-gray-300" /><Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || !customerSearch.trim()}>{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
+              {searchMode === "date" && (<div className="space-y-2"><div className="flex gap-2"><div className="flex-1"><label className="text-xs mb-0.5 block">From</label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 text-sm border-2 border-gray-300" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">To</label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 text-sm border-2 border-gray-300" /></div></div><Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || (!dateFrom && !dateTo)} className="h-9 w-full">{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
               {returnLookupError && <p className="text-xs text-red-600">{returnLookupError}</p>}
-              {saleSearchResults.length > 0 && (<div className="border border-gray-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">{saleSearchResults.map((s) => (<button key={s.id} onClick={() => { setSaleSearchResults([]); setReturnInvoice(s.invoice_number); setSearchMode("invoice"); setReturnLookupLoading(true); setReturnLookupError(null); getSaleByInvoice(s.invoice_number).then((sale) => { setReturnSale(sale); const init: Record<number, SelectedItem> = {}; sale.items.forEach((item) => { const rem = item.quantity - item.quantity_returned; if (rem > 0 && item.is_returnable) init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode }; }); setSelectedItems(init); }).catch((err: any) => setReturnLookupError(err?.response?.status === 404 ? "Not found." : err?.response?.data?.message)).finally(() => setReturnLookupLoading(false)); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left"><div><p className="text-sm font-medium">{s.invoice_number}</p><p className="text-xs text-gray-500">{s.customer_name}</p></div><div className="text-right"><p className="text-xs font-semibold text-blue-600">₱{Number(s.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p><p className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString()}</p></div></button>))}</div>)}
+              {saleSearchResults.length > 0 && (<div className="border-2 border-gray-300 rounded-lg overflow-hidden max-h-56 overflow-y-auto shadow-sm">{saleSearchResults.map((s) => (<button key={s.id} onClick={() => { setSaleSearchResults([]); setReturnInvoice(s.invoice_number); setSearchMode("invoice"); setReturnLookupLoading(true); setReturnLookupError(null); getSaleByInvoice(s.invoice_number).then((sale) => { setReturnSale(sale); const init: Record<number, SelectedItem> = {}; sale.items.forEach((item) => { const rem = item.quantity - item.quantity_returned; if (rem > 0 && item.is_returnable) init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode }; }); setSelectedItems(init); }).catch((err: any) => setReturnLookupError(err?.response?.status === 404 ? "Not found." : err?.response?.data?.message)).finally(() => setReturnLookupLoading(false)); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left border-b border-gray-200 last:border-b-0"><div><p className="text-sm font-medium">{s.invoice_number}</p><p className="text-xs text-gray-500">{s.customer_name}</p></div><div className="text-right"><p className="text-xs font-semibold text-blue-600">₱{Number(s.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p><p className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString()}</p></div></button>))}</div>)}
             </div>)}
-          {returnSale && !submittedReturn && (<div className="space-y-4"><div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1"><div className="flex justify-between"><span className="text-gray-500">Invoice</span><span className="font-semibold">{returnSale.invoice_number}</span></div><div className="flex justify-between"><span className="text-gray-500">Customer</span><span className="font-medium">{returnSale.customer_name}</span></div></div><div><p className="text-xs font-semibold text-gray-500 uppercase mb-2">Select Items</p><div className="space-y-2">{returnSale.items.filter((item) => { const rem = item.quantity - item.quantity_returned; return rem > 0 && item.is_returnable; }).map((item) => { const sel = selectedItems[item.id]; if (!sel) return null; const rem = item.quantity - item.quantity_returned; return (<div key={item.id} className={`border rounded-lg p-3 ${sel.checked ? "border-blue-300 bg-blue-50/40" : "border-gray-200 bg-white"}`}><div className="flex items-start gap-2"><input type="checkbox" checked={sel.checked} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], checked: e.target.checked } }))} className="mt-0.5 h-4 w-4 accent-blue-600" /><div className="flex-1"><p className="text-sm font-medium">{item.product_name}</p><p className="text-xs text-gray-500">Ret: {rem} · ₱{Number(item.unit_price).toFixed(2)}</p></div></div>{sel.checked && (<div className="pl-6 flex gap-2 mt-2"><div className="flex-1"><label className="text-xs mb-0.5 block">Qty</label><input type="number" min={1} max={rem} value={sel.quantity} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], quantity: Math.min(rem, Math.max(1, Number(e.target.value))) } }))} className="w-full h-9 text-sm border rounded px-2" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">Reason</label><select value={sel.reason} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))} className="w-full h-9 text-sm border rounded px-2"><option>Damaged</option><option>Missing Items</option><option>Wrong Item</option><option>Other</option></select></div></div>)}</div>); })}</div></div>{returnSubmitError && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{returnSubmitError}</p>}<div className="flex gap-2"><Button variant="outline" size="sm" className="flex-1" onClick={() => { setReturnSale(null); setReturnInvoice(""); setSelectedItems({}); }}>Back</Button><Button size="sm" className="flex-1" onClick={handleReturnSubmit} disabled={returnSubmitLoading || !Object.values(selectedItems).some((v) => v.checked)}>{returnSubmitLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Submit Return"}</Button></div></div>)}
-          {submittedReturn && (<div className="space-y-4"><div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center"><div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto"><RotateCcw className="h-5 w-5 text-green-600" /></div><p className="text-sm font-semibold text-green-800 mt-2">Return Submitted</p><p className="text-xs font-mono text-green-700 bg-green-100 rounded px-2 py-1 mt-1">{submittedReturn.return_number}</p><p className="text-xs text-green-700 mt-1">Wait for admin approval.</p></div><Button className="w-full" onClick={() => handleFetchForResolution(submittedReturn.id)}>Process Return</Button><Button variant="outline" className="w-full" onClick={() => { onHeldReturn({ id: `hret-${Date.now()}`, heldAt: new Date(), returnId: submittedReturn.id, returnNumber: submittedReturn.return_number, invoiceNumber: returnSale?.invoice_number ?? "", customerName: returnSale?.customer_name ?? "" }); onClose(); resetPanel(); toast.success("Return parked."); }}><Hourglass className="h-4 w-4 mr-2" />Serve Next Customer</Button><Button variant="outline" className="w-full h-9 text-xs" onClick={resetPanel}>Start New Return</Button></div>)}
+          {returnSale && !submittedReturn && (<div className="space-y-4"><div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 text-sm space-y-1 shadow-sm"><div className="flex justify-between"><span className="text-gray-500">Invoice</span><span className="font-semibold">{returnSale.invoice_number}</span></div><div className="flex justify-between"><span className="text-gray-500">Customer</span><span className="font-medium">{returnSale.customer_name}</span></div></div><div><p className="text-xs font-semibold text-gray-500 uppercase mb-2">Select Items</p><div className="space-y-2">{returnSale.items.filter((item) => { const rem = item.quantity - item.quantity_returned; return rem > 0 && item.is_returnable; }).map((item) => { const sel = selectedItems[item.id]; if (!sel) return null; const rem = item.quantity - item.quantity_returned; return (<div key={item.id} className={`border-2 rounded-lg p-3 shadow-sm ${sel.checked ? "border-blue-400 bg-blue-50/40" : "border-gray-300 bg-white"}`}><div className="flex items-start gap-2"><input type="checkbox" checked={sel.checked} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], checked: e.target.checked } }))} className="mt-0.5 h-4 w-4 accent-blue-600" /><div className="flex-1"><p className="text-sm font-medium">{item.product_name}</p><p className="text-xs text-gray-500">Ret: {rem} · ₱{Number(item.unit_price).toFixed(2)}</p></div></div>{sel.checked && (<div className="pl-6 flex gap-2 mt-2"><div className="flex-1"><label className="text-xs mb-0.5 block">Qty</label><input type="number" min={1} max={rem} value={sel.quantity} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], quantity: Math.min(rem, Math.max(1, Number(e.target.value))) } }))} className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">Reason</label><select value={sel.reason} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))} className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2"><option>Damaged</option><option>Missing Items</option><option>Wrong Item</option><option>Other</option></select></div></div>)}</div>); })}</div></div>{returnSubmitError && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{returnSubmitError}</p>}<div className="flex gap-2"><Button variant="outline" size="sm" className="flex-1" onClick={() => { setReturnSale(null); setReturnInvoice(""); setSelectedItems({}); }}>Back</Button><Button size="sm" className="flex-1" onClick={handleReturnSubmit} disabled={returnSubmitLoading || !Object.values(selectedItems).some((v) => v.checked)}>{returnSubmitLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Submit Return"}</Button></div></div>)}
+          {submittedReturn && (<div className="space-y-4"><div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 text-center shadow-sm"><div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto"><RotateCcw className="h-5 w-5 text-green-600" /></div><p className="text-sm font-semibold text-green-800 mt-2">Return Submitted</p><p className="text-xs font-mono text-green-700 bg-green-100 rounded px-2 py-1 mt-1">{submittedReturn.return_number}</p><p className="text-xs text-green-700 mt-1">Wait for admin approval.</p></div><Button className="w-full" onClick={() => handleFetchForResolution(submittedReturn.id)}>Process Return</Button><Button variant="outline" className="w-full border-2 border-gray-300" onClick={() => { onHeldReturn({ id: `hret-${Date.now()}`, heldAt: new Date(), returnId: submittedReturn.id, returnNumber: submittedReturn.return_number, invoiceNumber: returnSale?.invoice_number ?? "", customerName: returnSale?.customer_name ?? "" }); onClose(); resetPanel(); toast.success("Return parked."); }}><Hourglass className="h-4 w-4 mr-2" />Serve Next Customer</Button><Button variant="outline" className="w-full h-9 text-xs" onClick={resetPanel}>Start New Return</Button></div>)}
         </div>
       </div>
       <Dialog open={showResolution} onOpenChange={(o) => { if (!o) { setShowResolution(false); setResolveData(null); setResolveError(null); } }}>

@@ -24,98 +24,109 @@ export interface ReturnReceiptData {
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
+  const W = 72;
+  const center = (s: string, w = W) => s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
+  const rule = (ch = "=") => ch.repeat(W);
+  const lr = (left: string, right: string, w = W) => {
+    const gap = w - left.length - right.length;
+    return left + (gap > 0 ? " ".repeat(gap) : " ") + right;
+  };
+
   const storeName    = data.store_name    || "";
   const storeFb      = data.store_fb      || "";
   const storePhone   = data.store_phone   || "";
   const storeAddress = data.store_address || "";
   const storeTIN     = data.store_tin     || "";
   const isVAT        = data.store_vat_registered ?? false;
-  const currSym      = data.currency === "PHP" || !data.currency ? "&#8369;" : data.currency;
+  const currSym      = data.currency === "PHP" || !data.currency ? "P" : data.currency;
 
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const fmtPeso = (amount: number) =>
     amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const rows = data.items
-    .map(
-      (item) =>
-        `<tr>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;">${item.product_name}</td>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:center;">${item.quantity_returned}</td>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">${currSym}${fmtPeso(item.unit_price)}</td>
-          <td style="padding:3px 4px;border-bottom:1px solid #eee;text-align:right;">${currSym}${fmtPeso(item.unit_price * item.quantity_returned)}</td>
-        </tr>`
-    )
-    .join("");
+  const lines: string[] = [];
+  const ln = (s = "") => lines.push(s);
 
-  const resolutionLabel =
-    data.resolution === "refund"
-      ? `<div class="r tr" style="font-size:13px;"><span>Total Refund</span><span>${currSym}${fmtPeso(data.refund_amount ?? 0)}</span></div>`
-      : `<div style="text-align:center;font-weight:bold;margin:6px 0;font-size:13px;letter-spacing:1px;">REPLACEMENT</div>`;
+  // Header - same as sales receipt
+  ln(rule("="));
+  ln(center(storeName));
+  ln(center(storeAddress));
+  ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}`));
+  if (isVAT) ln(center("VAT REGISTERED"));
+  ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
+  ln(rule("="));
+  ln();
+  ln(center("SALES RETURN RECEIPT"));
+  ln(`Return No: ${data.return_number}`);
+  ln(`Original Invoice: ${data.invoice_number}`);
+  ln(`Date: ${dateStr}${" ".repeat(Math.max(1, W - `Date: ${dateStr}`.length - `Time: ${timeStr}`.length))}Time: ${timeStr}`);
+  ln(rule("-"));
+  ln(`PROCESSED BY: ${data.processed_by_name}`);
+  ln(rule("-"));
+  ln(`CUSTOMER: ${data.customer_name}`);
+  ln(rule("-"));
+  ln("QTY  UNIT  DESCRIPTION            UNIT PRICE            AMOUNT");
+  ln(rule("-"));
 
-  const conditionLabel =
-    data.item_condition === "good" ? "Good Condition (Returned to Stock)" : "Damaged (Written Off)";
-
-  // Barcode-style visual for return number
-  const barcodeDisplay = `<div style="text-align:center;font-family:monospace;letter-spacing:4px;font-size:18px;margin:6px 0;">${data.return_number}</div>`;
-
-  const w = window.open("", "_blank", "width=420,height=760");
-  if (!w) {
-    alert("Pop-up blocked. Please allow pop-ups for this site to print the return receipt.");
-    return;
+  // Items table - same layout as sales receipt
+  for (const item of data.items) {
+    const qty  = String(item.quantity_returned).padStart(3);
+    const unit = "".padEnd(5); // No unit for returns
+    const desc = item.product_name.length > 21 ? item.product_name.slice(0, 20) + "…" : item.product_name.padEnd(21);
+    const up   = `${currSym} ${fmtPeso(item.unit_price)}`.padStart(16);
+    const amt  = `${currSym} ${fmtPeso(item.unit_price * item.quantity_returned)}`.padStart(16);
+    ln(`${qty}  ${unit} ${desc} ${up} ${amt}`);
   }
 
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  ln(rule("-"));
+  const totalItems = data.items.reduce((s, i) => s + i.quantity_returned, 0);
+  ln(lr(`ITEMS: ${totalItems}`, `TOTAL REFUND:  ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`));
+  ln(rule("-"));
+
+  // Return-specific information
+  if (data.resolution === "replacement") {
+    ln();
+    ln(center("REPLACEMENT"));
+  }
+
+  ln();
+  ln(`RETURN REASON: ${data.resolution === "refund" ? "Refund Requested" : "Replacement Requested"}`);
+  ln(`ITEM CONDITION: ${data.item_condition === "good" ? "Good" : "Damaged"}`);
+  ln(`INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged"}`);
+  ln(rule("-"));
+  ln();
+  ln(`PROCESSED BY: ${data.processed_by_name}`);
+  ln(rule("-"));
+  ln();
+  ln(center("Thank you for your business."));
+  ln(center("We sincerely appreciate your trust"));
+  ln(center("and look forward to serving you again."));
+  ln();
+  ln(center("This is your SALES RETURN RECEIPT."));
+  ln(center('"This document is not valid for claiming input taxes."'));
+  ln(rule("="));
+
+  const text = lines.join("\n");
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>Return Receipt ${data.return_number}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',monospace;font-size:12px;color:#111;padding:16px;width:340px}
-  .c{text-align:center}.b{font-weight:bold}
-  hr{border:none;border-top:1px dashed #999;margin:8px 0}
-  .r{display:flex;justify-content:space-between;margin:2px 0}
-  .lbl{color:#555}
-  table{width:100%;border-collapse:collapse;margin:6px 0}
-  th{padding:3px 4px;border-bottom:2px solid #333;font-size:11px;text-align:left}
-  .tr{font-weight:bold;padding:5px 4px 2px}
-  .ft{margin-top:10px;font-size:11px;color:#666;text-align:center}
-  .badge{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:2px 8px;font-size:11px;display:inline-block;margin-top:4px;}
+  body{font-family:'Courier New',Courier,monospace;font-size:11px;white-space:pre;color:#000;padding:8px;}
   @media print{body{padding:0}}
-</style></head><body>
-  <div class="c">
-  <div class="b" style="font-size:15px">${storeName}</div>
-  <div>${storeAddress}</div>
-  <div style="font-size:11px;color:#555;margin-top:3px">TIN: ${storeTIN}${isVAT ? " (VAT-Registered)" : ""}</div>
-  <div style="font-size:11px;color:#555;">Return Receipt</div>
-  <div style="font-size:11px;color:#555;">Fb: ${storeFb} | Tel: ${storePhone}</div>
-</div>
-<hr/>
-${barcodeDisplay}
-<div class="r"><span class="lbl">Return No.:</span><span class="b">${data.return_number}</span></div>
-<div class="r"><span class="lbl">Original Invoice:</span><span class="b">${data.invoice_number}</span></div>
-<div class="r"><span class="lbl">Date:</span><span>${dateStr}</span></div>
-<div class="r"><span class="lbl">Time:</span><span>${timeStr}</span></div>
-<div class="r"><span class="lbl">Processed By:</span><span>${data.processed_by_name}</span></div>
-<hr/>
-<div class="r"><span class="lbl">Customer:</span><span class="b">${data.customer_name}</span></div>
-<hr/>
-<table>
-  <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amt</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<hr/>
-${resolutionLabel}
-<div style="margin-top:4px;font-size:11px;color:#555;">
-  Item Condition: <span class="badge">${conditionLabel}</span>
-</div>
-<hr/>
-<div class="ft">
-  <p>Thank you for your business.</p>
-  <p style="margin-top:3px;font-size:10px;">This serves as your official return receipt.</p>
-</div>
-</body></html>`);
-  w.document.close();
-  setTimeout(() => { w.print(); w.close(); }, 250);
+</style></head><body>${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</body></html>`;
+
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (!doc) { document.body.removeChild(iframe); return; }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  iframe.contentWindow?.focus();
+  iframe.contentWindow?.print();
+  setTimeout(() => document.body.removeChild(iframe), 1000);
 }

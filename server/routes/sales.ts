@@ -587,6 +587,38 @@ router.post(
   }
 );
 
+// ─── GET /my-void-requests — Cashier: load their pending void requests ───────────
+router.get(
+  "/my-void-requests",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT
+           sv.id,
+           sv.sale_id,
+           s.invoice_number,
+           s.customer_name,
+           s.total_amount,
+           sv.status,
+           sv.reason,
+           sv.created_at
+         FROM sale_voids sv
+         JOIN sales s ON s.id = sv.sale_id
+         WHERE sv.requested_by = ?
+           AND sv.status = 'pending'
+         ORDER BY sv.created_at DESC`,
+        [req.user!.id]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/sales/my-void-requests] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
 // ─── PATCH /:id/void-approve — Admin approves void ───────────────────────────
 router.patch(
   "/:id/void-approve",

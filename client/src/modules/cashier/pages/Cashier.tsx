@@ -3,8 +3,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { LogOut, Clock, User, ChevronDown, PauseCircle, Hourglass, Ban } from "lucide-react";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { createSale, markReceiptPrinted, generateClientTransactionId, type CreateSalePayload } from "@/shared/api/salesApi";
+import { getMyVoidRequests, type MyVoidRequest } from "@/shared/api/voidApi";
 import { getProduct } from "@/shared/api/productsApi";
-import { getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
+import { getReturnById, resolveReturn, getMyPendingReturns, type Return as ReturnFull } from "@/shared/api/returnsApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { toast } from "sonner";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
@@ -67,6 +68,7 @@ export default function Cashier() {
   const [showVoidDialog, setShowVoidDialog] = useState(false);
   const [showVoidRequests, setShowVoidRequests] = useState(false);
   const [latestVoidDecision, setLatestVoidDecision] = useState<VoidDecisionNotification | null>(null);
+  const [pendingVoidRequestsCount, setPendingVoidRequestsCount] = useState(0);
 
   // Persistent suspended sales (from database)
   const [suspendedSales, setSuspendedSales] = useState<SuspendedSaleApi[]>([]);
@@ -127,6 +129,25 @@ export default function Cashier() {
       await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
       toast.success(resolution === "refund" ? "Return completed." : "Replacement completed.");
       setShowResolution(false); setResolveData(null);
+      // Remove the resolved return from held returns list
+      setHeldReturns((prev) => prev.filter((r) => r.returnId !== resolveData.id));
+      // Reload pending returns to update count
+      try {
+        const data = await getMyPendingReturns();
+        const mappedHeldReturns: HeldReturn[] = data.map((r) => ({
+          id: String(r.id),
+          heldAt: new Date(r.created_at),
+          returnId: r.id,
+          returnNumber: r.return_number,
+          invoiceNumber: r.invoice_number,
+          customerName: r.customer_name,
+          decision: r.status === "approved" ? "approved" : r.status === "rejected" ? "rejected" : undefined,
+          adminName: r.admin_name || undefined,
+        }));
+        setHeldReturns(mappedHeldReturns);
+      } catch {
+        /* silent */
+      }
     } catch (err: unknown) { setResolveError(getErrorMessage(err, "Failed.")); }
     finally { setResolveLoading(false); }
   };
@@ -150,6 +171,42 @@ export default function Cashier() {
   }, []);
 
   useEffect(() => { loadSuspendedSales(); }, [loadSuspendedSales]);
+
+  // Load pending returns on mount
+  useEffect(() => {
+    const loadPendingReturns = async () => {
+      try {
+        const data = await getMyPendingReturns();
+        const held: HeldReturn[] = data.map((r) => ({
+          id: String(r.id),
+          heldAt: new Date(r.created_at),
+          returnId: r.id,
+          returnNumber: r.return_number,
+          invoiceNumber: r.invoice_number,
+          customerName: r.customer_name,
+          decision: r.status === "approved" ? "approved" : undefined,
+        }));
+        setHeldReturns(held);
+      } catch {
+        /* silent - may fail if no permissions */
+      }
+    };
+    loadPendingReturns();
+  }, []);
+
+  // Load pending void requests on mount
+  useEffect(() => {
+    const loadVoidRequests = async () => {
+      try {
+        const data = await getMyVoidRequests();
+        setPendingVoidRequestsCount(data.length);
+      } catch {
+        /* silent - may fail if no permissions */
+      }
+    };
+    loadVoidRequests();
+  }, []);
+
 
   // Handle hold with persistence
   const handleHold = useCallback(async () => {
@@ -187,7 +244,7 @@ export default function Cashier() {
   }, [cartItems, customerInfo, holdCounter, loadSuspendedSales]);
 
   // Recall a suspended sale
-  const handleRecall = useCallback((holdId: string) => {
+  const handleRecall = useCallback(async (holdId: string) => {
     const held = suspendedSales.find((h) => h.suspended_order_id === holdId);
     if (!held) return;
     const restoredItems: CartItem[] = held.cart_data.map(item => ({
@@ -211,8 +268,15 @@ export default function Cashier() {
     });
     setCashTendered("");
     setShowHolds(false);
+    // Remove the held order from the list after recalling
+    try {
+      await discardSuspendedSale(holdId);
+      loadSuspendedSales();
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to remove held order."));
+    }
     toast.success(`Resumed: ${held.label || held.suspended_order_id}`);
-  }, [suspendedSales]);
+  }, [suspendedSales, loadSuspendedSales]);
 
   // Discard a suspended sale
   const handleDiscard = useCallback(async (holdId: string) => {
@@ -370,7 +434,7 @@ export default function Cashier() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-100 overflow-hidden">
-      <header className="h-14 shrink-0 bg-white border-b border-gray-200 px-6 flex items-center justify-between shadow-sm z-10">
+      <header className="h-14 shrink-0 bg-white border-b-2 border-gray-300 px-6 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><span className="text-white font-bold text-xs">IH</span></div>
@@ -404,31 +468,13 @@ export default function Cashier() {
       <div className="flex-1 flex gap-3 p-3 overflow-hidden min-h-0">
         <CartPanel cartItems={cartItems} setCartItems={setCartItems} barcodeInput={barcodeInput} setBarcodeInput={setBarcodeInput} searchResults={searchResults} setSearchResults={setSearchResults} searchLoading={searchLoading} setSearchLoading={setSearchLoading} showDropdown={showDropdown} setShowDropdown={setShowDropdown} barcodeRef={barcodeRef} searchTimeoutRef={searchTimeout} />
         <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} />
-        <PaymentPanel subtotalCents={subtotalCents} taxCents={taxCents} totalCents={totalCents} taxRate={taxRate} cashTendered={cashTendered} setCashTendered={setCashTendered} cartLength={cartItems.length} customerName={customerInfo.name} isProcessing={isProcessing} onProcessPayment={handleProcessPayment} onHold={handleHold} onReturn={() => setShowReturns(true)} onVoid={() => setShowVoidDialog(true)} onVoidRequests={() => setShowVoidRequests(true)} unseenVoidDecisions={0} />
+        <PaymentPanel subtotalCents={subtotalCents} taxCents={taxCents} totalCents={totalCents} taxRate={taxRate} cashTendered={cashTendered} setCashTendered={setCashTendered} cartLength={cartItems.length} customerName={customerInfo.name} isProcessing={isProcessing} onProcessPayment={handleProcessPayment} onHold={handleHold} onHoldOrders={() => setShowHolds(true)} onReturn={() => setShowReturns(true)} onVoid={() => setShowVoidDialog(true)} onVoidRequests={() => setShowVoidRequests(true)} unseenVoidDecisions={0} pendingReturnsCount={heldReturns.length} hasApprovedReturns={heldReturns.some((r) => r.decision === "approved")} pendingVoidRequestsCount={pendingVoidRequestsCount} pendingHeldOrdersCount={heldOrders.length} />
       </div>
-
-      {/* Fixed bottom badges */}
-      {heldOrders.length > 0 && (
-        <button onClick={() => setShowHolds(true)} className="fixed bottom-4 left-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold z-30">
-          <PauseCircle className="h-3.5 w-3.5" />On Hold
-          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-xs">{heldOrders.length}</span>
-        </button>
-      )}
-      {heldReturns.length > 0 && (
-        <button onClick={() => setShowHeldReturns(true)} className={`fixed bottom-4 left-36 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold z-30 ${heldReturns.some((r) => r.decision) ? "border-green-300 bg-green-50 text-green-700" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
-          <Hourglass className="h-3.5 w-3.5" />Pending Returns
-          <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs ${heldReturns.some((r) => r.decision) ? "bg-green-500" : "bg-purple-500"}`}>{heldReturns.length}</span>
-        </button>
-      )}
-      <button
-        onClick={() => setShowVoidRequests(true)}
-        className="fixed bottom-4 right-4 hidden"
-      />
 
       <HeldOrdersPanel show={showHolds} onClose={() => setShowHolds(false)} heldOrders={heldOrders} taxRate={taxRate} onRecall={handleRecall} onDiscard={handleDiscard} />
       <PendingReturnsPanel show={showHeldReturns} onClose={() => setShowHeldReturns(false)} heldReturns={heldReturns} onProcess={handleProcessReturn} onDiscard={(id: string) => setHeldReturns((prev) => prev.filter((r) => r.id !== id))} />
-      <ReturnsPanel show={showReturns} onClose={() => setShowReturns(false)} storeSettings={storeSettings} onHeldReturn={(hr: HeldReturn) => setHeldReturns((prev) => [...prev, hr])} onProcessResolution={(ret: ReturnFull) => { setResolveData(ret); setShowResolution(true); }} />
-      <CashierVoidRequestsPanel show={showVoidRequests} onClose={() => setShowVoidRequests(false)} newDecision={latestVoidDecision} />
+      <ReturnsPanel show={showReturns} onClose={() => setShowReturns(false)} storeSettings={storeSettings} onHeldReturn={(hr: HeldReturn) => setHeldReturns((prev) => [...prev, hr])} onProcessResolution={(ret: ReturnFull) => { setResolveData(ret); setShowResolution(true); }} onReturnResolved={(returnId: number) => { setHeldReturns((prev) => prev.filter((r) => r.returnId !== returnId)); }} existingHeldReturns={heldReturns} />
+      <CashierVoidRequestsPanel show={showVoidRequests} onClose={() => setShowVoidRequests(false)} newDecision={latestVoidDecision} onRequestVoid={() => setShowVoidDialog(true)} />
       <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
 
       {showResolution && resolveData && (

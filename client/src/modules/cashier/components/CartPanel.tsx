@@ -120,7 +120,7 @@ export default function CartPanel({
   return (
     <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-0">
       {/* Barcode / search input */}
-      <div className="shrink-0 bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm">
+      <div className="shrink-0 bg-white rounded-xl border-2 border-gray-300 px-4 py-3 shadow-sm">
         <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
           Barcode Scanner / Product Search
         </label>
@@ -159,7 +159,7 @@ export default function CartPanel({
             autoFocus
           />
           {showDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
               {searchResults.map((product) => (
                 <button
                   key={product.id}
@@ -197,7 +197,7 @@ export default function CartPanel({
       </div>
 
       {/* Cart */}
-      <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+      <div className="flex-1 bg-white rounded-xl border-2 border-gray-300 shadow-sm flex flex-col min-h-0">
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-bold text-gray-900">
             Shopping Cart
@@ -250,14 +250,14 @@ export default function CartPanel({
                   <div className="col-span-3 flex items-center justify-center gap-1.5">
                     <button
                       onClick={() => updateQty(item.id, item.quantity - 1)}
-                      className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-600 transition-colors"
+                      className="w-7 h-7 rounded-md border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-600 transition-colors"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
                     <span className="w-9 text-center text-sm font-bold tabular-nums text-gray-900">{item.quantity}</span>
                     <button
                       onClick={() => updateQty(item.id, item.quantity + 1)}
-                      className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center hover:bg-green-50 hover:border-green-300 hover:text-green-600 text-gray-600 transition-colors"
+                      className="w-7 h-7 rounded-md border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-green-50 hover:border-green-300 hover:text-green-600 text-gray-600 transition-colors"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>

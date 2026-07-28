@@ -27,7 +27,7 @@ export default function HeldOrdersPanel({
     <>
       {show && <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />}
       <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${show ? "translate-x-0" : "translate-x-full"}`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b-2 border-gray-300 shrink-0">
           <div className="flex items-center gap-2">
             <PauseCircle className="h-5 w-5 text-amber-500" />
             <h2 className="text-base font-bold text-gray-900">Held Transactions</h2>

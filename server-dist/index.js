@@ -3147,7 +3147,6 @@ router10.get("/logs", async (req, res) => {
       where += " AND il.product_id = ?";
       params.push(parseInt(product_id, 10));
     }
-    params.push(limit, offset);
     const [rows] = await pool.execute(`
       SELECT
         il.id,
@@ -3167,7 +3166,7 @@ router10.get("/logs", async (req, res) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
     res.status(200).json(rows);
   } catch (err) {
@@ -3327,90 +3326,13 @@ router10.post("/stock-adjustment", async (req, res) => {
 });
 var inventory_default = router10;
 
-// server/routes/reorderAlerts.ts
+// server/routes/dashboard.ts
 init_db();
 import { Router as Router11 } from "express";
 var router11 = Router11();
 router11.use(authenticate);
 router11.use(requireRole("Admin"));
-router11.get("/", async (req, res) => {
-  try {
-    const { category_id } = req.query;
-    let where = `WHERE p.status = 'Active' AND p.quantity <= p.reorder_level`;
-    const params = [];
-    if (category_id) {
-      where += " AND p.category_id = ?";
-      params.push(Number(category_id));
-    }
-    const [rows] = await pool.execute(`
-      SELECT
-        p.id,
-        p.barcode,
-        p.product_name,
-        COALESCE(c.category_name, '\u2014')  AS category,
-        COALESCE(s.supplier_name, '\u2014')  AS supplier,
-        s.contact_number                AS supplier_contact,
-        COALESCE(u.unit_name, '')        AS unit,
-        COALESCE(u.abbreviation, '')     AS unit_abbreviation,
-        p.quantity,
-        p.reorder_level,
-        p.cost_price,
-        p.selling_price,
-        -- urgency level: 0 = out of stock, 1 = critical, 2 = low stock
-        CASE
-          WHEN p.quantity = 0                               THEN 'Out of Stock'
-          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5)  THEN 'Critical'
-          ELSE                                                   'Low Stock'
-        END AS urgency,
-        -- units needed to reach reorder level
-        (p.reorder_level - p.quantity)  AS units_needed
-      FROM products p
-      LEFT JOIN categories c ON c.id = p.category_id
-      LEFT JOIN suppliers  s ON s.id = p.supplier_id
-      LEFT JOIN units      u ON u.id = p.unit_id
-      ${where}
-      ORDER BY
-        CASE
-          WHEN p.quantity = 0                               THEN 0
-          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5)  THEN 1
-          ELSE                                                   2
-        END,
-        p.product_name ASC
-    `, params);
-    res.status(200).json(rows);
-  } catch (err) {
-    console.error("[reorder-alerts/GET /]", err);
-    res.status(500).json({ message: "An unexpected error occurred." });
-  }
-});
-router11.get("/summary", async (_req, res) => {
-  try {
-    const [rows] = await pool.execute(`
-      SELECT
-        COUNT(*)                                                                  AS total_alerts,
-        SUM(CASE WHEN p.quantity = 0 THEN 1 ELSE 0 END)                          AS out_of_stock,
-        SUM(CASE WHEN p.quantity > 0
-                  AND p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 1 ELSE 0 END) AS critical,
-        SUM(CASE WHEN p.quantity > FLOOR(p.reorder_level * 0.5)
-                  AND p.quantity <= p.reorder_level THEN 1 ELSE 0 END)            AS low_stock
-      FROM products p
-      WHERE p.status = 'Active' AND p.quantity <= p.reorder_level
-    `);
-    res.status(200).json(rows[0]);
-  } catch (err) {
-    console.error("[reorder-alerts/GET /summary]", err);
-    res.status(500).json({ message: "An unexpected error occurred." });
-  }
-});
-var reorderAlerts_default = router11;
-
-// server/routes/dashboard.ts
-init_db();
-import { Router as Router12 } from "express";
-var router12 = Router12();
-router12.use(authenticate);
-router12.use(requireRole("Admin"));
-router12.get("/pending-counts", async (_req, res) => {
+router11.get("/pending-counts", async (_req, res) => {
   try {
     const [commodityPending] = await pool.execute(
       "SELECT COUNT(*) as count FROM commodity_purchases WHERE status = 'PENDING_APPROVAL'"
@@ -3431,7 +3353,7 @@ router12.get("/pending-counts", async (_req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router12.get("/", async (_req, res) => {
+router11.get("/", async (_req, res) => {
   try {
     const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const monthStart = today.slice(0, 7) + "-01";
@@ -3550,15 +3472,15 @@ router12.get("/", async (_req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-var dashboard_default = router12;
+var dashboard_default = router11;
 
 // server/routes/reports.ts
 init_db();
-import { Router as Router13 } from "express";
-var router13 = Router13();
-router13.use(authenticate);
-router13.use(requireRole("Admin"));
-router13.get("/", async (req, res) => {
+import { Router as Router12 } from "express";
+var router12 = Router12();
+router12.use(authenticate);
+router12.use(requireRole("Admin"));
+router12.get("/", async (req, res) => {
   try {
     const {
       date_from = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString().slice(0, 10),
@@ -3740,15 +3662,15 @@ router13.get("/", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-var reports_default = router13;
+var reports_default = router12;
 
 // server/routes/settings.ts
 init_db();
-import { Router as Router14 } from "express";
+import { Router as Router13 } from "express";
 import { z as z10 } from "zod";
 init_auditLogger();
-var router14 = Router14();
-router14.use(authenticate);
+var router13 = Router13();
+router13.use(authenticate);
 function requireAdmin6(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
@@ -3775,7 +3697,7 @@ var settingsSchema = z10.object({
   pos_min: z10.string().max(30).optional(),
   pos_serial: z10.string().max(30).optional()
 });
-router14.get("/", async (req, res) => {
+router13.get("/", async (req, res) => {
   try {
     const [rows] = await pool.execute("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
     const row = rows[0] ?? {};
@@ -3790,7 +3712,7 @@ router14.get("/", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
   }
 });
-router14.put("/", async (req, res) => {
+router13.put("/", async (req, res) => {
   if (!requireAdmin6(req, res)) return;
   const parsed = settingsSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -3860,15 +3782,15 @@ router14.put("/", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
   }
 });
-var settings_default = router14;
+var settings_default = router13;
 
 // server/routes/commodityPrices.ts
 init_db();
-import { Router as Router15 } from "express";
+import { Router as Router14 } from "express";
 import { z as z11 } from "zod";
 init_auditLogger();
-var router15 = Router15();
-router15.use(authenticate);
+var router14 = Router14();
+router14.use(authenticate);
 function requireAdmin7(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
@@ -3925,7 +3847,7 @@ var recordPaymentSchema = z11.object({
   payment_reference: z11.string().max(100).optional().nullable(),
   notes: z11.string().max(500).optional().nullable()
 });
-router15.get("/products", async (req, res) => {
+router14.get("/products", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   try {
     const [rows] = await pool.execute(`
@@ -3961,7 +3883,7 @@ router15.get("/products", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.get("/:productId/current", async (req, res) => {
+router14.get("/:productId/current", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   const productId = parseInt(req.params.productId, 10);
   if (isNaN(productId)) {
@@ -3998,7 +3920,7 @@ router15.get("/:productId/current", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.get("/:productId/history", async (req, res) => {
+router14.get("/:productId/history", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   const productId = parseInt(req.params.productId, 10);
   if (isNaN(productId)) {
@@ -4024,7 +3946,7 @@ router15.get("/:productId/history", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.post("/:productId/set-price", async (req, res) => {
+router14.post("/:productId/set-price", async (req, res) => {
   if (!requireAdmin7(req, res)) return;
   const productId = parseInt(req.params.productId, 10);
   if (isNaN(productId)) {
@@ -4082,7 +4004,7 @@ router15.post("/:productId/set-price", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.post("/purchase", async (req, res) => {
+router14.post("/purchase", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   const parsed = purchaseSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4266,7 +4188,7 @@ router15.post("/purchase", async (req, res) => {
     conn.release();
   }
 });
-router15.get("/purchases/pending", async (req, res) => {
+router14.get("/purchases/pending", async (req, res) => {
   if (!requireAdmin7(req, res)) return;
   try {
     const [countCheck] = await pool.execute(`
@@ -4324,7 +4246,7 @@ router15.get("/purchases/pending", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.get("/purchases/approved", async (req, res) => {
+router14.get("/purchases/approved", async (req, res) => {
   if (!requireCashierOrAdmin(req, res)) return;
   const { payment_status } = req.query;
   let where = "WHERE cp.status = 'APPROVED'";
@@ -4394,7 +4316,7 @@ router15.get("/purchases/approved", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.post("/purchases/:id/payment", async (req, res) => {
+router14.post("/purchases/:id/payment", async (req, res) => {
   if (!requireCashierOrAdmin(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
@@ -4527,7 +4449,7 @@ router15.post("/purchases/:id/payment", async (req, res) => {
     conn.release();
   }
 });
-router15.get("/purchases/:id/payments", async (req, res) => {
+router14.get("/purchases/:id/payments", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
@@ -4556,7 +4478,7 @@ router15.get("/purchases/:id/payments", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.get("/purchases", async (req, res) => {
+router14.get("/purchases", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
   const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
@@ -4583,7 +4505,6 @@ router15.get("/purchases", async (req, res) => {
     where += " AND cp.status = ?";
     params.push(status);
   }
-  params.push(limit, offset);
   try {
     const [rows] = await pool.execute(`
       SELECT
@@ -4629,7 +4550,7 @@ router15.get("/purchases", async (req, res) => {
       LEFT JOIN users prep ON prep.id = cp.prepared_by
       ${where}
       ORDER BY cp.transaction_date DESC, cp.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
     res.status(200).json(rows.map((r) => ({
       ...r,
@@ -4653,7 +4574,7 @@ router15.get("/purchases", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router15.post("/purchases/:id/approve", async (req, res) => {
+router14.post("/purchases/:id/approve", async (req, res) => {
   if (!requireAdmin7(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
@@ -4755,7 +4676,7 @@ router15.post("/purchases/:id/approve", async (req, res) => {
 var rejectSchema2 = z11.object({
   rejection_reason: z11.string().min(1, "Rejection reason is required").max(500)
 });
-router15.post("/purchases/:id/reject", async (req, res) => {
+router14.post("/purchases/:id/reject", async (req, res) => {
   if (!requireAdmin7(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
@@ -4824,15 +4745,15 @@ router15.post("/purchases/:id/reject", async (req, res) => {
     conn.release();
   }
 });
-var commodityPrices_default = router15;
+var commodityPrices_default = router14;
 
 // server/routes/externalProcessing.ts
 init_db();
-import { Router as Router16 } from "express";
+import { Router as Router15 } from "express";
 import { z as z12 } from "zod";
 init_auditLogger();
-var router16 = Router16();
-router16.use(authenticate);
+var router15 = Router15();
+router15.use(authenticate);
 function requireAdmin8(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
@@ -4857,7 +4778,7 @@ var recordDeliverySchema = z12.object({
   message: "Processing company is required",
   path: ["company_name"]
 });
-router16.get("/companies", async (req, res) => {
+router15.get("/companies", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   try {
     const [rows] = await pool.execute(
@@ -4872,7 +4793,7 @@ router16.get("/companies", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.get("/companies/all", async (req, res) => {
+router15.get("/companies/all", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   try {
     const [rows] = await pool.execute(
@@ -4886,7 +4807,7 @@ router16.get("/companies/all", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.post("/companies", async (req, res) => {
+router15.post("/companies", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const parsed = createCompanySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4929,7 +4850,7 @@ router16.post("/companies", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.put("/companies/:id", async (req, res) => {
+router15.put("/companies/:id", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -4977,7 +4898,7 @@ router16.put("/companies/:id", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.delete("/companies/:id", async (req, res) => {
+router15.delete("/companies/:id", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -5028,7 +4949,7 @@ router16.delete("/companies/:id", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.post("/deliveries", async (req, res) => {
+router15.post("/deliveries", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const parsed = recordDeliverySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -5203,7 +5124,7 @@ router16.post("/deliveries", async (req, res) => {
     conn.release();
   }
 });
-router16.get("/deliveries", async (req, res) => {
+router15.get("/deliveries", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
@@ -5267,7 +5188,7 @@ router16.get("/deliveries", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-router16.get("/deliveries/:id", async (req, res) => {
+router15.get("/deliveries/:id", async (req, res) => {
   if (!requireAdmin8(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -5312,13 +5233,13 @@ router16.get("/deliveries/:id", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-var externalProcessing_default = router16;
+var externalProcessing_default = router15;
 
 // server/routes/suspendedSales.ts
 init_db();
-import { Router as Router17 } from "express";
+import { Router as Router16 } from "express";
 import { z as z13 } from "zod";
-var router17 = Router17();
+var router16 = Router16();
 var suspendedItemSchema = z13.object({
   product_id: z13.number().int().positive(),
   name: z13.string(),
@@ -5338,7 +5259,7 @@ var suspendSaleSchema = z13.object({
   cart_items: z13.array(suspendedItemSchema).min(1),
   label: z13.string().optional()
 });
-router17.get(
+router16.get(
   "/",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5381,7 +5302,7 @@ router17.get(
     }
   }
 );
-router17.post(
+router16.post(
   "/",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5451,7 +5372,7 @@ router17.post(
     }
   }
 );
-router17.get(
+router16.get(
   "/:id",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5499,7 +5420,7 @@ router17.get(
     }
   }
 );
-router17.put(
+router16.put(
   "/:id",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5558,7 +5479,7 @@ router17.put(
     }
   }
 );
-router17.delete(
+router16.delete(
   "/:id",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5600,7 +5521,7 @@ router17.delete(
     }
   }
 );
-router17.post(
+router16.post(
   "/:id/complete",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5804,7 +5725,7 @@ router17.post(
     }
   }
 );
-var suspendedSales_default = router17;
+var suspendedSales_default = router16;
 
 // server/index.ts
 var __filename = fileURLToPath(import.meta.url);
@@ -5823,7 +5744,6 @@ async function startServer() {
   app.use("/api/suppliers", suppliers_default);
   app.use("/api/units", units_default);
   app.use("/api/inventory", inventory_default);
-  app.use("/api/reorder-alerts", reorderAlerts_default);
   app.use("/api/dashboard", dashboard_default);
   app.use("/api/reports", reports_default);
   app.use("/api/settings", settings_default);

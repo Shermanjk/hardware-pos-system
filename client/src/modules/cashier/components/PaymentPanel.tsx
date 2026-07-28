@@ -14,17 +14,22 @@ interface PaymentPanelProps {
   isProcessing: boolean;
   onProcessPayment: () => void;
   onHold: () => void;
+  onHoldOrders: () => void;
   onReturn: () => void;
   onVoid: () => void;
   onVoidRequests: () => void;
   unseenVoidDecisions: number;
+  pendingReturnsCount: number;
+  hasApprovedReturns: boolean;
+  pendingVoidRequestsCount: number;
+  pendingHeldOrdersCount: number;
 }
 
 export default function PaymentPanel({
   subtotalCents, taxCents, totalCents, taxRate,
   cashTendered, setCashTendered,
   cartLength, customerName, isProcessing,
-  onProcessPayment, onHold, onReturn, onVoid, onVoidRequests, unseenVoidDecisions,
+  onProcessPayment, onHold, onHoldOrders, onReturn, onVoid, onVoidRequests, unseenVoidDecisions, pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
 }: PaymentPanelProps) {
   const cashCents   = parseCashInput(cashTendered);
   const changeCents = cashCents >= totalCents ? cashCents - totalCents : null;
@@ -32,7 +37,7 @@ export default function PaymentPanel({
 
   return (
     <div className="w-80 shrink-0 flex flex-col gap-3 min-h-0">
-      <div className="shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 space-y-2">
+      <div className="shrink-0 bg-white rounded-xl border-2 border-gray-300 shadow-sm px-4 py-3 space-y-2">
         <div className="flex justify-between text-sm text-gray-600">
           <span>Subtotal</span>
           <span className="font-medium tabular-nums">₱{fmtCents(subtotalCents)}</span>
@@ -112,7 +117,7 @@ export default function PaymentPanel({
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
-              className="h-10 text-sm rounded-xl gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHold}
               disabled={cartLength === 0 || !customerName.trim()}
             >
@@ -120,27 +125,39 @@ export default function PaymentPanel({
             </Button>
             <Button
               variant="outline"
-              className="h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50"
+              onClick={onHoldOrders}
+            >
+              <PauseCircle className="h-4 w-4" /> Held Transactions
+              {pendingHeldOrdersCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs font-bold">
+                  {pendingHeldOrdersCount}
+                </span>
+              )}
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
               onClick={onReturn}
             >
               <RotateCcw className="h-4 w-4" /> Return
+              {pendingReturnsCount > 0 && (
+                <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs font-bold ${hasApprovedReturns ? "bg-green-500" : "bg-purple-500"}`}>
+                  {pendingReturnsCount}
+                </span>
+              )}
             </Button>
             <Button
               variant="outline"
-              className="h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-              onClick={onVoid}
-            >
-              <Ban className="h-4 w-4" /> Request Void
-            </Button>
-            <Button
-              variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-gray-200 text-gray-600 hover:bg-gray-50"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
               onClick={onVoidRequests}
             >
               <Ban className="h-4 w-4" /> Void Requests
-              {unseenVoidDecisions > 0 && (
+              {pendingVoidRequestsCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold">
-                  {unseenVoidDecisions}
+                  {pendingVoidRequestsCount}
                 </span>
               )}
             </Button>

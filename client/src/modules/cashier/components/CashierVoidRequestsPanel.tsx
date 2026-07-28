@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, RefreshCw, ChevronRight, ChevronLeft, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { X, RefreshCw, ChevronRight, ChevronLeft, CheckCircle2, XCircle, Clock, Ban } from "lucide-react";
 import { getMyVoidRequests, type MyVoidRequest } from "@/shared/api/voidApi";
 import type { VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   show: boolean;
   onClose: () => void;
   /** Called by parent when a WS void_decision arrives so the panel can refresh */
   newDecision: VoidDecisionNotification | null;
+  onRequestVoid: () => void;
 }
 
 function fmt(n: number) {
@@ -46,7 +48,7 @@ function StatusBadge({ status }: { status: MyVoidRequest["status"] }) {
 function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void }) {
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+      <div className="shrink-0 flex items-center gap-2 px-4 py-3 border-b-2 border-gray-300">
         <button
           onClick={onBack}
           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
@@ -61,7 +63,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Status banner */}
         {req.status === "approved" && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 space-y-0.5">
+          <div className="p-3 bg-green-50 border-2 border-green-300 rounded-lg text-sm text-green-800 space-y-0.5">
             <p className="font-semibold flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Void Approved</p>
             <p className="text-xs">The sale has been voided and inventory has been restored.</p>
             {req.approved_by_name && <p className="text-xs text-green-700">Approved by: <span className="font-semibold">{req.approved_by_name}</span></p>}
@@ -69,7 +71,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
           </div>
         )}
         {req.status === "rejected" && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 space-y-0.5">
+          <div className="p-3 bg-red-50 border-2 border-red-300 rounded-lg text-sm text-red-800 space-y-0.5">
             <p className="font-semibold flex items-center gap-1.5"><XCircle className="h-4 w-4" /> Void Rejected</p>
             {req.rejection_reason && <p className="text-xs">Reason: <span className="font-medium">{req.rejection_reason}</span></p>}
             {req.approved_by_name && <p className="text-xs text-red-700">Rejected by: <span className="font-semibold">{req.approved_by_name}</span></p>}
@@ -77,7 +79,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
           </div>
         )}
         {req.status === "pending" && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm text-amber-800">
             <p className="font-semibold flex items-center gap-1.5"><Clock className="h-4 w-4" /> Awaiting Admin Review</p>
             <p className="text-xs mt-0.5">Your void request has been submitted and is pending approval.</p>
           </div>
@@ -102,10 +104,10 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
         {/* Items */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Items</p>
-          <div className="rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg border-2 border-gray-300 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr className="bg-gray-50 border-b-2 border-gray-300">
                   <th className="text-left py-2 px-3 font-semibold text-gray-600">Product</th>
                   <th className="text-center py-2 px-2 font-semibold text-gray-600">Qty</th>
                   <th className="text-right py-2 px-3 font-semibold text-gray-600">Subtotal</th>
@@ -129,7 +131,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
         {/* Void reason */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Void Reason</p>
-          <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">{req.reason}</p>
+          <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 border-2 border-gray-300">{req.reason}</p>
         </div>
       </div>
     </div>
@@ -138,7 +140,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
-export default function CashierVoidRequestsPanel({ show, onClose, newDecision }: Props) {
+export default function CashierVoidRequestsPanel({ show, onClose, newDecision, onRequestVoid }: Props) {
   const [requests, setRequests] = useState<MyVoidRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<MyVoidRequest | null>(null);
@@ -182,13 +184,13 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision }:
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div
-        className="w-96 bg-white h-full shadow-2xl flex flex-col border-l border-gray-200"
+        className="w-96 bg-white h-full shadow-2xl flex flex-col border-l-2 border-gray-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-4 py-3.5 border-b border-gray-200 bg-white">
+        <div className="shrink-0 flex items-center justify-between px-4 py-3.5 border-b-2 border-gray-300 bg-white">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-900 text-sm">My Void Requests</span>
+            <span className="font-bold text-gray-900 text-sm">Void</span>
             {pendingCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs font-bold">
                 {pendingCount}
@@ -217,32 +219,51 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision }:
           {detail ? (
             <DetailView req={detail} onBack={() => setDetail(null)} />
           ) : (
-            <div className="h-full overflow-y-auto">
-              {loading ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
-                  <span className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-                  <span className="text-sm">Loading…</span>
+            <div className="h-full overflow-y-auto p-4 space-y-4">
+              {/* Request Void Section */}
+              <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Ban className="h-4 w-4 text-red-600" />
+                  <h3 className="text-sm font-semibold text-red-900">Request Void</h3>
                 </div>
-              ) : requests.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
-                  <Clock className="h-10 w-10 opacity-30" />
-                  <p className="text-sm font-medium">No void requests yet</p>
-                  <p className="text-xs text-center px-8">Void requests you submit will appear here with their approval status.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {requests.map((req) => (
-                    <button
-                      key={req.id}
-                      onClick={() => setDetail(req)}
-                      className="w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors flex items-start gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="font-mono text-xs font-semibold text-gray-800 truncate">
-                            {req.invoice_number}
-                          </span>
-                          <StatusBadge status={req.status} />
+                <p className="text-xs text-red-700 mb-3">Submit a void request for the current sale.</p>
+                <Button
+                  size="sm"
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                  onClick={onRequestVoid}
+                >
+                  <Ban className="h-4 w-4 mr-2" /> Request Void
+                </Button>
+              </div>
+
+              {/* Void Requests List */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">My Void Requests</p>
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+                    <span className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                    <span className="text-sm">Loading…</span>
+                  </div>
+                ) : requests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
+                    <Clock className="h-10 w-10 opacity-30" />
+                    <p className="text-sm font-medium">No void requests yet</p>
+                    <p className="text-xs text-center px-8">Void requests you submit will appear here with their approval status.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {requests.map((req) => (
+                      <button
+                        key={req.id}
+                        onClick={() => setDetail(req)}
+                        className="w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors flex items-start gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="font-mono text-xs font-semibold text-gray-800 truncate">
+                              {req.invoice_number}
+                            </span>
+                            <StatusBadge status={req.status} />
                         </div>
                         <div className="flex items-center justify-between text-xs text-gray-500">
                           <span>{req.items.length} item{req.items.length !== 1 ? "s" : ""}</span>
@@ -255,6 +276,7 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision }:
                   ))}
                 </div>
               )}
+              </div>
             </div>
           )}
         </div>

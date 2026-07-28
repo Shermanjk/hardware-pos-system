@@ -13,7 +13,7 @@ export default function CustomerPanel({ customerInfo, setCustomerInfo }: Custome
 
   return (
     <div className="w-72 shrink-0 flex flex-col min-h-0">
-      <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex flex-col">
+      <div className="flex-1 bg-white rounded-xl border-2 border-gray-300 shadow-sm px-4 py-3 flex flex-col">
         <div className="flex items-center gap-2 mb-4">
           <User className="h-4 w-4 text-blue-600" />
           <h3 className="text-sm font-bold text-gray-900">Customer Details</h3>

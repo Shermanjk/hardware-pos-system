@@ -139,3 +139,10 @@ export async function resolveReturn(
   );
   return response.data;
 }
+
+export async function getMyPendingReturns(): Promise<Return[]> {
+  const response = await axios.get<Return[]>("/api/returns/my-pending", {
+    headers: authHeaders(),
+  });
+  return response.data;
+}
