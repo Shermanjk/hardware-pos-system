@@ -831,9 +831,6 @@ router.get("/purchases", async (req: Request, res: Response) => {
     params.push(status);
   }
 
-  // Append LIMIT/OFFSET as parameterized values (best practice, avoids any interpolation path)
-  params.push(limit, offset);
-
   try {
     const [rows] = await pool.execute<any[]>(`
       SELECT
@@ -879,7 +876,7 @@ router.get("/purchases", async (req: Request, res: Response) => {
       LEFT JOIN users prep ON prep.id = cp.prepared_by
       ${where}
       ORDER BY cp.transaction_date DESC, cp.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
 
     res.status(200).json(rows.map((r) => ({

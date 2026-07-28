@@ -146,9 +146,6 @@ router.get("/logs", async (req: Request, res: Response) => {
       params.push(parseInt(product_id as string, 10));
     }
 
-    // Append LIMIT/OFFSET as parameterized values (best practice, avoids any interpolation path)
-    params.push(limit, offset);
-
     const [rows] = await pool.execute<any[]>(`
       SELECT
         il.id,
@@ -168,7 +165,7 @@ router.get("/logs", async (req: Request, res: Response) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
 
     res.status(200).json(rows);

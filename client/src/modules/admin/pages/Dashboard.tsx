@@ -196,11 +196,11 @@ export default function Dashboard() {
       {/* KPI cards — row 2: alert cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard icon={AlertCircle}  label="Out of Stock"      value={(kpis?.out_of_stock ?? 0).toString()}
-          sub="Need immediate restock" color="text-red-600" bg="bg-red-50" loading={loading} href="/reorder-alerts" />
+          sub="Need immediate restock" color="text-red-600" bg="bg-red-50" loading={loading} href="/inventory" />
         <KpiCard icon={AlertTriangle} label="Critical Stock"    value={(kpis?.critical ?? 0).toString()}
-          sub="Below 50% reorder level" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/reorder-alerts" />
+          sub="Below 50% reorder level" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/inventory" />
         <KpiCard icon={TrendingDown} label="Low Stock"         value={(kpis?.low_stock ?? 0).toString()}
-          sub="At or below reorder level" color="text-amber-600" bg="bg-amber-50" loading={loading} href="/reorder-alerts" />
+          sub="At or below reorder level" color="text-amber-600" bg="bg-amber-50" loading={loading} href="/inventory" />
         <KpiCard icon={RotateCcw}    label="Pending Returns"   value={(kpis?.pending_returns ?? 0).toString()}
           sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/returns" />
       </div>
@@ -314,7 +314,7 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500 mt-0.5">Top urgent items</p>
             </div>
             {!loading && (kpis?.low_stock ?? 0) + (kpis?.out_of_stock ?? 0) > 0 && (
-              <Link href="/reorder-alerts">
+              <Link href="/inventory">
                 <a className="text-xs text-blue-600 font-semibold hover:underline">View all</a>
               </Link>
             )}

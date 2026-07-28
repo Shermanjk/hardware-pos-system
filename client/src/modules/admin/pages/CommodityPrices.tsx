@@ -85,6 +85,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
       setShowApproveModal(null);
       onRefresh();
       load();
+      window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
     } catch (err: unknown) {
       toast.error(extractError(err));
       setShowApproveModal(null);
@@ -103,6 +104,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
       setRejectReason("");
       onRefresh();
       load();
+      window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
     } catch (err: unknown) {
       toast.error(extractError(err));
     } finally {

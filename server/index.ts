@@ -15,7 +15,6 @@ import categoriesRoutes from "./routes/categories.js";
 import suppliersRoutes from "./routes/suppliers.js";
 import unitsRoutes from "./routes/units.js";
 import inventoryRoutes from "./routes/inventory.js";
-import reorderAlertsRoutes from "./routes/reorderAlerts.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import reportsRoutes from "./routes/reports.js";
 import settingsRoutes from "./routes/settings.js";
@@ -44,7 +43,6 @@ async function startServer() {
   app.use("/api/suppliers", suppliersRoutes);
   app.use("/api/units", unitsRoutes);
   app.use("/api/inventory", inventoryRoutes);
-  app.use("/api/reorder-alerts", reorderAlertsRoutes);
   app.use("/api/dashboard", dashboardRoutes);
   app.use("/api/reports",   reportsRoutes);
   app.use("/api/settings",  settingsRoutes);

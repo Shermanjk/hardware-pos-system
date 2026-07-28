@@ -41,8 +41,7 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: Package, label: "Products", href: "/products" },
       { icon: Boxes, label: "Inventory", href: "/inventory", hasAlertBadge: true },
       { icon: Truck, label: "Suppliers", href: "/suppliers" },
-      { icon: BellRing, label: "Reorder Alerts", href: "/reorder-alerts", isAlertRoute: true },
-      { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices" },
+      { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices", hasAlertBadge: true },
       { icon: Truck, label: "External Processing", href: "/external-processing" },
     ],
   } as NavGroup,
@@ -53,8 +52,8 @@ const navStructure: (NavItem | NavGroup)[] = [
     icon: TrendingUp,
     items: [
       { icon: TrendingUp, label: "Sales", href: "/sales" },
-      { icon: RotateCcw, label: "Returns", href: "/returns" },
-      { icon: Ban, label: "Void Requests", href: "/void-requests" },
+      { icon: RotateCcw, label: "Returns", href: "/returns", hasAlertBadge: true },
+      { icon: Ban, label: "Void Requests", href: "/void-requests", hasAlertBadge: true },
     ],
   } as NavGroup,
 
@@ -73,20 +72,21 @@ const navStructure: (NavItem | NavGroup)[] = [
   } as NavGroup,
 ];
 
-// ─── Hook: fetch reorder alert count every 2 minutes ─────────────────────────
+// ─── Hook: fetch low stock count every 2 minutes ─────────────────────────────
 
-function useReorderAlertCount() {
+function useLowStockCount() {
   const [count, setCount] = useState(0);
 
   const fetch = async () => {
     try {
       const token = loadToken();
       if (!token) return;
-      const res = await axios.get<{ total_alerts: number }>(
-        "/api/reorder-alerts/summary",
+      const res = await axios.get<{ out_of_stock: string; critical: string; low_stock: string }>(
+        "/api/inventory/summary",
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setCount(res.data.total_alerts ?? 0);
+      const total = Number(res.data.out_of_stock ?? 0) + Number(res.data.critical ?? 0) + Number(res.data.low_stock ?? 0);
+      setCount(total);
     } catch {
       // silently ignore — sidebar shouldn't crash on a failed poll
     }
@@ -99,6 +99,48 @@ function useReorderAlertCount() {
   }, []);
 
   return count;
+}
+
+// ─── Hook: fetch pending counts every 2 minutes ───────────────────────────────
+
+function usePendingCounts() {
+  const [pendingReturns, setPendingReturns] = useState(0);
+  const [pendingVoids, setPendingVoids] = useState(0);
+  const [pendingCommodity, setPendingCommodity] = useState(0);
+
+  const fetch = async () => {
+    try {
+      const token = loadToken();
+      if (!token) return;
+      const res = await axios.get<{ pending_returns: number; pending_voids: number; pending_commodity_approvals: number }>(
+        "/api/dashboard/pending-counts",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPendingReturns(res.data.pending_returns ?? 0);
+      setPendingVoids(res.data.pending_voids ?? 0);
+      setPendingCommodity(res.data.pending_commodity_approvals ?? 0);
+    } catch (err) {
+      console.error("Failed to fetch pending counts:", err);
+      // silently ignore — sidebar shouldn't crash on a failed poll
+    }
+  };
+
+  useEffect(() => {
+    fetch();
+    const id = setInterval(fetch, 2 * 60 * 1000); // re-check every 2 min
+    return () => clearInterval(id);
+  }, []);
+
+  // Listen for custom event to refresh counts immediately
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetch();
+    };
+    window.addEventListener('refresh-pending-counts', handleRefresh);
+    return () => window.removeEventListener('refresh-pending-counts', handleRefresh);
+  }, []);
+
+  return { pendingReturns, pendingVoids, pendingCommodity, refreshPendingCounts: fetch };
 }
 
 // ─── Check if a route belongs to a group ─────────────────────────────────────
@@ -118,8 +160,9 @@ function getGroupForRoute(route: string): string | null {
 
 export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const [location]     = useLocation();
-  const alertCount     = useReorderAlertCount();
+  const alertCount     = useLowStockCount();
   const hasAlerts      = alertCount > 0;
+  const { pendingReturns, pendingVoids, pendingCommodity } = usePendingCounts();
   
   // Auto-expand group when route belongs to it
   const activeGroup    = getGroupForRoute(location);
@@ -215,8 +258,22 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           const group = item as NavGroup;
           const isExpanded = isGroupExpanded(group.label);
           const isGroupActive = group.items.some((subItem) => location === subItem.href);
-          const hasAlertInGroup = group.items.some((subItem) => subItem.hasAlertBadge) && hasAlerts;
-          const groupHasAlerts = hasAlertInGroup && !isExpanded;
+          
+          // Check if group has any alerts based on specific item types
+          let groupHasAlerts = false;
+          if (group.items.some((subItem) => subItem.href === "/inventory")) {
+            groupHasAlerts = groupHasAlerts || hasAlerts;
+          }
+          if (group.items.some((subItem) => subItem.href === "/returns")) {
+            groupHasAlerts = groupHasAlerts || pendingReturns > 0;
+          }
+          if (group.items.some((subItem) => subItem.href === "/void-requests")) {
+            groupHasAlerts = groupHasAlerts || pendingVoids > 0;
+          }
+          if (group.items.some((subItem) => subItem.href === "/commodity-prices")) {
+            groupHasAlerts = groupHasAlerts || pendingCommodity > 0;
+          }
+          const showGroupAlert = groupHasAlerts && !isExpanded;
 
           return (
             <div key={group.label}>
@@ -235,7 +292,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                     <group.icon className="h-5 w-5 shrink-0" />
                   )}
                   {/* Alert indicator when group is collapsed */}
-                  {groupHasAlerts && (
+                  {showGroupAlert && (
                     <>
                       <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 animate-ping opacity-75" />
                       <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-1 ring-[#0f172a]" />
@@ -260,7 +317,26 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                   {group.items.map((subItem) => {
                     const SubIcon = subItem.icon!;
                     const isActive = location === subItem.href;
-                    const showAlertBadge = subItem.hasAlertBadge && hasAlerts;
+                    
+                    // Determine alert count based on item type
+                    let itemAlertCount = 0;
+                    let showItemAlert = false;
+                    let alertColor = "bg-red-500";
+                    
+                    if (subItem.href === "/inventory") {
+                      itemAlertCount = alertCount;
+                      showItemAlert = hasAlerts;
+                    } else if (subItem.href === "/returns") {
+                      itemAlertCount = pendingReturns;
+                      showItemAlert = pendingReturns > 0;
+                    } else if (subItem.href === "/void-requests") {
+                      itemAlertCount = pendingVoids;
+                      showItemAlert = pendingVoids > 0;
+                    } else if (subItem.href === "/commodity-prices") {
+                      itemAlertCount = pendingCommodity;
+                      showItemAlert = pendingCommodity > 0;
+                      alertColor = "bg-orange-500";
+                    }
 
                     return (
                       <Link
@@ -275,18 +351,18 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                         <span className="relative shrink-0">
                           <SubIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
                           {/* Alert indicator for sub-items with badge */}
-                          {showAlertBadge && (
+                          {showItemAlert && (
                             <>
-                              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 animate-ping opacity-75" />
-                              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-1 ring-[#0f172a]" />
+                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${alertColor} animate-ping opacity-75`} />
+                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${alertColor} ring-1 ring-[#0f172a]`} />
                             </>
                           )}
                         </span>
                         <span className="text-sm font-medium truncate">{subItem.label}</span>
                         {/* Badge count for sub-items */}
-                        {isOpen && showAlertBadge && (
-                          <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
-                            {alertCount > 99 ? "99+" : alertCount}
+                        {isOpen && showItemAlert && (
+                          <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full ${alertColor} text-white text-xs font-bold leading-none`}>
+                            {itemAlertCount > 99 ? "99+" : itemAlertCount}
                           </span>
                         )}
                         {isActive && (
