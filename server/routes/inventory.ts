@@ -356,4 +356,91 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /api/inventory/notifications — clerk notifications ─────────────────────
+router.get("/notifications", async (req: Request, res: Response) => {
+  if (!requireAdminOrClerk(req, res)) return;
+
+  try {
+    // Get low stock and out of stock items
+    const [stockAlertRows] = await pool.execute<any[]>(`
+      SELECT
+        p.id,
+        p.product_name,
+        p.barcode,
+        p.quantity,
+        p.reorder_level,
+        CASE
+          WHEN p.quantity = 0 THEN 'out_of_stock'
+          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 'critical'
+          WHEN p.quantity <= p.reorder_level THEN 'low_stock'
+        END AS alert_type
+      FROM products p
+      WHERE p.status = 'Active' AND p.quantity <= p.reorder_level
+      ORDER BY
+        CASE
+          WHEN p.quantity = 0 THEN 0
+          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 1
+          ELSE 2
+        END,
+        p.product_name ASC
+      LIMIT 10
+    `);
+
+    // Get recent stock-ins from last 24 hours
+    const [recentStockInRows] = await pool.execute<any[]>(`
+      SELECT
+        il.id,
+        il.reference,
+        il.created_at,
+        COUNT(*) AS item_count
+      FROM inventory_logs il
+      WHERE il.transaction_type = 'Stock In'
+        AND il.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      GROUP BY il.reference, il.created_at, il.id
+      ORDER BY il.created_at DESC
+      LIMIT 5
+    `);
+
+    const notifications = [
+      ...stockAlertRows.map((row) => ({
+        id: `stock-${row.id}`,
+        type: row.alert_type === 'out_of_stock' ? 'danger' : row.alert_type === 'critical' ? 'danger' : 'warning',
+        message: row.alert_type === 'out_of_stock'
+          ? `${row.product_name} is out of stock`
+          : `${row.product_name} is below reorder level (${row.quantity} remaining)`,
+        time: formatTimeAgo(row.updated_at || new Date()),
+        product_id: row.id,
+        product_name: row.product_name,
+        quantity: row.quantity,
+        reorder_level: row.reorder_level,
+      })),
+      ...recentStockInRows.map((row) => ({
+        id: `stockin-${row.id}`,
+        type: 'success',
+        message: `Stock In ${row.reference} saved successfully (${row.item_count} items)`,
+        time: formatTimeAgo(row.created_at),
+        reference: row.reference,
+      })),
+    ];
+
+    res.status(200).json({ notifications, unread_count: notifications.length });
+  } catch (err) {
+    console.error("[inventory/GET /notifications]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
+function formatTimeAgo(date: Date | string): string {
+  const now = new Date();
+  const then = new Date(date);
+  const diffMs = now.getTime() - then.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  return `${Math.floor(diffHours / 24)} days ago`;
+}
+
 export default router;

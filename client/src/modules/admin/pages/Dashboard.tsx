@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, AlertCircle, Package, Truck,
-  DollarSign, ShoppingCart, RefreshCw, RotateCcw,
+  ShoppingCart, RefreshCw, RotateCcw,
   AlertTriangle, TrendingDown, CheckCircle, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,10 @@ function fmtTime(d: string) {
 
 function Spinner({ className = "" }: { className?: string }) {
   return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
+}
+
+function PesoIcon({ className = "" }: { className?: string }) {
+  return <span className={`text-lg font-bold ${className}`}>₱</span>;
 }
 
 function authHeaders() {
@@ -182,7 +186,7 @@ export default function Dashboard() {
 
       {/* KPI cards — row 1 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={DollarSign}   label="Today's Revenue"   value={fmtShort(kpis?.today_revenue ?? 0)}
+        <KpiCard icon={PesoIcon}     label="Today's Revenue"   value={fmtShort(kpis?.today_revenue ?? 0)}
           sub={`${kpis?.today_transactions ?? 0} transaction${(kpis?.today_transactions ?? 0) !== 1 ? "s" : ""}`}
           color="text-blue-600" bg="bg-blue-50" loading={loading} />
         <KpiCard icon={TrendingUp}   label="Monthly Revenue"   value={fmtShort(kpis?.monthly_revenue ?? 0)}

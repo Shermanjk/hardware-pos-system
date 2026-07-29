@@ -6,22 +6,18 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
+import { useClerkNotifications } from "@/shared/hooks/useClerkNotifications";
 
 interface ClerkTopNavProps {
   onMenuClick: () => void;
 }
-
-const mockNotifications = [
-  { id: 1, message: "8 products are below reorder level", type: "warning", time: "5 min ago" },
-  { id: 2, message: "Stock In #SI-042 saved successfully",  type: "success", time: "1 hr ago"  },
-  { id: 3, message: "Portland Cement is out of stock",      type: "danger",  time: "2 hr ago"  },
-];
 
 export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
   const { user: clerkUser, logout } = useClerkAuth();
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
   const [showNotifs, setShowNotifs] = useState(false);
+  const { notifications, unreadCount, clearAll, loading, refetch } = useClerkNotifications();
 
   useEffect(() => {
     const tick = () => {
@@ -42,6 +38,12 @@ export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showNotifs]);
+
+  useEffect(() => {
+    if (showNotifs) {
+      refetch();
+    }
+  }, [showNotifs, refetch]);
 
   const initials = clerkUser?.full_name
     ? clerkUser.full_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
@@ -80,37 +82,44 @@ export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
             className="relative h-9 w-9 p-0 text-gray-500 hover:text-gray-900"
             onClick={() => setShowNotifs((v) => !v)}
           >
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
+            <Bell className={`h-5 w-5 ${unreadCount > 0 ? "text-orange-500" : ""}`} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
+            )}
           </Button>
 
           {showNotifs && (
             <div className="absolute right-0 top-11 w-80 bg-white rounded-xl border border-gray-200 shadow-lg z-50">
-              <div className="px-4 py-3 border-b border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-900">Notifications</p>
-                <p className="text-xs text-gray-500">{mockNotifications.length} unread</p>
+                {unreadCount > 0 && (
+                  <button onClick={clearAll} className="text-xs text-blue-600 hover:text-blue-800">
+                    Clear all
+                  </button>
+                )}
               </div>
-              <div className="divide-y divide-gray-50">
-                {mockNotifications.map((n) => (
-                  <div key={n.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                    <div className="flex gap-3 items-start">
-                      <span className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                        n.type === "warning" ? "bg-amber-400" :
-                        n.type === "danger"  ? "bg-red-500"   : "bg-emerald-500"
-                      }`} />
-                      <div>
-                        <p className="text-sm text-gray-800">{n.message}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+              {loading ? (
+                <div className="px-4 py-10 text-center text-gray-400 text-sm">Loading...</div>
+              ) : notifications.length === 0 ? (
+                <div className="px-4 py-10 text-center text-gray-400 text-sm">No notifications</div>
+              ) : (
+                <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
+                  {notifications.map((n) => (
+                    <div key={n.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex gap-3 items-start">
+                        <span className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
+                          n.type === "warning" ? "bg-amber-400" :
+                          n.type === "danger"  ? "bg-red-500"   : "bg-emerald-500"
+                        }`} />
+                        <div>
+                          <p className="text-sm text-gray-800">{n.message}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div className="px-4 py-2 border-t border-gray-100">
-                <button className="text-xs text-blue-600 hover:underline w-full text-center font-medium">
-                  Mark all as read
-                </button>
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
