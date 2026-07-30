@@ -75,55 +75,6 @@ export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
           <span className="text-xs text-gray-400">{date}</span>
         </div>
 
-        {/* Notifications */}
-        <div className="relative" data-notif-panel>
-          <Button
-            variant="ghost" size="sm"
-            className="relative h-9 w-9 p-0 text-gray-500 hover:text-gray-900"
-            onClick={() => setShowNotifs((v) => !v)}
-          >
-            <Bell className={`h-5 w-5 ${unreadCount > 0 ? "text-orange-500" : ""}`} />
-            {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
-            )}
-          </Button>
-
-          {showNotifs && (
-            <div className="absolute right-0 top-11 w-80 bg-white rounded-xl border border-gray-200 shadow-lg z-50">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-900">Notifications</p>
-                {unreadCount > 0 && (
-                  <button onClick={clearAll} className="text-xs text-blue-600 hover:text-blue-800">
-                    Clear all
-                  </button>
-                )}
-              </div>
-              {loading ? (
-                <div className="px-4 py-10 text-center text-gray-400 text-sm">Loading...</div>
-              ) : notifications.length === 0 ? (
-                <div className="px-4 py-10 text-center text-gray-400 text-sm">No notifications</div>
-              ) : (
-                <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
-                  {notifications.map((n) => (
-                    <div key={n.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                      <div className="flex gap-3 items-start">
-                        <span className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                          n.type === "warning" ? "bg-amber-400" :
-                          n.type === "danger"  ? "bg-red-500"   : "bg-emerald-500"
-                        }`} />
-                        <div>
-                          <p className="text-sm text-gray-800">{n.message}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* Divider */}
         <div className="w-px h-8 bg-gray-200 mx-1" />
 

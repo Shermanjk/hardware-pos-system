@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, FolderOpen, Boxes, Truck,
   TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing, Scale,
+  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing,
 } from "lucide-react";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
@@ -43,7 +43,7 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: Truck, label: "Suppliers", href: "/suppliers" },
       { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices", hasAlertBadge: true },
       { icon: Truck, label: "External Processing", href: "/external-processing" },
-      { icon: Scale, label: "Market-Based Adjustments", href: "/market-based-adjustments", hasAlertBadge: true },
+      { icon: BellRing, label: "Requests", href: "/requests", hasAlertBadge: true },
     ],
   } as NavGroup,
 
@@ -53,8 +53,6 @@ const navStructure: (NavItem | NavGroup)[] = [
     icon: TrendingUp,
     items: [
       { icon: TrendingUp, label: "Sales", href: "/sales" },
-      { icon: RotateCcw, label: "Returns", href: "/returns", hasAlertBadge: true },
-      { icon: Ban, label: "Void Requests", href: "/void-requests", hasAlertBadge: true },
     ],
   } as NavGroup,
 
@@ -105,31 +103,27 @@ function useLowStockCount() {
 // ─── Hook: fetch pending counts every 2 minutes ───────────────────────────────
 
 function usePendingCounts() {
-  const [pendingReturns, setPendingReturns] = useState(0);
-  const [pendingVoids, setPendingVoids] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingCommodity, setPendingCommodity] = useState(0);
-  const [pendingAdjustments, setPendingAdjustments] = useState(0);
 
   const fetch = async () => {
     try {
       const token = loadToken();
       if (!token) return;
       
-      // Fetch dashboard pending counts
-      const res = await axios.get<{ pending_returns: number; pending_voids: number; pending_commodity_approvals: number }>(
+      // Fetch unified requests KPI
+      const reqRes = await axios.get<{ pending_requests: number }>(
+        "/api/requests/kpi",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPendingRequests(reqRes.data.pending_requests ?? 0);
+
+      // Fetch commodity purchase pending counts (separate from requests module)
+      const commodityRes = await axios.get<{ pending_commodity_approvals: number }>(
         "/api/dashboard/pending-counts",
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setPendingReturns(res.data.pending_returns ?? 0);
-      setPendingVoids(res.data.pending_voids ?? 0);
-      setPendingCommodity(res.data.pending_commodity_approvals ?? 0);
-
-      // Fetch pending adjustment counts
-      const adjRes = await axios.get<{ count: number }>(
-        "/api/market-based-adjustments/pending-count",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setPendingAdjustments(adjRes.data.count ?? 0);
+      setPendingCommodity(commodityRes.data.pending_commodity_approvals ?? 0);
     } catch (err) {
       console.error("Failed to fetch pending counts:", err);
       // silently ignore — sidebar shouldn't crash on a failed poll
@@ -151,7 +145,7 @@ function usePendingCounts() {
     return () => window.removeEventListener('refresh-pending-counts', handleRefresh);
   }, []);
 
-  return { pendingReturns, pendingVoids, pendingCommodity, pendingAdjustments, refreshPendingCounts: fetch };
+  return { pendingRequests, pendingCommodity, refreshPendingCounts: fetch };
 }
 
 // ─── Check if a route belongs to a group ─────────────────────────────────────
@@ -173,7 +167,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const [location]     = useLocation();
   const alertCount     = useLowStockCount();
   const hasAlerts      = alertCount > 0;
-  const { pendingReturns, pendingVoids, pendingCommodity, pendingAdjustments } = usePendingCounts();
+  const { pendingRequests, pendingCommodity } = usePendingCounts();
   
   // Auto-expand group when route belongs to it
   const activeGroup    = getGroupForRoute(location);
@@ -275,17 +269,11 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           if (group.items.some((subItem) => subItem.href === "/inventory")) {
             groupHasAlerts = groupHasAlerts || hasAlerts;
           }
-          if (group.items.some((subItem) => subItem.href === "/returns")) {
-            groupHasAlerts = groupHasAlerts || pendingReturns > 0;
-          }
-          if (group.items.some((subItem) => subItem.href === "/void-requests")) {
-            groupHasAlerts = groupHasAlerts || pendingVoids > 0;
+          if (group.items.some((subItem) => subItem.href === "/requests")) {
+            groupHasAlerts = groupHasAlerts || pendingRequests > 0;
           }
           if (group.items.some((subItem) => subItem.href === "/commodity-prices")) {
             groupHasAlerts = groupHasAlerts || pendingCommodity > 0;
-          }
-          if (group.items.some((subItem) => subItem.href === "/market-based-adjustments")) {
-            groupHasAlerts = groupHasAlerts || pendingAdjustments > 0;
           }
           const showGroupAlert = groupHasAlerts && !isExpanded;
 
@@ -340,19 +328,13 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                     if (subItem.href === "/inventory") {
                       itemAlertCount = alertCount;
                       showItemAlert = hasAlerts;
-                    } else if (subItem.href === "/returns") {
-                      itemAlertCount = pendingReturns;
-                      showItemAlert = pendingReturns > 0;
-                    } else if (subItem.href === "/void-requests") {
-                      itemAlertCount = pendingVoids;
-                      showItemAlert = pendingVoids > 0;
+                    } else if (subItem.href === "/requests") {
+                      itemAlertCount = pendingRequests;
+                      showItemAlert = pendingRequests > 0;
+                      alertColor = "bg-blue-500";
                     } else if (subItem.href === "/commodity-prices") {
                       itemAlertCount = pendingCommodity;
                       showItemAlert = pendingCommodity > 0;
-                      alertColor = "bg-orange-500";
-                    } else if (subItem.href === "/market-based-adjustments") {
-                      itemAlertCount = pendingAdjustments;
-                      showItemAlert = pendingAdjustments > 0;
                       alertColor = "bg-orange-500";
                     }
 

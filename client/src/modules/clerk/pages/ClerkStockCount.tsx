@@ -14,7 +14,27 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getInventory, getInventoryLogs, submitStockAdjustment, createAdjustmentRequest, AdjustmentReason } from "@/shared/api/inventoryApi";
+import { createStockCountRequest } from "@/shared/api/requestsApi";
 import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+
+// ─── Reason Lists ───────────────────────────────────────────────────────────────
+const STANDARD_REASONS = [
+  "Inventory Miscount",
+  "Damaged Items",
+  "Lost Items",
+  "Newly Found Stock",
+  "Encoding Error",
+  "Other",
+] as const;
+
+const MARKET_BASED_REASONS = [
+  "Drying/Moisture Loss",
+  "Spillage",
+  "Theft",
+  "Processing Loss",
+  "Warehouse Damage",
+  "Other",
+] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CountRow {
@@ -202,20 +222,31 @@ export default function ClerkStockCount() {
       (r) => parseFloat(r.physicalCount) !== r.systemQty
     );
 
+    // Validate all rows with discrepancy have a reason
+    for (const row of rowsWithDiff) {
+      if (!row.reason) {
+        throw new Error(`Reason required for product with discrepancy: ${row.productName}`);
+      }
+      if (row.reason === "Other" && !row.remarks.trim()) {
+        throw new Error(`Remarks required when reason is 'Other' for: ${row.productName}`);
+      }
+    }
+
     // Separate Market-Based and standard products
     const marketBasedRows = rowsWithDiff.filter((r) => r.pricing_type === "MARKET_BASED");
     const standardRows = rowsWithDiff.filter((r) => r.pricing_type !== "MARKET_BASED");
 
     try {
-      // Process standard products with direct adjustment
+      // Process standard products with approval workflow
       if (standardRows.length > 0) {
         await Promise.all(
           standardRows.map((row) =>
-            submitStockAdjustment({
+            createStockCountRequest({
               product_id: row.productId,
-              type: "Correction",
-              quantity: parseFloat(row.physicalCount),
-              reason: row.remarks.trim() || "Stock count correction",
+              system_quantity: Number(row.systemQty),
+              physical_quantity: parseFloat(row.physicalCount),
+              reason: row.reason || "",
+              remarks: row.remarks.trim() || undefined,
             })
           )
         );
@@ -224,26 +255,20 @@ export default function ClerkStockCount() {
       // Process Market-Based products with approval workflow
       if (marketBasedRows.length > 0) {
         await Promise.all(
-          marketBasedRows.map((row) => {
-            if (!row.reason) {
-              throw new Error(`Reason required for Market-Based product: ${row.productName}`);
-            }
-            if (row.reason === "Other" && !row.remarks.trim()) {
-              throw new Error(`Remarks required when reason is 'Other' for: ${row.productName}`);
-            }
-            return createAdjustmentRequest({
+          marketBasedRows.map((row) =>
+            createAdjustmentRequest({
               product_id: row.productId,
-              system_quantity: row.systemQty,
+              system_quantity: Number(row.systemQty),
               physical_quantity: parseFloat(row.physicalCount),
-              reason: row.reason,
+              reason: row.reason || "",
               remarks: row.remarks.trim() || undefined,
-            });
-          })
+            })
+          )
         );
       }
 
       toast.success(
-        `Stock count completed — ${countedRows.length} counted, ${standardRows.length} direct update(s), ${marketBasedRows.length} approval request(s)`
+        `Stock count completed — ${countedRows.length} counted, ${standardRows.length + marketBasedRows.length} approval request(s) submitted`
       );
       setCountComplete(true);
       setRows((prev) =>
@@ -348,8 +373,8 @@ export default function ClerkStockCount() {
         <AlertTriangle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
         <p>
           Enter the physical count for each product you have counted. Leave blank to skip.
-          Rows with a difference will update the system quantity when you click{" "}
-          <strong>Complete Stock Count</strong>.
+          <strong className="font-semibold"> When a discrepancy is detected, you must select a reason.</strong>
+          Rows with a difference will be submitted for admin approval.
         </p>
       </div>
 
@@ -488,9 +513,9 @@ export default function ClerkStockCount() {
                         <DiffCell system={row.systemQty} physical={row.physicalCount} quantityType={row.quantity_type} />
                       </td>
 
-                      {/* Reason (for Market-Based products) */}
+                      {/* Reason (for products with discrepancy) */}
                       <td className="py-3.5 px-4">
-                        {isMarketBased ? (
+                        {hasDiff ? (
                           <select
                             value={row.reason || ""}
                             onChange={(e) => updateRow(row.productId, "reason", e.target.value)}
@@ -499,30 +524,29 @@ export default function ClerkStockCount() {
                             }`}
                           >
                             <option value="">Select reason…</option>
-                            <option value="Drying/Moisture Loss">Drying/Moisture Loss</option>
-                            <option value="Spillage">Spillage</option>
-                            <option value="Theft">Theft</option>
-                            <option value="Processing Loss">Processing Loss</option>
-                            <option value="Handling Loss">Handling Loss</option>
-                            <option value="Warehouse Damage">Warehouse Damage</option>
-                            <option value="Inventory Miscount">Inventory Miscount</option>
-                            <option value="Other">Other</option>
+                            {(isMarketBased ? MARKET_BASED_REASONS : STANDARD_REASONS).map((reason) => (
+                              <option key={reason} value={reason}>{reason}</option>
+                            ))}
                           </select>
                         ) : (
-                          <span className="text-gray-400 text-xs">—</span>
+                          <span className="text-gray-300 text-xs">—</span>
                         )}
                       </td>
 
-                      {/* Remarks */}
+                      {/* Remarks (only when Other is selected) */}
                       <td className="py-3.5 px-4">
-                        <Input
-                          placeholder={isMarketBased && row.reason === "Other" ? "Required…" : "Optional note…"}
-                          value={row.remarks}
-                          onChange={(e) => updateRow(row.productId, "remarks", e.target.value)}
-                          className={`h-8 text-xs border-2 ${
-                            isMarketBased && row.reason === "Other" && !row.remarks.trim() ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
-                          }`}
-                        />
+                        {row.reason === "Other" ? (
+                          <Input
+                            placeholder="Required…"
+                            value={row.remarks}
+                            onChange={(e) => updateRow(row.productId, "remarks", e.target.value)}
+                            className={`h-8 text-xs border-2 ${
+                              !row.remarks.trim() ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
+                            }`}
+                          />
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -568,9 +592,9 @@ export default function ClerkStockCount() {
             <AlertDialogDescription>
               You have counted <strong>{countedRows.length}</strong> product(s).{" "}
               {shortRows.length + overRows.length > 0
-                ? `${shortRows.length + overRows.length} product(s) have a quantity difference and will be updated.`
+                ? `${shortRows.length + overRows.length} product(s) have a quantity difference and require a reason for admin approval.`
                 : "All counted products match the system quantity."}
-              {" "}This action will update the inventory and cannot be undone.
+              {" "}Ensure all discrepancies have a reason selected before confirming.
             </AlertDialogDescription>
           </AlertDialogHeader>
 

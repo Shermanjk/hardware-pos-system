@@ -7,45 +7,60 @@
 export type QuantityType = "WHOLE_UNIT" | "WEIGHTED";
 
 export function formatQuantity(
-  quantity: number,
+  quantity: number | string,
   unit?: string,
   quantityType: QuantityType = "WHOLE_UNIT"
 ): string {
+  const qty = typeof quantity === 'string' ? parseFloat(quantity) : quantity;
+  if (isNaN(qty)) {
+    return unit ? `0 ${unit}` : "0";
+  }
+  
   if (quantityType === "WEIGHTED") {
     // Display with up to 3 decimal places for weighted items
-    const formatted = quantity.toFixed(3).replace(/\.?0+$/, "");
+    const formatted = qty.toFixed(3).replace(/\.?0+$/, "");
     return unit ? `${formatted} ${unit}` : formatted;
   } else {
     // Display as whole number for whole-unit items
-    const formatted = Math.round(quantity).toString();
+    const formatted = Math.round(qty).toString();
     return unit ? `${formatted} ${unit}` : formatted;
   }
 }
 
 export function formatQuantityForTable(
-  quantity: number,
+  quantity: number | string,
   unit?: string,
   quantityType: QuantityType = "WHOLE_UNIT"
 ): string {
+  const qty = typeof quantity === 'string' ? parseFloat(quantity) : quantity;
+  if (isNaN(qty)) {
+    return "0";
+  }
+  
   if (quantityType === "WEIGHTED") {
     // Display with up to 3 decimal places for weighted items
-    return quantity.toFixed(3);
+    return qty.toFixed(3);
   } else {
     // Display as whole number for whole-unit items
-    return Math.round(quantity).toString();
+    return Math.round(qty).toString();
   }
 }
 
 export function formatQuantityParts(
-  quantity: number,
+  quantity: number | string,
   unit?: string,
   quantityType: QuantityType = "WHOLE_UNIT"
 ): { number: string; unit: string } {
+  const qty = typeof quantity === 'string' ? parseFloat(quantity) : quantity;
+  if (isNaN(qty)) {
+    return { number: "0", unit: unit || "" };
+  }
+  
   if (quantityType === "WEIGHTED") {
-    const formatted = quantity.toFixed(3).replace(/\.?0+$/, "");
+    const formatted = qty.toFixed(3).replace(/\.?0+$/, "");
     return { number: formatted, unit: unit || "" };
   } else {
-    const formatted = Math.round(quantity).toString();
+    const formatted = Math.round(qty).toString();
     return { number: formatted, unit: unit || "" };
   }
 }

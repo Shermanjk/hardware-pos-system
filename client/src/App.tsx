@@ -16,14 +16,12 @@ import Categories from "./modules/admin/pages/Categories";
 import Inventory from "./modules/admin/pages/Inventory";
 import Suppliers from "./modules/admin/pages/Suppliers";
 import Sales from "./modules/admin/pages/Sales";
-import Returns from "./modules/admin/pages/Returns";
-import VoidRequests from "./modules/admin/pages/VoidRequests";
 import Reports from "./modules/admin/pages/Reports";
 import Users from "./modules/admin/pages/Users";
 import Settings from "./modules/admin/pages/Settings";
 import CommodityPrices from "./modules/admin/pages/CommodityPrices";
 import ExternalProcessing from "./modules/admin/pages/ExternalProcessing";
-import MarketBasedAdjustments from "./modules/admin/pages/MarketBasedAdjustments";
+import Requests from "./modules/admin/pages/Requests";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import Cashier from "./modules/cashier/pages/Cashier";
@@ -69,14 +67,12 @@ function AdminRouter() {
         <Route path="/inventory"       component={Inventory}      />
         <Route path="/suppliers"       component={Suppliers}      />
         <Route path="/sales"           component={Sales}          />
-        <Route path="/returns"         component={Returns}        />
-        <Route path="/void-requests"    component={VoidRequests}   />
         <Route path="/reports"         component={Reports}        />
         <Route path="/users"           component={Users}          />
         <Route path="/settings"        component={Settings}       />
         <Route path="/commodity-prices" component={CommodityPrices} />
         <Route path="/external-processing" component={ExternalProcessing} />
-        <Route path="/market-based-adjustments" component={MarketBasedAdjustments} />
+        <Route path="/requests"        component={Requests}       />
         <Route path="/404"             component={NotFound}       />
         <Route component={NotFound} />
       </Switch>

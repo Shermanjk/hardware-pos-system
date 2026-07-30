@@ -1211,6 +1211,36 @@ router4.post(
     }
   }
 );
+router4.get(
+  "/my-void-requests",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req, res) => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT
+           sv.id,
+           sv.sale_id,
+           s.invoice_number,
+           s.customer_name,
+           s.total_amount,
+           sv.status,
+           sv.reason,
+           sv.created_at
+         FROM sale_voids sv
+         JOIN sales s ON s.id = sv.sale_id
+         WHERE sv.requested_by = ?
+           AND sv.status = 'pending'
+         ORDER BY sv.created_at DESC`,
+        [req.user.id]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/sales/my-void-requests] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
 router4.patch(
   "/:id/void-approve",
   authenticate,
@@ -1891,6 +1921,35 @@ router5.get(
       res.status(200).json(rows);
     } catch (err) {
       console.error("[GET /api/returns/search-approved] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+router5.get(
+  "/my-pending",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req, res) => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.status,
+           r.resolution,
+           r.created_at
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         WHERE r.processed_by = ?
+           AND r.status = 'pending'
+         ORDER BY r.created_at DESC`,
+        [req.user.id]
+      );
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/my-pending] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred." });
     }
   }
@@ -3114,6 +3173,8 @@ router10.get("/", async (req, res) => {
         p.damaged_stock,
         p.cost_price,
         p.selling_price,
+        p.pricing_type,
+        p.quantity_type,
         p.updated_at
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
@@ -3277,13 +3338,18 @@ router10.post("/stock-adjustment", async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [productRows] = await conn.execute("SELECT id, quantity, product_name FROM products WHERE id = ? FOR UPDATE", [product_id]);
+    const [productRows] = await conn.execute("SELECT id, quantity, product_name, pricing_type FROM products WHERE id = ? FOR UPDATE", [product_id]);
     if (productRows.length === 0) {
       await conn.rollback();
       res.status(404).json({ message: `Product ID ${product_id} not found` });
       return;
     }
     const product = productRows[0];
+    if (product.pricing_type === "MARKET_BASED") {
+      await conn.rollback();
+      res.status(422).json({ message: "Market-Based products require the approval workflow. Use the Stock Count panel to submit adjustment requests." });
+      return;
+    }
     let newQuantity;
     let quantityChange;
     if (type === "Correction") {
@@ -3324,6 +3390,81 @@ router10.post("/stock-adjustment", async (req, res) => {
     conn.release();
   }
 });
+router10.get("/notifications", async (req, res) => {
+  if (!requireAdminOrClerk(req, res)) return;
+  try {
+    const [stockAlertRows] = await pool.execute(`
+      SELECT
+        p.id,
+        p.product_name,
+        p.barcode,
+        p.quantity,
+        p.reorder_level,
+        CASE
+          WHEN p.quantity = 0 THEN 'out_of_stock'
+          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 'critical'
+          WHEN p.quantity <= p.reorder_level THEN 'low_stock'
+        END AS alert_type
+      FROM products p
+      WHERE p.status = 'Active' AND p.quantity <= p.reorder_level
+      ORDER BY
+        CASE
+          WHEN p.quantity = 0 THEN 0
+          WHEN p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 1
+          ELSE 2
+        END,
+        p.product_name ASC
+      LIMIT 10
+    `);
+    const [recentStockInRows] = await pool.execute(`
+      SELECT
+        il.id,
+        il.reference,
+        il.created_at,
+        COUNT(*) AS item_count
+      FROM inventory_logs il
+      WHERE il.transaction_type = 'Stock In'
+        AND il.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      GROUP BY il.reference, il.created_at, il.id
+      ORDER BY il.created_at DESC
+      LIMIT 5
+    `);
+    const notifications = [
+      ...stockAlertRows.map((row) => ({
+        id: `stock-${row.id}`,
+        type: row.alert_type === "out_of_stock" ? "danger" : row.alert_type === "critical" ? "danger" : "warning",
+        message: row.alert_type === "out_of_stock" ? `${row.product_name} is out of stock` : `${row.product_name} is below reorder level (${row.quantity} remaining)`,
+        time: formatTimeAgo(row.updated_at || /* @__PURE__ */ new Date()),
+        product_id: row.id,
+        product_name: row.product_name,
+        quantity: row.quantity,
+        reorder_level: row.reorder_level
+      })),
+      ...recentStockInRows.map((row) => ({
+        id: `stockin-${row.id}`,
+        type: "success",
+        message: `Stock In ${row.reference} saved successfully (${row.item_count} items)`,
+        time: formatTimeAgo(row.created_at),
+        reference: row.reference
+      }))
+    ];
+    res.status(200).json({ notifications, unread_count: notifications.length });
+  } catch (err) {
+    console.error("[inventory/GET /notifications]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+function formatTimeAgo(date) {
+  const now = /* @__PURE__ */ new Date();
+  const then = new Date(date);
+  const diffMs = now.getTime() - then.getTime();
+  const diffMins = Math.floor(diffMs / 6e4);
+  const diffHours = Math.floor(diffMs / 36e5);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  return `${Math.floor(diffHours / 24)} days ago`;
+}
 var inventory_default = router10;
 
 // server/routes/dashboard.ts
@@ -4585,7 +4726,7 @@ router14.post("/purchases/:id/approve", async (req, res) => {
   try {
     await conn.beginTransaction();
     const [purchaseRows] = await conn.execute(
-      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
+      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by, final_amount FROM commodity_purchases WHERE id = ? FOR UPDATE",
       [purchaseId]
     );
     if (purchaseRows.length === 0) {
@@ -4614,13 +4755,19 @@ router14.post("/purchases/:id/approve", async (req, res) => {
       return;
     }
     const product = productRows[0];
+    const finalAmount = Number(purchase.final_amount);
     await conn.execute(`
       UPDATE commodity_purchases
       SET status = 'APPROVED',
           approved_by = ?,
-          approved_at = NOW()
+          approved_at = NOW(),
+          payment_status = 'PAID',
+          amount_paid = ?,
+          balance_due = 0,
+          paid_at = NOW(),
+          paid_by = ?
       WHERE id = ?
-    `, [req.user.id, purchaseId]);
+    `, [req.user.id, finalAmount, req.user.id, purchaseId]);
     const payableQty = Number(purchase.payable_quantity ?? null) > 0 && Number(purchase.payable_quantity) <= Number(purchase.quantity) ? Number(purchase.payable_quantity) : Number(purchase.quantity);
     const newQty = Math.round((Number(product.current_qty) + payableQty) * 1e3) / 1e3;
     await conn.execute(
@@ -5148,11 +5295,12 @@ router15.get("/deliveries", async (req, res) => {
     params.push(date_to);
   }
   if (search) {
-    where += " AND (epd.delivery_reference LIKE ? OR epc.name LIKE ? OR p.product_name LIKE ?)";
+    where += " AND (epd.delivery_reference LIKE ? OR COALESCE(epc.name, '') LIKE ? OR p.product_name LIKE ?)";
     const s = `%${search}%`;
     params.push(s, s, s);
   }
-  params.push(limit, offset);
+  console.log("[externalProcessing/GET /deliveries] Query params:", params);
+  console.log("[externalProcessing/GET /deliveries] WHERE clause:", where);
   try {
     const [rows] = await pool.execute(`
       SELECT
@@ -5164,7 +5312,7 @@ router15.get("/deliveries", async (req, res) => {
         COALESCE(u.abbreviation, '')   AS unit_abbreviation,
         epd.quantity,
         epd.company_id,
-        epc.name                       AS company_name,
+        COALESCE(epc.name, '\u2014')        AS company_name,
         epd.delivery_date,
         epd.delivered_by,
         epd.remarks,
@@ -5172,12 +5320,12 @@ router15.get("/deliveries", async (req, res) => {
         COALESCE(usr.full_name, '\u2014')   AS recorded_by_name
       FROM external_processing_deliveries epd
       JOIN products p  ON p.id  = epd.product_id
-      JOIN external_processing_companies epc ON epc.id = epd.company_id
+      LEFT JOIN external_processing_companies epc ON epc.id = epd.company_id
       LEFT JOIN units u ON u.id = p.unit_id
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       ${where}
       ORDER BY epd.delivery_date DESC, epd.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
     res.status(200).json(rows.map((r) => ({
       ...r,
@@ -5206,7 +5354,7 @@ router15.get("/deliveries/:id", async (req, res) => {
         COALESCE(u.abbreviation, '')   AS unit_abbreviation,
         epd.quantity,
         epd.company_id,
-        epc.name                       AS company_name,
+        COALESCE(epc.name, '\u2014')        AS company_name,
         epc.address                    AS company_address,
         epd.delivery_date,
         epd.delivered_by,
@@ -5215,7 +5363,7 @@ router15.get("/deliveries/:id", async (req, res) => {
         COALESCE(usr.full_name, '\u2014')   AS recorded_by_name
       FROM external_processing_deliveries epd
       JOIN products p  ON p.id  = epd.product_id
-      JOIN external_processing_companies epc ON epc.id = epd.company_id
+      LEFT JOIN external_processing_companies epc ON epc.id = epd.company_id
       LEFT JOIN units u ON u.id = p.unit_id
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       WHERE epd.id = ?
@@ -5727,6 +5875,500 @@ router16.post(
 );
 var suspendedSales_default = router16;
 
+// server/routes/requests.ts
+init_db();
+import { Router as Router17 } from "express";
+init_auditLogger();
+import { z as z14 } from "zod";
+var router17 = Router17();
+router17.use(authenticate);
+function requireAdmin9(req, res) {
+  if (req.user?.role !== "Admin") {
+    res.status(403).json({ message: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+router17.get("/pending", async (req, res) => {
+  if (!requireAdmin9(req, res)) return;
+  try {
+    const [stockCountStandard] = await pool.execute(`
+      SELECT
+        'STOCK_COUNT_STANDARD' as type,
+        scar.id,
+        scar.reference,
+        p.product_name,
+        p.barcode,
+        COALESCE(u.full_name, '\u2014') AS requested_by_name,
+        scar.prepared_at,
+        scar.difference,
+        scar.reason,
+        scar.remarks,
+        scar.status,
+        scar.system_quantity,
+        scar.physical_quantity
+      FROM stock_count_adjustment_requests scar
+      JOIN products p ON p.id = scar.product_id
+      LEFT JOIN users u ON u.id = scar.prepared_by
+      WHERE scar.status = 'PENDING_APPROVAL'
+    `);
+    const [stockCountMarket] = await pool.execute(`
+      SELECT
+        'STOCK_COUNT_MARKET' as type,
+        mbar.id,
+        mbar.reference,
+        p.product_name,
+        p.barcode,
+        COALESCE(u.full_name, '\u2014') AS requested_by_name,
+        mbar.prepared_at,
+        mbar.difference,
+        mbar.reason,
+        mbar.remarks,
+        mbar.status,
+        mbar.system_quantity,
+        mbar.physical_quantity
+      FROM market_based_adjustment_requests mbar
+      JOIN products p ON p.id = mbar.product_id
+      LEFT JOIN users u ON u.id = mbar.prepared_by
+      WHERE mbar.status = 'PENDING_APPROVAL'
+    `);
+    const [voidRequests] = await pool.execute(`
+      SELECT
+        'VOID' as type,
+        sv.id,
+        s.invoice_number as reference,
+        '' as product_name,
+        '' as barcode,
+        COALESCE(u.full_name, '\u2014') AS requested_by_name,
+        sv.created_at as prepared_at,
+        0 as difference,
+        sv.reason,
+        '' as remarks,
+        sv.status,
+        0 as system_quantity,
+        0 as physical_quantity
+      FROM sale_voids sv
+      JOIN sales s ON s.id = sv.sale_id
+      LEFT JOIN users u ON u.id = sv.requested_by
+      WHERE sv.status = 'pending'
+    `);
+    const [returnRequests] = await pool.execute(`
+      SELECT
+        'RETURN' as type,
+        r.id,
+        r.return_number as reference,
+        '' as product_name,
+        '' as barcode,
+        COALESCE(u.full_name, '\u2014') AS requested_by_name,
+        r.created_at as prepared_at,
+        0 as difference,
+        r.return_reason as reason,
+        '' as remarks,
+        r.status,
+        0 as system_quantity,
+        0 as physical_quantity
+      FROM returns r
+      LEFT JOIN users u ON u.id = r.processed_by
+      WHERE r.status = 'pending' AND r.resolution IS NULL
+    `);
+    const allRequests = [
+      ...stockCountStandard,
+      ...stockCountMarket,
+      ...voidRequests,
+      ...returnRequests
+    ].sort((a, b) => new Date(b.prepared_at).getTime() - new Date(a.prepared_at).getTime());
+    res.status(200).json(allRequests);
+  } catch (err) {
+    console.error("[requests/GET /pending]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router17.get("/history", async (req, res) => {
+  if (!requireAdmin9(req, res)) return;
+  const { type, status, date_from, date_to, search, limit, offset } = req.query;
+  let where = "WHERE 1=1";
+  const params = [];
+  if (type && type !== "all") {
+  }
+  if (status && status !== "all") {
+    where += " AND status = ?";
+    params.push(status);
+  }
+  if (date_from) {
+    where += " AND prepared_at >= ?";
+    params.push(date_from);
+  }
+  if (date_to) {
+    where += " AND prepared_at <= ?";
+    params.push(date_to);
+  }
+  const limitVal = Math.min(100, Math.max(1, parseInt(limit || "50", 10)));
+  const offsetVal = Math.max(0, parseInt(offset || "0", 10));
+  try {
+    let allRequests = [];
+    if (!type || type === "all" || type === "STOCK_COUNT_STANDARD") {
+      const [rows] = await pool.execute(`
+        SELECT
+          'STOCK_COUNT_STANDARD' as type,
+          scar.id,
+          scar.reference,
+          p.product_name,
+          p.barcode,
+          COALESCE(u.full_name, '\u2014') AS requested_by_name,
+          scar.prepared_at,
+          scar.difference,
+          scar.reason,
+          scar.remarks,
+          scar.status,
+          scar.system_quantity,
+          scar.physical_quantity
+        FROM stock_count_adjustment_requests scar
+        JOIN products p ON p.id = scar.product_id
+        LEFT JOIN users u ON u.id = scar.prepared_by
+        ${where}
+        ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR scar.reference LIKE ?)" : ""}
+        ORDER BY scar.prepared_at DESC
+        LIMIT ${limitVal} OFFSET ${offsetVal}
+      `, [...params, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
+      allRequests.push(...rows);
+    }
+    if (!type || type === "all" || type === "STOCK_COUNT_MARKET") {
+      const [rows] = await pool.execute(`
+        SELECT
+          'STOCK_COUNT_MARKET' as type,
+          mbar.id,
+          mbar.reference,
+          p.product_name,
+          p.barcode,
+          COALESCE(u.full_name, '\u2014') AS requested_by_name,
+          mbar.prepared_at,
+          mbar.difference,
+          mbar.reason,
+          mbar.remarks,
+          mbar.status,
+          mbar.system_quantity,
+          mbar.physical_quantity
+        FROM market_based_adjustment_requests mbar
+        JOIN products p ON p.id = mbar.product_id
+        LEFT JOIN users u ON u.id = mbar.prepared_by
+        ${where}
+        ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR mbar.reference LIKE ?)" : ""}
+        ORDER BY mbar.prepared_at DESC
+        LIMIT ${limitVal} OFFSET ${offsetVal}
+      `, [...params, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
+      allRequests.push(...rows);
+    }
+    if (!type || type === "all" || type === "VOID") {
+      const [rows] = await pool.execute(`
+        SELECT
+          'VOID' as type,
+          sv.id,
+          s.invoice_number as reference,
+          '' as product_name,
+          '' as barcode,
+          COALESCE(u.full_name, '\u2014') AS requested_by_name,
+          sv.created_at as prepared_at,
+          0 as difference,
+          sv.reason,
+          '' as remarks,
+          sv.status,
+          0 as system_quantity,
+          0 as physical_quantity
+        FROM sale_voids sv
+        JOIN sales s ON s.id = sv.sale_id
+        LEFT JOIN users u ON u.id = sv.requested_by
+        ${where}
+        ${search ? "AND (s.invoice_number LIKE ?)" : ""}
+        ORDER BY sv.created_at DESC
+        LIMIT ${limitVal} OFFSET ${offsetVal}
+      `, [...params, ...search ? [`%${search}%`] : []]);
+      allRequests.push(...rows);
+    }
+    if (!type || type === "all" || type === "RETURN") {
+      const [rows] = await pool.execute(`
+        SELECT
+          'RETURN' as type,
+          r.id,
+          r.return_number as reference,
+          '' as product_name,
+          '' as barcode,
+          COALESCE(u.full_name, '\u2014') AS requested_by_name,
+          r.created_at as prepared_at,
+          0 as difference,
+          r.return_reason as reason,
+          '' as remarks,
+          r.status,
+          0 as system_quantity,
+          0 as physical_quantity
+        FROM returns r
+        LEFT JOIN users u ON u.id = r.processed_by
+        ${where}
+        ${search ? "AND (r.return_number LIKE ?)" : ""}
+        ORDER BY r.created_at DESC
+        LIMIT ${limitVal} OFFSET ${offsetVal}
+      `, [...params, ...search ? [`%${search}%`] : []]);
+      allRequests.push(...rows);
+    }
+    allRequests.sort((a, b) => new Date(b.prepared_at).getTime() - new Date(a.prepared_at).getTime());
+    res.status(200).json(allRequests);
+  } catch (err) {
+    console.error("[requests/GET /history]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router17.get("/kpi", async (req, res) => {
+  if (!requireAdmin9(req, res)) return;
+  try {
+    const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const [pendingStandard] = await pool.execute(
+      "SELECT COUNT(*) as count FROM stock_count_adjustment_requests WHERE status = 'PENDING_APPROVAL'"
+    );
+    const [pendingMarket] = await pool.execute(
+      "SELECT COUNT(*) as count FROM market_based_adjustment_requests WHERE status = 'PENDING_APPROVAL'"
+    );
+    const [pendingVoid] = await pool.execute(
+      "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'pending'"
+    );
+    const [pendingReturn] = await pool.execute(
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'pending' AND resolution IS NULL"
+    );
+    const [approvedTodayStandard] = await pool.execute(
+      "SELECT COUNT(*) as count FROM stock_count_adjustment_requests WHERE status = 'APPROVED' AND DATE(approved_at) = ?",
+      [today]
+    );
+    const [approvedTodayMarket] = await pool.execute(
+      "SELECT COUNT(*) as count FROM market_based_adjustment_requests WHERE status = 'APPROVED' AND DATE(approved_at) = ?",
+      [today]
+    );
+    const [approvedTodayVoid] = await pool.execute(
+      "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'approved' AND DATE(resolved_at) = ?",
+      [today]
+    );
+    const [approvedTodayReturn] = await pool.execute(
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'approved' AND DATE(resolved_at) = ?",
+      [today]
+    );
+    const [rejectedTodayStandard] = await pool.execute(
+      "SELECT COUNT(*) as count FROM stock_count_adjustment_requests WHERE status = 'REJECTED' AND DATE(approved_at) = ?",
+      [today]
+    );
+    const [rejectedTodayMarket] = await pool.execute(
+      "SELECT COUNT(*) as count FROM market_based_adjustment_requests WHERE status = 'REJECTED' AND DATE(approved_at) = ?",
+      [today]
+    );
+    const [rejectedTodayVoid] = await pool.execute(
+      "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'rejected' AND DATE(resolved_at) = ?",
+      [today]
+    );
+    const [rejectedTodayReturn] = await pool.execute(
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'rejected' AND DATE(resolved_at) = ?",
+      [today]
+    );
+    const pendingRequests = Number(pendingStandard[0]?.count || 0) + Number(pendingMarket[0]?.count || 0) + Number(pendingVoid[0]?.count || 0) + Number(pendingReturn[0]?.count || 0);
+    const approvedToday = Number(approvedTodayStandard[0]?.count || 0) + Number(approvedTodayMarket[0]?.count || 0) + Number(approvedTodayVoid[0]?.count || 0) + Number(approvedTodayReturn[0]?.count || 0);
+    const rejectedToday = Number(rejectedTodayStandard[0]?.count || 0) + Number(rejectedTodayMarket[0]?.count || 0) + Number(rejectedTodayVoid[0]?.count || 0) + Number(rejectedTodayReturn[0]?.count || 0);
+    res.status(200).json({
+      pending_requests: pendingRequests,
+      approved_today: approvedToday,
+      rejected_today: rejectedToday,
+      awaiting_review: pendingRequests
+    });
+  } catch (err) {
+    console.error("[requests/GET /kpi]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+var createStockCountRequestSchema = z14.object({
+  product_id: z14.number(),
+  system_quantity: z14.number(),
+  physical_quantity: z14.number(),
+  reason: z14.enum(["Inventory Miscount", "Damaged Items", "Lost Items", "Newly Found Stock", "Encoding Error", "Other"]),
+  remarks: z14.string().optional()
+});
+router17.post("/stock-count-standard", async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  try {
+    const data = createStockCountRequestSchema.parse(req.body);
+    const [seqResult] = await pool.execute(
+      "SELECT current_number FROM invoice_sequences WHERE document_type = 'STOCK COUNT ADJUSTMENT REQUEST'"
+    );
+    const seq = seqResult[0];
+    const nextNum = (seq?.current_number || 0) + 1;
+    const dateStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "");
+    const reference = `SCAR-${dateStr}-${String(nextNum).padStart(6, "0")}`;
+    await pool.execute(
+      `INSERT INTO stock_count_adjustment_requests 
+       (product_id, system_quantity, physical_quantity, reason, remarks, prepared_by, reference)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [data.product_id, data.system_quantity, data.physical_quantity, data.reason, data.remarks || null, userId, reference]
+    );
+    await pool.execute(
+      "UPDATE invoice_sequences SET current_number = ? WHERE document_type = 'STOCK COUNT ADJUSTMENT REQUEST'",
+      [nextNum]
+    );
+    await logAuditEvent({
+      action: "STOCK_COUNT_ADJUSTMENT_REQUEST_CREATED",
+      performedById: userId,
+      performedByUsername: req.user?.username || "Unknown",
+      entityType: "stock_count_adjustment_request",
+      entityId: void 0,
+      metadata: { reference, product_id: data.product_id }
+    });
+    res.status(201).json({ reference });
+  } catch (err) {
+    console.error("[requests/POST /stock-count-standard]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router17.post("/:type/:id/approve", async (req, res) => {
+  if (!requireAdmin9(req, res)) return;
+  const { type, id } = req.params;
+  const adminId = req.user?.id;
+  const adminUsername = req.user?.username;
+  try {
+    const requestId = parseInt(id, 10);
+    if (isNaN(requestId)) {
+      res.status(400).json({ message: "Invalid request ID." });
+      return;
+    }
+    if (type === "stock-count-standard") {
+      const [rows] = await pool.execute(
+        "SELECT * FROM stock_count_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL'",
+        [requestId]
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ message: "Request not found or already processed." });
+        return;
+      }
+      const request = rows[0];
+      await pool.execute(
+        "UPDATE products SET quantity = quantity WHERE id = ?",
+        [request.product_id]
+      );
+      await pool.execute(
+        `INSERT INTO inventory_logs (product_id, quantity, transaction_type, action, reference, user_id)
+         VALUES (?, ?, 'Adjustment', 'Stock Count Adjustment Approved', ?, ?)`,
+        [request.product_id, request.physical_quantity, request.reference, adminId]
+      );
+      await pool.execute(
+        "UPDATE stock_count_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
+        [adminId, requestId]
+      );
+      await logAuditEvent({
+        action: "STOCK_COUNT_ADJUSTMENT_REQUEST_APPROVED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "stock_count_adjustment_request",
+        entityId: requestId,
+        metadata: { reference: request.reference, product_id: request.product_id }
+      });
+      res.status(200).json({ message: "Request approved." });
+    } else if (type === "stock-count-market") {
+      const [rows] = await pool.execute(
+        "SELECT * FROM market_based_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL'",
+        [requestId]
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ message: "Request not found or already processed." });
+        return;
+      }
+      const request = rows[0];
+      await pool.execute(
+        "UPDATE products SET quantity = quantity WHERE id = ?",
+        [request.product_id]
+      );
+      await pool.execute(
+        `INSERT INTO inventory_logs (product_id, quantity, transaction_type, action, reference, user_id)
+         VALUES (?, ?, 'Adjustment', 'Market-Based Adjustment Approved', ?, ?)`,
+        [request.product_id, request.physical_quantity, request.reference, adminId]
+      );
+      await pool.execute(
+        "UPDATE market_based_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
+        [adminId, requestId]
+      );
+      await logAuditEvent({
+        action: "MARKET_BASED_ADJUSTMENT_REQUEST_APPROVED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "market_based_adjustment_request",
+        entityId: requestId,
+        metadata: { reference: request.reference, product_id: request.product_id }
+      });
+      res.status(200).json({ message: "Request approved." });
+    } else if (type === "void") {
+      res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
+    } else if (type === "return") {
+      res.status(501).json({ message: "Return approval not yet implemented in unified endpoint." });
+    } else {
+      res.status(400).json({ message: "Invalid request type." });
+    }
+  } catch (err) {
+    console.error("[requests/POST /:type/:id/approve]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router17.post("/:type/:id/reject", async (req, res) => {
+  if (!requireAdmin9(req, res)) return;
+  const { type, id } = req.params;
+  const adminId = req.user?.id;
+  const adminUsername = req.user?.username;
+  const { rejection_reason } = req.body;
+  if (!rejection_reason || !rejection_reason.trim()) {
+    res.status(400).json({ message: "Rejection reason is required." });
+    return;
+  }
+  try {
+    const requestId = parseInt(id, 10);
+    if (isNaN(requestId)) {
+      res.status(400).json({ message: "Invalid request ID." });
+      return;
+    }
+    if (type === "stock-count-standard") {
+      await pool.execute(
+        "UPDATE stock_count_adjustment_requests SET status = 'REJECTED', approved_by = ?, approved_at = NOW(), rejection_reason = ? WHERE id = ?",
+        [adminId, rejection_reason, requestId]
+      );
+      await logAuditEvent({
+        action: "STOCK_COUNT_ADJUSTMENT_REQUEST_REJECTED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "stock_count_adjustment_request",
+        entityId: requestId,
+        reason: rejection_reason
+      });
+      res.status(200).json({ message: "Request rejected." });
+    } else if (type === "stock-count-market") {
+      await pool.execute(
+        "UPDATE market_based_adjustment_requests SET status = 'REJECTED', approved_by = ?, approved_at = NOW(), rejection_reason = ? WHERE id = ?",
+        [adminId, rejection_reason, requestId]
+      );
+      await logAuditEvent({
+        action: "MARKET_BASED_ADJUSTMENT_REQUEST_REJECTED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "market_based_adjustment_request",
+        entityId: requestId,
+        reason: rejection_reason
+      });
+      res.status(200).json({ message: "Request rejected." });
+    } else if (type === "void") {
+      res.status(501).json({ message: "Void rejection not yet implemented in unified endpoint." });
+    } else if (type === "return") {
+      res.status(501).json({ message: "Return rejection not yet implemented in unified endpoint." });
+    } else {
+      res.status(400).json({ message: "Invalid request type." });
+    }
+  } catch (err) {
+    console.error("[requests/POST /:type/:id/reject]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+var requests_default = router17;
+
 // server/index.ts
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
@@ -5750,6 +6392,7 @@ async function startServer() {
   app.use("/api/commodity-prices", commodityPrices_default);
   app.use("/api/external-processing", externalProcessing_default);
   app.use("/api/suspended-sales", suspendedSales_default);
+  app.use("/api/requests", requests_default);
   const staticPath = fs.existsSync(path.resolve(__dirname, "../dist/public")) ? path.resolve(__dirname, "../dist/public") : path.resolve(__dirname, "public");
   if (fs.existsSync(staticPath)) {
     app.use(express.static(staticPath));

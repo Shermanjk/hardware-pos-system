@@ -113,9 +113,9 @@ export default function Dashboard() {
   // Pending counts for "Requires Attention" section
   const [pendingCounts, setPendingCounts] = useState({
     pending_commodity_approvals: 0,
-    pending_returns: 0,
-    pending_voids: 0,
-    pending_adjustments: 0,
+    pending_requests: 0,
+    approved_today: 0,
+    rejected_today: 0,
   });
   const [pendingLoading, setPendingLoading] = useState(true);
 
@@ -129,7 +129,24 @@ export default function Dashboard() {
       // Also load pending counts
       try {
         const counts = await getPendingCounts();
-        setPendingCounts(counts);
+        setPendingCounts({
+          pending_commodity_approvals: counts.pending_commodity_approvals ?? 0,
+          pending_requests: 0, // Will be fetched from requests API
+          approved_today: 0,
+          rejected_today: 0,
+        });
+        
+        // Fetch unified requests KPI
+        const reqRes = await axios.get<{ pending_requests: number; approved_today: number; rejected_today: number }>(
+          "/api/requests/kpi",
+          { headers: authHeaders() }
+        );
+        setPendingCounts(prev => ({
+          ...prev,
+          pending_requests: reqRes.data.pending_requests ?? 0,
+          approved_today: reqRes.data.approved_today ?? 0,
+          rejected_today: reqRes.data.rejected_today ?? 0,
+        }));
       } catch { /* silent */ }
       setPendingLoading(false);
     } catch (err) {
@@ -215,17 +232,67 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="h-5 w-5 text-amber-600" />
           <h2 className="text-base font-bold text-gray-900">Requires Attention</h2>
-          <span className="ml-auto text-xs text-gray-500">Persistence-backed ·survives restart</span>
+          <span className="ml-auto text-xs text-gray-500">Persistence-backed · survives restart</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Commodity Approvals */}
+          {/* Unified Requests */}
+          <Link href="/requests">
+            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 font-medium">Pending Requests</p>
+                {pendingLoading ? <Spinner className="text-blue-500 mt-1" /> : (
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">
+                    {pendingCounts.pending_requests}
+                  </p>
+                )}
+              </div>
+              {pendingCounts.pending_requests > 0 && (
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              )}
+            </a>
+          </Link>
+          
+          {/* Approved Today */}
+          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200">
+            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-medium">Approved Today</p>
+              {pendingLoading ? <Spinner className="text-green-500 mt-1" /> : (
+                <p className="text-xl font-bold text-gray-900 tabular-nums">
+                  {pendingCounts.approved_today}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* Rejected Today */}
+          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-red-200">
+            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+              <XCircle className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-medium">Rejected Today</p>
+              {pendingLoading ? <Spinner className="text-red-500 mt-1" /> : (
+                <p className="text-xl font-bold text-gray-900 tabular-nums">
+                  {pendingCounts.rejected_today}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Commodity Approvals (separate from requests) */}
           <Link href="/commodity-prices">
             <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all">
               <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 text-amber-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-medium">Pending Commodity Approvals</p>
+                <p className="text-xs text-gray-500 font-medium">Commodity Approvals</p>
                 {pendingLoading ? <Spinner className="text-amber-500 mt-1" /> : (
                   <p className="text-xl font-bold text-gray-900 tabular-nums">
                     {pendingCounts.pending_commodity_approvals}
@@ -234,66 +301,6 @@ export default function Dashboard() {
               </div>
               {pendingCounts.pending_commodity_approvals > 0 && (
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              )}
-            </a>
-          </Link>
-          
-          {/* Returns */}
-          <Link href="/returns">
-            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-orange-200 hover:border-orange-400 hover:shadow-md transition-all">
-              <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                <RotateCcw className="h-5 w-5 text-orange-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-medium">Return Requests</p>
-                {pendingLoading ? <Spinner className="text-orange-500 mt-1" /> : (
-                  <p className="text-xl font-bold text-gray-900 tabular-nums">
-                    {pendingCounts.pending_returns}
-                  </p>
-                )}
-              </div>
-              {pendingCounts.pending_returns > 0 && (
-                <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-              )}
-            </a>
-          </Link>
-          
-          {/* Void Requests */}
-          <Link href="/void-requests">
-            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-red-200 hover:border-red-400 hover:shadow-md transition-all">
-              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                <XCircle className="h-5 w-5 text-red-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-medium">Void Requests</p>
-                {pendingLoading ? <Spinner className="text-red-500 mt-1" /> : (
-                  <p className="text-xl font-bold text-gray-900 tabular-nums">
-                    {pendingCounts.pending_voids}
-                  </p>
-                )}
-              </div>
-              {pendingCounts.pending_voids > 0 && (
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              )}
-            </a>
-          </Link>
-
-          {/* Market-Based Adjustments */}
-          <Link href="/market-based-adjustments">
-            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Package className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-medium">Market-Based Adjustments</p>
-                {pendingLoading ? <Spinner className="text-blue-500 mt-1" /> : (
-                  <p className="text-xl font-bold text-gray-900 tabular-nums">
-                    {pendingCounts.pending_adjustments}
-                  </p>
-                )}
-              </div>
-              {pendingCounts.pending_adjustments > 0 && (
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               )}
             </a>
           </Link>
