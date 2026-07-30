@@ -100,7 +100,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, bg, loading, href }: {
       </div>
     </div>
   );
-  return href ? <Link href={href}><a>{inner}</a></Link> : inner;
+  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
@@ -236,8 +236,7 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Unified Requests */}
-          <Link href="/requests">
-            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all">
+          <Link href="/requests" className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all">
               <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                 <AlertCircle className="h-5 w-5 text-blue-600" />
               </div>
@@ -252,7 +251,6 @@ export default function Dashboard() {
               {pendingCounts.pending_requests > 0 && (
                 <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               )}
-            </a>
           </Link>
           
           {/* Approved Today */}
@@ -286,8 +284,7 @@ export default function Dashboard() {
           </div>
 
           {/* Commodity Approvals (separate from requests) */}
-          <Link href="/commodity-prices">
-            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all">
+          <Link href="/commodity-prices" className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all">
               <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 text-amber-600" />
               </div>
@@ -302,7 +299,6 @@ export default function Dashboard() {
               {pendingCounts.pending_commodity_approvals > 0 && (
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               )}
-            </a>
           </Link>
         </div>
         <p className="text-xs text-gray-400 mt-3">
@@ -346,9 +342,7 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500 mt-0.5">Top urgent items</p>
             </div>
             {!loading && (kpis?.low_stock ?? 0) + (kpis?.out_of_stock ?? 0) > 0 && (
-              <Link href="/inventory">
-                <a className="text-xs text-blue-600 font-semibold hover:underline">View all</a>
-              </Link>
+              <Link href="/inventory" className="text-xs text-blue-600 font-semibold hover:underline">View all</Link>
             )}
           </div>
           <div className="flex-1 space-y-2">
@@ -418,9 +412,7 @@ export default function Dashboard() {
               <h2 className="text-base font-bold text-gray-900">Recent Sales</h2>
               <p className="text-xs text-gray-500 mt-0.5">Latest transactions</p>
             </div>
-            <Link href="/sales">
-              <a className="text-xs text-blue-600 font-semibold hover:underline">View all</a>
-            </Link>
+            <Link href="/sales" className="text-xs text-blue-600 font-semibold hover:underline">View all</Link>
           </div>
           <div className="flex-1 divide-y divide-gray-50">
             {loading ? (
