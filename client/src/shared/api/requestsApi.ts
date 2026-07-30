@@ -27,6 +27,7 @@ export interface UnifiedRequest {
   customer_name?: string;
   total_amount?: number;
   unit_price?: number;
+  quantity_type?: 'WHOLE_UNIT' | 'WEIGHTED';
 }
 
 export interface RequestKPI {

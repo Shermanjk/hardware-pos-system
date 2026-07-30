@@ -134,9 +134,19 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
             <div className="p-3 bg-blue-50 rounded-lg text-sm border border-blue-200">
               <div className="grid grid-cols-3 gap-4">
                 <div><span className="text-gray-500">Product:</span> <span className="font-medium">{req.product_name}</span></div>
-                <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold">{req.system_quantity}</span></div>
-                <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold">{req.physical_quantity}</span></div>
-                <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{req.difference}</span></div>
+                <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold">{(() => {
+                  const isWeighted = req.quantity_type === "WEIGHTED";
+                  return isWeighted ? req.system_quantity?.toFixed(3) : req.system_quantity;
+                })()}</span></div>
+                <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold">{(() => {
+                  const isWeighted = req.quantity_type === "WEIGHTED";
+                  return isWeighted ? req.physical_quantity?.toFixed(3) : req.physical_quantity;
+                })()}</span></div>
+                <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{(() => {
+                  const isWeighted = req.quantity_type === "WEIGHTED";
+                  const displayDiff = isWeighted ? req.difference?.toFixed(3) : Math.round(req.difference || 0);
+                  return displayDiff;
+                })()}</span></div>
               </div>
             </div>
           )}
@@ -379,7 +389,13 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
                   <td className="py-3.5 px-5 text-sm text-gray-600">{r.requested_by_name}</td>
                   <td className="py-3.5 px-5 text-sm text-gray-500">{fmtDate(r.created_at || r.prepared_at)}</td>
                   <td className="py-3.5 px-5 font-bold text-gray-900 tabular-nums">
-                    {r.difference !== undefined ? r.difference : r.amount !== undefined ? fmtPeso(r.amount) : "—"}
+                    {r.difference !== undefined
+                      ? (() => {
+                          const isWeighted = r.quantity_type === "WEIGHTED";
+                          const displayDiff = isWeighted ? r.difference.toFixed(3) : Math.round(r.difference);
+                          return displayDiff;
+                        })()
+                      : r.amount !== undefined ? fmtPeso(r.amount) : "—"}
                   </td>
                   <td className="py-3.5 px-5 text-sm text-gray-600 max-w-[150px] truncate">{r.reason}</td>
                   <td className="py-3.5 px-5"><StatusBadge status={r.status} /></td>

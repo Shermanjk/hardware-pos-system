@@ -35,7 +35,8 @@ router.get("/pending", async (req: Request, res: Response) => {
         scar.remarks,
         scar.status,
         scar.system_quantity,
-        scar.physical_quantity
+        scar.physical_quantity,
+        p.quantity_type
       FROM stock_count_adjustment_requests scar
       JOIN products p ON p.id = scar.product_id
       LEFT JOIN users u ON u.id = scar.prepared_by
@@ -56,7 +57,8 @@ router.get("/pending", async (req: Request, res: Response) => {
         mbar.remarks,
         mbar.status,
         mbar.system_quantity,
-        mbar.physical_quantity
+        mbar.physical_quantity,
+        p.quantity_type
       FROM market_based_adjustment_requests mbar
       JOIN products p ON p.id = mbar.product_id
       LEFT JOIN users u ON u.id = mbar.prepared_by
@@ -191,7 +193,8 @@ router.get("/history", async (req: Request, res: Response) => {
           scar.remarks,
           scar.status,
           scar.system_quantity,
-          scar.physical_quantity
+          scar.physical_quantity,
+          p.quantity_type
         FROM stock_count_adjustment_requests scar
         JOIN products p ON p.id = scar.product_id
         LEFT JOIN users u ON u.id = scar.prepared_by
@@ -233,7 +236,8 @@ router.get("/history", async (req: Request, res: Response) => {
           mbar.remarks,
           mbar.status,
           mbar.system_quantity,
-          mbar.physical_quantity
+          mbar.physical_quantity,
+          p.quantity_type
         FROM market_based_adjustment_requests mbar
         JOIN products p ON p.id = mbar.product_id
         LEFT JOIN users u ON u.id = mbar.prepared_by
