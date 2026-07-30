@@ -23,6 +23,7 @@ import Users from "./modules/admin/pages/Users";
 import Settings from "./modules/admin/pages/Settings";
 import CommodityPrices from "./modules/admin/pages/CommodityPrices";
 import ExternalProcessing from "./modules/admin/pages/ExternalProcessing";
+import MarketBasedAdjustments from "./modules/admin/pages/MarketBasedAdjustments";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import Cashier from "./modules/cashier/pages/Cashier";
@@ -75,6 +76,7 @@ function AdminRouter() {
         <Route path="/settings"        component={Settings}       />
         <Route path="/commodity-prices" component={CommodityPrices} />
         <Route path="/external-processing" component={ExternalProcessing} />
+        <Route path="/market-based-adjustments" component={MarketBasedAdjustments} />
         <Route path="/404"             component={NotFound}       />
         <Route component={NotFound} />
       </Switch>

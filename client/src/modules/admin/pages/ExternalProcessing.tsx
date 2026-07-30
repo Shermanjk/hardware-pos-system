@@ -473,15 +473,18 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      console.log("[DeliveryHistory] Loading deliveries with filters:", { search, dateFrom, dateTo });
       const data = await getEprDeliveries({
         search: search || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         limit: 100,
       });
+      console.log("[DeliveryHistory] Loaded deliveries:", data);
       setDeliveries(data);
-    } catch {
-      /* silent */
+    } catch (err) {
+      console.error("[DeliveryHistory] Failed to load deliveries:", err);
+      toast.error("Failed to load delivery records");
     } finally {
       setLoading(false);
     }
@@ -545,14 +548,18 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-800 text-white">
-                {["Reference", "Date", "Product", "Quantity", "Company", "Delivered By", "Recorded By", ""].map((h, i) => (
-                  <th key={i} className={`py-3 px-4 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i === 3 ? "text-right" : i === 7 ? "text-center" : "text-left"}`}>{h}</th>
+                {["Reference", "Date", "Product", "Quantity", "Company", "Delivered By", "Recorded By"].map((h, i) => (
+                  <th key={i} className={`py-3 px-4 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i === 3 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {deliveries.map((d, idx) => (
-                <tr key={d.id} className={`hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                <tr 
+                  key={d.id} 
+                  className={`hover:bg-blue-50/40 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                  onClick={() => setSelectedDelivery(d)}
+                >
                   <td className="py-3 px-4">
                     <span className="font-mono text-xs font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
                       {d.delivery_reference}
@@ -569,15 +576,6 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
                   <td className="py-3 px-4 text-sm text-gray-700">{d.company_name}</td>
                   <td className="py-3 px-4 text-sm text-gray-600">{d.delivered_by || "—"}</td>
                   <td className="py-3 px-4 text-xs text-gray-500">{d.recorded_by_name}</td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      title="View details"
-                      onClick={() => setSelectedDelivery(d)}
-                      className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>

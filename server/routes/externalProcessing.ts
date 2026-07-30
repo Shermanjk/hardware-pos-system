@@ -454,13 +454,13 @@ router.get("/deliveries", async (req: Request, res: Response) => {
     params.push(date_to);
   }
   if (search) {
-    where += " AND (epd.delivery_reference LIKE ? OR epc.name LIKE ? OR p.product_name LIKE ?)";
+    where += " AND (epd.delivery_reference LIKE ? OR COALESCE(epc.name, '') LIKE ? OR p.product_name LIKE ?)";
     const s = `%${search}%`;
     params.push(s, s, s);
   }
 
-  // Append LIMIT/OFFSET as parameterized values (best practice)
-  params.push(limit, offset);
+  console.log("[externalProcessing/GET /deliveries] Query params:", params);
+  console.log("[externalProcessing/GET /deliveries] WHERE clause:", where);
 
   try {
     const [rows] = await pool.execute<any[]>(`
@@ -473,7 +473,7 @@ router.get("/deliveries", async (req: Request, res: Response) => {
         COALESCE(u.abbreviation, '')   AS unit_abbreviation,
         epd.quantity,
         epd.company_id,
-        epc.name                       AS company_name,
+        COALESCE(epc.name, '—')        AS company_name,
         epd.delivery_date,
         epd.delivered_by,
         epd.remarks,
@@ -481,12 +481,12 @@ router.get("/deliveries", async (req: Request, res: Response) => {
         COALESCE(usr.full_name, '—')   AS recorded_by_name
       FROM external_processing_deliveries epd
       JOIN products p  ON p.id  = epd.product_id
-      JOIN external_processing_companies epc ON epc.id = epd.company_id
+      LEFT JOIN external_processing_companies epc ON epc.id = epd.company_id
       LEFT JOIN units u ON u.id = p.unit_id
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       ${where}
       ORDER BY epd.delivery_date DESC, epd.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${limit} OFFSET ${offset}
     `, params);
 
     res.status(200).json(rows.map((r: any) => ({
@@ -517,7 +517,7 @@ router.get("/deliveries/:id", async (req: Request, res: Response) => {
         COALESCE(u.abbreviation, '')   AS unit_abbreviation,
         epd.quantity,
         epd.company_id,
-        epc.name                       AS company_name,
+        COALESCE(epc.name, '—')        AS company_name,
         epc.address                    AS company_address,
         epd.delivery_date,
         epd.delivered_by,
@@ -526,7 +526,7 @@ router.get("/deliveries/:id", async (req: Request, res: Response) => {
         COALESCE(usr.full_name, '—')   AS recorded_by_name
       FROM external_processing_deliveries epd
       JOIN products p  ON p.id  = epd.product_id
-      JOIN external_processing_companies epc ON epc.id = epd.company_id
+      LEFT JOIN external_processing_companies epc ON epc.id = epd.company_id
       LEFT JOIN units u ON u.id = p.unit_id
       LEFT JOIN users usr ON usr.id = epd.recorded_by
       WHERE epd.id = ?

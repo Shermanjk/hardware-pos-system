@@ -106,6 +106,8 @@ router.get("/", async (req: Request, res: Response) => {
         p.damaged_stock,
         p.cost_price,
         p.selling_price,
+        p.pricing_type,
+        p.quantity_type,
         p.updated_at
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
@@ -302,7 +304,7 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
   try {
     await conn.beginTransaction();
 
-    const [productRows] = await conn.execute<any[]>("SELECT id, quantity, product_name FROM products WHERE id = ? FOR UPDATE", [product_id]);
+    const [productRows] = await conn.execute<any[]>("SELECT id, quantity, product_name, pricing_type FROM products WHERE id = ? FOR UPDATE", [product_id]);
     if (productRows.length === 0) {
       await conn.rollback();
       res.status(404).json({ message: `Product ID ${product_id} not found` });
@@ -310,6 +312,13 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
     }
 
     const product = productRows[0];
+
+    // Block direct adjustments for Market-Based products
+    if (product.pricing_type === "MARKET_BASED") {
+      await conn.rollback();
+      res.status(422).json({ message: "Market-Based products require the approval workflow. Use the Stock Count panel to submit adjustment requests." });
+      return;
+    }
     let newQuantity: number;
     let quantityChange: number;
 

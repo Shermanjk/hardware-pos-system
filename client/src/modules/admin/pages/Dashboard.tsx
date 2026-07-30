@@ -115,6 +115,7 @@ export default function Dashboard() {
     pending_commodity_approvals: 0,
     pending_returns: 0,
     pending_voids: 0,
+    pending_adjustments: 0,
   });
   const [pendingLoading, setPendingLoading] = useState(true);
 
@@ -216,7 +217,7 @@ export default function Dashboard() {
           <h2 className="text-base font-bold text-gray-900">Requires Attention</h2>
           <span className="ml-auto text-xs text-gray-500">Persistence-backed ·survives restart</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Commodity Approvals */}
           <Link href="/commodity-prices">
             <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all">
@@ -273,6 +274,26 @@ export default function Dashboard() {
               </div>
               {pendingCounts.pending_voids > 0 && (
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </a>
+          </Link>
+
+          {/* Market-Based Adjustments */}
+          <Link href="/market-based-adjustments">
+            <a className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <Package className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 font-medium">Market-Based Adjustments</p>
+                {pendingLoading ? <Spinner className="text-blue-500 mt-1" /> : (
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">
+                    {pendingCounts.pending_adjustments}
+                  </p>
+                )}
+              </div>
+              {pendingCounts.pending_adjustments > 0 && (
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               )}
             </a>
           </Link>

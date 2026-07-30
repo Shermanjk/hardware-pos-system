@@ -10,6 +10,7 @@ export interface PendingCounts {
   pending_commodity_approvals: number;
   pending_returns: number;
   pending_voids: number;
+  pending_adjustments: number;
 }
 
 export async function getPendingCounts(): Promise<PendingCounts> {

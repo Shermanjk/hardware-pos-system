@@ -914,7 +914,7 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
 
     // 1. Lock the purchase row — including payable_quantity for correct stock increment
     const [purchaseRows] = await conn.execute<any[]>(
-      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by FROM commodity_purchases WHERE id = ? FOR UPDATE",
+      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by, final_amount FROM commodity_purchases WHERE id = ? FOR UPDATE",
       [purchaseId]
     );
     if (purchaseRows.length === 0) {
@@ -950,14 +950,20 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
     }
     const product = productRows[0];
 
-    // 5. Update purchase status to APPROVED, add approval info
+    // 5. Update purchase status to APPROVED, add approval info, and auto-mark as PAID
+    const finalAmount = Number(purchase.final_amount);
     await conn.execute(`
       UPDATE commodity_purchases
       SET status = 'APPROVED',
           approved_by = ?,
-          approved_at = NOW()
+          approved_at = NOW(),
+          payment_status = 'PAID',
+          amount_paid = ?,
+          balance_due = 0,
+          paid_at = NOW(),
+          paid_by = ?
       WHERE id = ?
-    `, [req.user!.id, purchaseId]);
+    `, [req.user!.id, finalAmount, req.user!.id, purchaseId]);
 
     // 6. Increase inventory by the PAYABLE quantity (gross quantity - deducted_quantity)
     //    Use payable_quantity if set, otherwise fall back to quantity for legacy records.

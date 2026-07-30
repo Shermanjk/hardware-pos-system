@@ -47,6 +47,10 @@ export type AuditAction =
   | "EP_COMPANY_DEACTIVATED"
   | "EP_COMPANY_DELETED"
   | "EP_DELIVERY_RECORDED"
+  // ── Market-Based Adjustment Requests ─────────────────────────────────────────
+  | "MBAR_ADJUSTMENT_REQUESTED"
+  | "MBAR_ADJUSTMENT_APPROVED"
+  | "MBAR_ADJUSTMENT_REJECTED"
   // ── System / settings ───────────────────────────────────────────────────────
   | "SYSTEM_SETTINGS_UPDATED"
   | "TAX_CONFIGURATION_UPDATED"

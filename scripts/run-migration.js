@@ -17,19 +17,26 @@ if (!DB_HOST || !DB_USER || DB_PASSWORD === undefined || !DB_NAME) {
 }
 
 async function runMigration() {
+  const migrationFile = process.argv[2];
+  if (!migrationFile) {
+    console.error('Usage: node scripts/run-migration.js <migration-file>');
+    process.exit(1);
+  }
+
   const connection = await mysql.createConnection({
     host: DB_HOST,
     port: Number(DB_PORT),
     user: DB_USER,
     password: DB_PASSWORD,
     database: DB_NAME,
+    multipleStatements: true,
   });
 
   try {
-    const migrationPath = path.join(process.cwd(), 'migrations/024_create_inventory_logs.sql');
+    const migrationPath = path.join(process.cwd(), migrationFile);
     const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
     
-    console.log('Running migration: 024_create_inventory_logs.sql');
+    console.log(`Running migration: ${migrationFile}`);
     await connection.query(migrationSQL);
     console.log('Migration completed successfully');
   } catch (error) {

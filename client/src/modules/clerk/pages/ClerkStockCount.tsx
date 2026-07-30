@@ -13,7 +13,7 @@ import {
   PackagePlus, ShoppingCart, SlidersHorizontal, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getInventory, getInventoryLogs, submitStockAdjustment } from "@/shared/api/inventoryApi";
+import { getInventory, getInventoryLogs, submitStockAdjustment, createAdjustmentRequest, AdjustmentReason } from "@/shared/api/inventoryApi";
 import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,17 +25,22 @@ interface CountRow {
   unit: string;
   unit_abbreviation?: string;
   quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  pricing_type?: "FIXED_PRICE" | "MARKET_BASED";
   systemQty: number;
   physicalCount: string; // string so input can be blank
   remarks: string;
+  reason?: AdjustmentReason; // For Market-Based products
 }
 
 // ─── Difference badge ─────────────────────────────────────────────────────────
-function DiffCell({ system, physical }: { system: number; physical: string }) {
+function DiffCell({ system, physical, quantityType }: { system: number; physical: string; quantityType?: "WHOLE_UNIT" | "WEIGHTED" }) {
   if (physical === "") {
     return <span className="text-gray-300 text-sm font-mono">—</span>;
   }
-  const diff = parseInt(physical, 10) - system;
+  const physNum = parseFloat(physical);
+  const diff = physNum - system;
+  const isWeighted = quantityType === "WEIGHTED";
+
   if (diff === 0) return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-bold text-xs">
       <Minus className="h-3 w-3" /> Match
@@ -43,12 +48,12 @@ function DiffCell({ system, physical }: { system: number; physical: string }) {
   );
   if (diff > 0) return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
-      <TrendingUp className="h-3.5 w-3.5" /> +{diff} over
+      <TrendingUp className="h-3.5 w-3.5" /> +{isWeighted ? diff.toFixed(3) : diff} over
     </span>
   );
   return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-xs">
-      <TrendingDown className="h-3.5 w-3.5" /> {diff} short
+      <TrendingDown className="h-3.5 w-3.5" /> {isWeighted ? diff.toFixed(3) : diff} short
     </span>
   );
 }
@@ -138,9 +143,11 @@ export default function ClerkStockCount() {
             unit: p.unit,
             unit_abbreviation: p.unit_abbreviation,
             quantity_type: p.quantity_type,
+            pricing_type: (p as any).pricing_type,
             systemQty: p.quantity,
             physicalCount: "",
             remarks: "",
+            reason: undefined,
           }))
         );
       } catch (err) {
@@ -161,8 +168,8 @@ export default function ClerkStockCount() {
     toast.info("Count sheet cleared");
   };
 
-  // Update a single row's physicalCount or remarks
-  const updateRow = (productId: number, field: "physicalCount" | "remarks", value: string) => {
+  // Update a single row's physicalCount, remarks, or reason
+  const updateRow = (productId: number, field: "physicalCount" | "remarks" | "reason", value: string) => {
     if (field === "physicalCount" && value !== "" && (isNaN(Number(value)) || Number(value) < 0)) return;
     setRows((prev) =>
       prev.map((r) => r.productId === productId ? { ...r, [field]: value } : r)
@@ -183,36 +190,66 @@ export default function ClerkStockCount() {
 
   // Stats
   const countedRows  = rows.filter((r) => r.physicalCount !== "");
-  const matchRows    = countedRows.filter((r) => parseInt(r.physicalCount, 10) === r.systemQty);
-  const overRows     = countedRows.filter((r) => parseInt(r.physicalCount, 10) > r.systemQty);
-  const shortRows    = countedRows.filter((r) => parseInt(r.physicalCount, 10) < r.systemQty);
+  const matchRows    = countedRows.filter((r) => parseFloat(r.physicalCount) === r.systemQty);
+  const overRows     = countedRows.filter((r) => parseFloat(r.physicalCount) > r.systemQty);
+  const shortRows    = countedRows.filter((r) => parseFloat(r.physicalCount) < r.systemQty);
 
   const canComplete = countedRows.length > 0;
 
   // Save stock count — submit corrections via API
   const handleSave = async () => {
     const rowsWithDiff = countedRows.filter(
-      (r) => parseInt(r.physicalCount, 10) !== r.systemQty
+      (r) => parseFloat(r.physicalCount) !== r.systemQty
     );
+
+    // Separate Market-Based and standard products
+    const marketBasedRows = rowsWithDiff.filter((r) => r.pricing_type === "MARKET_BASED");
+    const standardRows = rowsWithDiff.filter((r) => r.pricing_type !== "MARKET_BASED");
+
     try {
-      await Promise.all(
-        rowsWithDiff.map((row) =>
-          submitStockAdjustment({
-            product_id: row.productId,
-            type: "Correction",
-            quantity: parseInt(row.physicalCount, 10),
-            reason: row.remarks.trim() || "Stock count correction",
+      // Process standard products with direct adjustment
+      if (standardRows.length > 0) {
+        await Promise.all(
+          standardRows.map((row) =>
+            submitStockAdjustment({
+              product_id: row.productId,
+              type: "Correction",
+              quantity: parseFloat(row.physicalCount),
+              reason: row.remarks.trim() || "Stock count correction",
+            })
+          )
+        );
+      }
+
+      // Process Market-Based products with approval workflow
+      if (marketBasedRows.length > 0) {
+        await Promise.all(
+          marketBasedRows.map((row) => {
+            if (!row.reason) {
+              throw new Error(`Reason required for Market-Based product: ${row.productName}`);
+            }
+            if (row.reason === "Other" && !row.remarks.trim()) {
+              throw new Error(`Remarks required when reason is 'Other' for: ${row.productName}`);
+            }
+            return createAdjustmentRequest({
+              product_id: row.productId,
+              system_quantity: row.systemQty,
+              physical_quantity: parseFloat(row.physicalCount),
+              reason: row.reason,
+              remarks: row.remarks.trim() || undefined,
+            });
           })
-        )
-      );
+        );
+      }
+
       toast.success(
-        `Stock count completed — ${countedRows.length} counted, ${rowsWithDiff.length} quantity update(s) applied`
+        `Stock count completed — ${countedRows.length} counted, ${standardRows.length} direct update(s), ${marketBasedRows.length} approval request(s)`
       );
       setCountComplete(true);
       setRows((prev) =>
         prev.map((r) => {
           if (r.physicalCount !== "") {
-            return { ...r, systemQty: parseInt(r.physicalCount, 10), physicalCount: "", remarks: "" };
+            return { ...r, systemQty: parseFloat(r.physicalCount), physicalCount: "", remarks: "", reason: undefined };
           }
           return r;
         })
@@ -220,7 +257,7 @@ export default function ClerkStockCount() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Failed to save stock count:", message.replace(/[\r\n\t]/g, " "));
-      toast.error("Failed to save stock count");
+      toast.error(message || "Failed to save stock count");
     }
   };
 
@@ -352,6 +389,7 @@ export default function ClerkStockCount() {
                   { label: "System Qty",     cls: "text-center min-w-[130px]" },
                   { label: "Physical Count", cls: "text-center" },
                   { label: "Difference",     cls: "text-center" },
+                  { label: "Reason",         cls: "min-w-[140px]" },
                   { label: "Remarks",        cls: "min-w-[160px]" },
                 ].map(({ label, cls }) => (
                   <th key={label} className={`py-3 px-4 text-xs font-bold uppercase tracking-wider whitespace-nowrap text-left ${cls}`}>
@@ -364,14 +402,14 @@ export default function ClerkStockCount() {
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} className="border-b border-gray-100">
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 10 }).map((_, j) => (
                       <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full" /></td>
                     ))}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={10} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-400">
                       <ClipboardList className="h-10 w-10 opacity-30" />
                       <p className="font-medium text-gray-500">No products match your search</p>
@@ -380,11 +418,12 @@ export default function ClerkStockCount() {
                 </tr>
               ) : (
                 filtered.map((row, idx) => {
-                  const physNum  = parseInt(row.physicalCount, 10);
+                  const physNum  = row.physicalCount !== "" ? parseFloat(row.physicalCount) : 0;
                   const hasDiff  = row.physicalCount !== "" && physNum !== row.systemQty;
                   const isOver   = hasDiff && physNum > row.systemQty;
                   const isShort  = hasDiff && physNum < row.systemQty;
                   const isCounted = row.physicalCount !== "";
+                  const isMarketBased = row.pricing_type === "MARKET_BASED";
 
                   const rowBg = isOver   ? "bg-blue-50 border-l-4 border-l-blue-400"
                               : isShort  ? "bg-red-50 border-l-4 border-l-red-400"
@@ -406,6 +445,11 @@ export default function ClerkStockCount() {
                       {/* Product name */}
                       <td className="py-3.5 px-4">
                         <p className="font-semibold text-gray-900 text-sm leading-tight">{row.productName}</p>
+                        {isMarketBased && (
+                          <span className="inline-block mt-1 text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                            Market-Based
+                          </span>
+                        )}
                       </td>
 
                       {/* Category */}
@@ -424,8 +468,9 @@ export default function ClerkStockCount() {
                       {/* Physical count input */}
                       <td className="py-3.5 px-4 text-center">
                         <Input
-                          type="number"
+                          type={row.quantity_type === "WEIGHTED" ? "number" : "number"}
                           min={0}
+                          step={row.quantity_type === "WEIGHTED" ? "0.001" : "1"}
                           placeholder="—"
                           value={row.physicalCount}
                           onChange={(e) => updateRow(row.productId, "physicalCount", e.target.value)}
@@ -440,16 +485,43 @@ export default function ClerkStockCount() {
 
                       {/* Difference */}
                       <td className="py-3.5 px-4 text-center">
-                        <DiffCell system={row.systemQty} physical={row.physicalCount} />
+                        <DiffCell system={row.systemQty} physical={row.physicalCount} quantityType={row.quantity_type} />
+                      </td>
+
+                      {/* Reason (for Market-Based products) */}
+                      <td className="py-3.5 px-4">
+                        {isMarketBased ? (
+                          <select
+                            value={row.reason || ""}
+                            onChange={(e) => updateRow(row.productId, "reason", e.target.value)}
+                            className={`h-8 text-xs border-2 rounded ${
+                              hasDiff && !row.reason ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
+                            }`}
+                          >
+                            <option value="">Select reason…</option>
+                            <option value="Drying/Moisture Loss">Drying/Moisture Loss</option>
+                            <option value="Spillage">Spillage</option>
+                            <option value="Theft">Theft</option>
+                            <option value="Processing Loss">Processing Loss</option>
+                            <option value="Handling Loss">Handling Loss</option>
+                            <option value="Warehouse Damage">Warehouse Damage</option>
+                            <option value="Inventory Miscount">Inventory Miscount</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
                       </td>
 
                       {/* Remarks */}
                       <td className="py-3.5 px-4">
                         <Input
-                          placeholder="Optional note…"
+                          placeholder={isMarketBased && row.reason === "Other" ? "Required…" : "Optional note…"}
                           value={row.remarks}
                           onChange={(e) => updateRow(row.productId, "remarks", e.target.value)}
-                          className="h-8 text-xs border-gray-300"
+                          className={`h-8 text-xs border-2 ${
+                            isMarketBased && row.reason === "Other" && !row.remarks.trim() ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
+                          }`}
                         />
                       </td>
                     </tr>

@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, FolderOpen, Boxes, Truck,
   TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing,
+  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing, Scale,
 } from "lucide-react";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
@@ -43,6 +43,7 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: Truck, label: "Suppliers", href: "/suppliers" },
       { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices", hasAlertBadge: true },
       { icon: Truck, label: "External Processing", href: "/external-processing" },
+      { icon: Scale, label: "Market-Based Adjustments", href: "/market-based-adjustments", hasAlertBadge: true },
     ],
   } as NavGroup,
 
@@ -107,11 +108,14 @@ function usePendingCounts() {
   const [pendingReturns, setPendingReturns] = useState(0);
   const [pendingVoids, setPendingVoids] = useState(0);
   const [pendingCommodity, setPendingCommodity] = useState(0);
+  const [pendingAdjustments, setPendingAdjustments] = useState(0);
 
   const fetch = async () => {
     try {
       const token = loadToken();
       if (!token) return;
+      
+      // Fetch dashboard pending counts
       const res = await axios.get<{ pending_returns: number; pending_voids: number; pending_commodity_approvals: number }>(
         "/api/dashboard/pending-counts",
         { headers: { Authorization: `Bearer ${token}` } }
@@ -119,6 +123,13 @@ function usePendingCounts() {
       setPendingReturns(res.data.pending_returns ?? 0);
       setPendingVoids(res.data.pending_voids ?? 0);
       setPendingCommodity(res.data.pending_commodity_approvals ?? 0);
+
+      // Fetch pending adjustment counts
+      const adjRes = await axios.get<{ count: number }>(
+        "/api/market-based-adjustments/pending-count",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPendingAdjustments(adjRes.data.count ?? 0);
     } catch (err) {
       console.error("Failed to fetch pending counts:", err);
       // silently ignore — sidebar shouldn't crash on a failed poll
@@ -140,7 +151,7 @@ function usePendingCounts() {
     return () => window.removeEventListener('refresh-pending-counts', handleRefresh);
   }, []);
 
-  return { pendingReturns, pendingVoids, pendingCommodity, refreshPendingCounts: fetch };
+  return { pendingReturns, pendingVoids, pendingCommodity, pendingAdjustments, refreshPendingCounts: fetch };
 }
 
 // ─── Check if a route belongs to a group ─────────────────────────────────────
@@ -162,7 +173,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const [location]     = useLocation();
   const alertCount     = useLowStockCount();
   const hasAlerts      = alertCount > 0;
-  const { pendingReturns, pendingVoids, pendingCommodity } = usePendingCounts();
+  const { pendingReturns, pendingVoids, pendingCommodity, pendingAdjustments } = usePendingCounts();
   
   // Auto-expand group when route belongs to it
   const activeGroup    = getGroupForRoute(location);
@@ -273,6 +284,9 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           if (group.items.some((subItem) => subItem.href === "/commodity-prices")) {
             groupHasAlerts = groupHasAlerts || pendingCommodity > 0;
           }
+          if (group.items.some((subItem) => subItem.href === "/market-based-adjustments")) {
+            groupHasAlerts = groupHasAlerts || pendingAdjustments > 0;
+          }
           const showGroupAlert = groupHasAlerts && !isExpanded;
 
           return (
@@ -335,6 +349,10 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                     } else if (subItem.href === "/commodity-prices") {
                       itemAlertCount = pendingCommodity;
                       showItemAlert = pendingCommodity > 0;
+                      alertColor = "bg-orange-500";
+                    } else if (subItem.href === "/market-based-adjustments") {
+                      itemAlertCount = pendingAdjustments;
+                      showItemAlert = pendingAdjustments > 0;
                       alertColor = "bg-orange-500";
                     }
 

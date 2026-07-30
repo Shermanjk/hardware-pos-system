@@ -502,6 +502,15 @@ function MarketBasedWithTabs({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [sellerSearch, setSellerSearch] = useState("");
+  const [selectedPurchase, setSelectedPurchase] = useState<CommodityPurchase | null>(null);
+
+  // Filter purchases by seller name
+  const filteredPurchases = sellerSearch.trim()
+    ? purchases.filter((p) =>
+        p.seller?.toLowerCase().includes(sellerSearch.toLowerCase())
+      )
+    : purchases;
 
   const loadProducts = useCallback(async () => {
     setProductsLoading(true);
@@ -660,8 +669,18 @@ function MarketBasedWithTabs({
               <Label className="text-xs font-semibold text-gray-500 mb-1 block">To</Label>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-sm w-36" />
             </div>
-            {(dateFrom || dateTo) && (
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setDateFrom(""); setDateTo(""); }}>
+            <div>
+              <Label className="text-xs font-semibold text-gray-500 mb-1 block">Seller</Label>
+              <Input 
+                type="text" 
+                value={sellerSearch} 
+                onChange={(e) => setSellerSearch(e.target.value)} 
+                placeholder="Search seller..." 
+                className="h-8 text-sm w-48 border-gray-400" 
+              />
+            </div>
+            {(dateFrom || dateTo || sellerSearch) && (
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setDateFrom(""); setDateTo(""); setSellerSearch(""); }}>
                 <X className="h-3 w-3 mr-1" /> Clear
               </Button>
             )}
@@ -671,21 +690,25 @@ function MarketBasedWithTabs({
             <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
               <Spinner className="text-blue-500" /> Loading…
             </div>
-          ) : purchases.length === 0 ? (
-            <div className="py-10 text-center text-gray-400 text-sm">No purchase records found.</div>
+          ) : filteredPurchases.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-sm">{sellerSearch.trim() ? "No matching sellers found." : "No purchase records found."}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-800 text-white">
-                    {["Date", "Product", "Seller", "Qty Rec", "Ded", "Payable", "Ref.Price", "Gross", "Ded.Amt", "FinalAmt", "Status", "Pmt", "Paid", "Bal", "By"].map((h, i) => (
+                    {["Date", "Product", "Seller", "Qty Rec", "Ded", "Payable", "Ref.Price", "Gross", "Ded.Amt", "FinalAmt", "Status", "Pmt", "By"].map((h, i) => (
                       <th key={h} className={`py-3 px-2 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i >= 3 && i <= 9 ? "text-right" : i >= 11 ? "text-center" : "text-left"}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {purchases.map((p, idx) => (
-                    <tr key={p.id} className={`hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                  {filteredPurchases.map((p, idx) => (
+                    <tr 
+                      key={p.id} 
+                      className={`hover:bg-blue-50/40 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                      onClick={() => setSelectedPurchase(p)}
+                    >
                       <td className="py-3 px-3 whitespace-nowrap text-xs text-gray-600">{fmtDateOnly(p.transaction_date)}</td>
                       <td className="py-3 px-3">
                         <p className="font-semibold text-gray-900 text-sm">{p.product_name}</p>
@@ -727,12 +750,6 @@ function MarketBasedWithTabs({
                           {p.payment_status}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right font-medium text-gray-700 tabular-nums">
-                        {Number(p.amount_paid).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-red-600 tabular-nums">
-                        {Number(p.balance_due).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                      </td>
                       <td className="py-3 px-3 text-xs text-gray-500">{p.recorded_by_name}</td>
                     </tr>
                   ))}
@@ -742,6 +759,175 @@ function MarketBasedWithTabs({
           )}
         </>
       )}
+
+      {/* Transaction Detail Modal */}
+      <Dialog open={!!selectedPurchase} onOpenChange={(o) => { if (!o) setSelectedPurchase(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              Transaction Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedPurchase && (
+            <div className="space-y-4">
+              {/* Product Information */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Product Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Product Name</p>
+                    <p className="font-medium text-gray-900">{selectedPurchase.product_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Barcode</p>
+                    <p className="font-mono text-gray-900">{selectedPurchase.barcode}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity & Pricing */}
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Quantity & Pricing</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Quantity Received</p>
+                    <p className="font-bold text-gray-900 tabular-nums">
+                      {Number(selectedPurchase.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Deducted Quantity</p>
+                    <p className="font-bold text-red-600 tabular-nums">
+                      {Number(selectedPurchase.deducted_quantity) > 0
+                        ? `−${Number(selectedPurchase.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} ${selectedPurchase.unit_name}`
+                        : "—"
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Payable Quantity</p>
+                    <p className="font-bold text-emerald-700 tabular-nums">
+                      {Number(selectedPurchase.payable_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Reference Price</p>
+                    <p className="font-medium text-gray-900 tabular-nums">{fmtShort(selectedPurchase.reference_price)}/{selectedPurchase.unit_name}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Details */}
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Financial Details</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Gross Amount</p>
+                    <p className="font-medium text-gray-900 tabular-nums">{fmt(selectedPurchase.gross_amount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Deduction Amount</p>
+                    <p className="font-medium text-red-600 tabular-nums">
+                      {Number(selectedPurchase.deduction_amount) > 0
+                        ? `−${fmt(selectedPurchase.deduction_amount)}`
+                        : "—"
+                      }
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Final Amount</p>
+                    <p className="font-bold text-xl text-emerald-700 tabular-nums">{fmt(selectedPurchase.final_amount)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Information */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Status Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Approval Status</p>
+                    {selectedPurchase.approval_status ? (
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                        selectedPurchase.approval_status === "APPROVED" ? "bg-green-100 text-green-700" :
+                        selectedPurchase.approval_status === "REJECTED" ? "bg-red-100 text-red-700" :
+                        "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {selectedPurchase.approval_status}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Payment Status</p>
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      selectedPurchase.payment_status === "PAID" ? "bg-green-100 text-green-700" :
+                      selectedPurchase.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" :
+                      "bg-red-100 text-red-700"
+                    }`}>
+                      {selectedPurchase.payment_status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Additional Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Seller</p>
+                    <p className="font-medium text-gray-900">{selectedPurchase.seller || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Transaction Date</p>
+                    <p className="font-medium text-gray-900">{fmtDateOnly(selectedPurchase.transaction_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Recorded By</p>
+                    <p className="font-medium text-gray-900">{selectedPurchase.recorded_by_name || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Prepared By</p>
+                    <p className="font-medium text-gray-900">{selectedPurchase.prepared_by_name || "—"}</p>
+                  </div>
+                  {selectedPurchase.approved_by_name && (
+                    <div>
+                      <p className="text-xs text-gray-500">Approved By</p>
+                      <p className="font-medium text-gray-900">{selectedPurchase.approved_by_name}</p>
+                    </div>
+                  )}
+                  {selectedPurchase.approved_at && (
+                    <div>
+                      <p className="text-xs text-gray-500">Approved At</p>
+                      <p className="font-medium text-gray-900">{fmtDate(selectedPurchase.approved_at)}</p>
+                    </div>
+                  )}
+                  {selectedPurchase.rejection_reason && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Rejection Reason</p>
+                      <p className="font-medium text-red-600">{selectedPurchase.rejection_reason}</p>
+                    </div>
+                  )}
+                  {selectedPurchase.remarks && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Remarks</p>
+                      <p className="font-medium text-gray-900">{selectedPurchase.remarks}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedPurchase(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

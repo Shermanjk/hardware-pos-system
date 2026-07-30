@@ -19,11 +19,15 @@ router.get("/pending-counts", async (_req: Request, res: Response) => {
     const [voidsPending] = await pool.execute<any[]>(
       "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'pending'"
     );
+    const [adjustmentsPending] = await pool.execute<any[]>(
+      "SELECT COUNT(*) as count FROM market_based_adjustment_requests WHERE status = 'PENDING_APPROVAL'"
+    );
     
     res.status(200).json({
       pending_commodity_approvals: Number(commodityPending[0]?.count || 0),
       pending_returns: Number(returnsPending[0]?.count || 0),
       pending_voids: Number(voidsPending[0]?.count || 0),
+      pending_adjustments: Number(adjustmentsPending[0]?.count || 0),
     });
   } catch (err) {
     console.error("[dashboard/GET /pending-counts]", err);
