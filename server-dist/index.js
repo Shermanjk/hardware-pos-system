@@ -1459,6 +1459,22 @@ router4.get(
         params.push(payment_status);
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const returnableFilter = `
+        AND s.id IN (
+          SELECT DISTINCT si.sale_id
+          FROM sale_items si
+          JOIN products p ON p.id = si.product_id
+          WHERE p.is_returnable = 1
+            AND si.quantity > COALESCE((
+              SELECT COALESCE(SUM(ri.quantity_returned), 0)
+              FROM return_items ri
+              JOIN returns r ON ri.return_id = r.id
+              WHERE ri.sale_item_id = si.id
+                AND r.status IN ('pending', 'waiting_for_cashier', 'completed')
+            ), 0)
+        )
+      `;
+      const finalWhere = where ? `${where} ${returnableFilter}` : `WHERE 1=1 ${returnableFilter}`;
       const [rows] = await pool.execute(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
@@ -1466,7 +1482,7 @@ router4.get(
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
-         ${where}
+         ${finalWhere}
          ORDER BY s.created_at DESC
          LIMIT 200`,
         params
@@ -1614,15 +1630,19 @@ router4.get(
            p.product_name, p.barcode, p.is_returnable,
            si.quantity, si.unit_price, si.subtotal,
            si.tax_type, si.tax_rate, si.taxable_amount, si.vat_amount AS item_vat_amount,
+           COALESCE(u.abbreviation, '') AS unit_abbreviation,
+           COALESCE(p.quantity_type, 'WHOLE_UNIT') AS quantity_type,
+           COALESCE(u.allow_decimal, 0) AS unit_allow_decimal,
            (
              SELECT COALESCE(SUM(ri.quantity_returned), 0)
              FROM return_items ri
              JOIN returns r ON ri.return_id = r.id
              WHERE ri.sale_item_id = si.id
-               AND r.status IN ('pending', 'approved')
+               AND r.status IN ('pending', 'waiting_for_cashier', 'completed')
            ) AS quantity_returned
          FROM sale_items si
          JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
          WHERE si.sale_id = ?`,
         [sale.id]
       );
@@ -1912,8 +1932,7 @@ router5.get(
            r.created_at
          FROM returns r
          JOIN sales s ON s.id = r.sale_id
-         WHERE r.status = 'approved'
-           AND r.resolution IS NULL
+         WHERE r.status = 'waiting_for_cashier'
            AND s.customer_name LIKE ?
          ORDER BY r.created_at DESC`,
         [`%${customer_name.trim()}%`]
@@ -1950,7 +1969,7 @@ router5.get(
          JOIN sales s ON s.id = r.sale_id
          LEFT JOIN users u ON u.id = r.approved_by
          WHERE r.processed_by = ?
-           AND r.status IN ('approved', 'rejected')
+           AND r.status IN ('completed', 'rejected')
       `;
       const params = [req.user.id];
       if (search) {
@@ -1984,7 +2003,7 @@ router5.get(
          FROM returns r
          JOIN sales s ON s.id = r.sale_id
          WHERE r.processed_by = ?
-           AND r.status = 'pending'
+           AND r.status IN ('pending', 'waiting_for_cashier', 'approved')
          ORDER BY r.created_at DESC`,
         [req.user.id]
       );
@@ -2126,7 +2145,7 @@ router5.patch(
         return;
       }
       await conn.execute(
-        `UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
+        `UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
         [req.user.id, id]
       );
       await conn.commit();
@@ -2266,7 +2285,7 @@ router5.patch(
         res.status(404).json({ message: "Return not found." });
         return;
       }
-      if (returnRow.status !== "approved") {
+      if (returnRow.status !== "waiting_for_cashier" && returnRow.status !== "approved") {
         await conn.rollback();
         res.status(422).json({ message: "Return must be approved before resolution." });
         return;
@@ -2306,7 +2325,7 @@ router5.patch(
         }
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'refund', item_condition = ?, refund_amount = ?, resolved_at = NOW()
+           SET resolution = 'refund', item_condition = ?, refund_amount = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
           [item_condition, refund_amount.toFixed(2), id]
         );
@@ -2354,7 +2373,7 @@ router5.patch(
         }
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'replacement', item_condition = ?, resolved_at = NOW()
+           SET resolution = 'replacement', item_condition = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
           [item_condition, id]
         );
@@ -2431,6 +2450,9 @@ var PRODUCT_COLS = `
   p.unit_id,
   COALESCE(u.unit_name, '')      AS unit,
   COALESCE(u.abbreviation, '')   AS unit_abbreviation,
+  COALESCE(u.unit_type, 'Other') AS unit_type,
+  COALESCE(u.allow_decimal, 0)   AS unit_allow_decimal,
+  COALESCE(u.status, 'Active')   AS unit_status,
   p.cost_price,
   p.selling_price,
   p.quantity,
@@ -3108,16 +3130,136 @@ var suppliers_default = router8;
 // server/routes/units.ts
 init_db();
 import { Router as Router9 } from "express";
+import { z as z9 } from "zod";
 var router9 = Router9();
 router9.use(authenticate);
+function requireAdmin6(req, res) {
+  if (req.user?.role !== "Admin") {
+    res.status(403).json({ message: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+var unitSchema = z9.object({
+  unit_name: z9.string().min(1, "Unit name is required").max(50),
+  abbreviation: z9.string().min(1, "Abbreviation is required").max(30),
+  unit_type: z9.enum(["Count", "Weight", "Volume", "Length", "Area", "Packaging", "Other"], {
+    message: "Unit type is required"
+  }),
+  allow_decimal: z9.boolean({
+    message: "Decimal support is required"
+  }),
+  description: z9.string().optional().nullable(),
+  status: z9.enum(["Active", "Inactive"]).default("Active")
+});
 router9.get("/", async (_req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT id, unit_name, abbreviation, description FROM units ORDER BY unit_name ASC"
+      `SELECT u.id, u.unit_name, u.abbreviation, u.unit_type, u.allow_decimal, u.description, u.status,
+              COUNT(p.id) as product_count
+       FROM units u
+       LEFT JOIN products p ON p.unit_id = u.id
+       GROUP BY u.id, u.unit_name, u.abbreviation, u.unit_type, u.allow_decimal, u.description, u.status
+       ORDER BY u.unit_name ASC`
     );
     res.status(200).json(rows);
   } catch (err) {
     console.error("[units/GET /]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router9.post("/", async (req, res) => {
+  if (!requireAdmin6(req, res)) return;
+  const parsed = unitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "unit_name"), message: i.message })) });
+    return;
+  }
+  const { unit_name, abbreviation, unit_type, allow_decimal, description, status } = parsed.data;
+  try {
+    const [existing] = await pool.execute(
+      "SELECT id FROM units WHERE LOWER(unit_name) = LOWER(?) OR LOWER(abbreviation) = LOWER(?) LIMIT 1",
+      [unit_name, abbreviation]
+    );
+    if (existing.length > 0) {
+      res.status(409).json({ message: "Unit with this name or abbreviation already exists." });
+      return;
+    }
+    const [result] = await pool.execute(
+      "INSERT INTO units (unit_name, abbreviation, unit_type, allow_decimal, description, status) VALUES (?, ?, ?, ?, ?, ?)",
+      [unit_name, abbreviation, unit_type, allow_decimal ? 1 : 0, description ?? null, status]
+    );
+    res.status(201).json({ id: result.insertId, unit_name, abbreviation, unit_type, allow_decimal, description, status });
+  } catch (err) {
+    console.error("[units/POST /]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router9.put("/:id", async (req, res) => {
+  if (!requireAdmin6(req, res)) return;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ message: "Invalid ID." });
+    return;
+  }
+  const parsed = unitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "unit_name"), message: i.message })) });
+    return;
+  }
+  const { unit_name, abbreviation, unit_type, allow_decimal, description, status } = parsed.data;
+  try {
+    const [existing] = await pool.execute(
+      "SELECT id FROM units WHERE (LOWER(unit_name) = LOWER(?) OR LOWER(abbreviation) = LOWER(?)) AND id != ? LIMIT 1",
+      [unit_name, abbreviation, id]
+    );
+    if (existing.length > 0) {
+      res.status(409).json({ message: "Unit with this name or abbreviation already exists." });
+      return;
+    }
+    const [result] = await pool.execute(
+      "UPDATE units SET unit_name = ?, abbreviation = ?, unit_type = ?, allow_decimal = ?, description = ?, status = ? WHERE id = ?",
+      [unit_name, abbreviation, unit_type, allow_decimal ? 1 : 0, description ?? null, status, id]
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ message: "Unit not found." });
+      return;
+    }
+    res.status(200).json({ id, unit_name, abbreviation, unit_type, allow_decimal, description, status });
+  } catch (err) {
+    console.error("[units/PUT /:id]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+router9.delete("/:id", async (req, res) => {
+  if (!requireAdmin6(req, res)) return;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ message: "Invalid ID." });
+    return;
+  }
+  try {
+    const [inUse] = await pool.execute(
+      "SELECT COUNT(*) as count FROM products WHERE unit_id = ?",
+      [id]
+    );
+    const productCount = inUse[0]?.count || 0;
+    if (productCount > 0) {
+      res.status(409).json({
+        message: `Cannot delete. This unit is currently assigned to ${productCount} ${productCount === 1 ? "product" : "products"}. Deactivate it instead.`,
+        can_mark_inactive: true,
+        product_count: productCount
+      });
+      return;
+    }
+    const [result] = await pool.execute("DELETE FROM units WHERE id = ?", [id]);
+    if (result.affectedRows === 0) {
+      res.status(404).json({ message: "Unit not found." });
+      return;
+    }
+    res.status(200).json({ message: "Unit deleted." });
+  } catch (err) {
+    console.error("[units/DELETE /:id]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
@@ -3126,7 +3268,7 @@ var units_default = router9;
 // server/routes/inventory.ts
 init_db();
 import { Router as Router10 } from "express";
-import { z as z9 } from "zod";
+import { z as z10 } from "zod";
 init_auditLogger();
 var router10 = Router10();
 router10.use(authenticate);
@@ -3209,6 +3351,9 @@ router10.get("/", async (req, res) => {
         COALESCE(s.supplier_name, '\u2014')  AS supplier,
         COALESCE(u.unit_name, '')        AS unit,
         COALESCE(u.abbreviation, '')     AS unit_abbreviation,
+        COALESCE(u.unit_type, 'Other')  AS unit_type,
+        COALESCE(u.allow_decimal, 0)    AS unit_allow_decimal,
+        COALESCE(u.status, 'Active')    AS unit_status,
         p.quantity,
         p.reorder_level,
         p.damaged_stock,
@@ -3255,6 +3400,9 @@ router10.get("/logs", async (req, res) => {
         il.product_id,
         p.product_name,
         p.barcode,
+        COALESCE(units.abbreviation, '') AS unit_abbreviation,
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal,
         il.transaction_type,
         il.action,
         il.quantity_change,
@@ -3265,6 +3413,7 @@ router10.get("/logs", async (req, res) => {
         COALESCE(u.full_name, '\u2014') AS performed_by
       FROM inventory_logs il
       LEFT JOIN products p ON p.id = il.product_id
+      LEFT JOIN units ON units.id = p.unit_id
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
@@ -3276,30 +3425,30 @@ router10.get("/logs", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-var stockInItemSchema = z9.object({
-  product_id: z9.number().int().positive(),
+var stockInItemSchema = z10.object({
+  product_id: z10.number().int().positive(),
   // Accept decimals for commodity products (e.g. 100.5 kg).
   // Whole-number products continue to work unchanged.
-  quantity_received: z9.number().positive("Quantity must be greater than 0"),
-  unit_cost: z9.number().min(0).optional().nullable()
+  quantity_received: z10.number().positive("Quantity must be greater than 0"),
+  unit_cost: z10.number().min(0).optional().nullable()
 });
 var STOCK_IN_SOURCES = [
   "Supplier Delivery",
   "Direct Purchase"
 ];
-var stockInSchema = z9.object({
-  source: z9.enum(STOCK_IN_SOURCES),
-  supplier_id: z9.number().int().positive().optional().nullable(),
-  invoice_number: z9.string().optional().nullable(),
-  delivery_date: z9.string().min(1, "Delivery date is required"),
-  remarks: z9.string().optional().nullable(),
-  items: z9.array(stockInItemSchema).min(1, "At least one item is required")
+var stockInSchema = z10.object({
+  source: z10.enum(STOCK_IN_SOURCES),
+  supplier_id: z10.number().int().positive().optional().nullable(),
+  invoice_number: z10.string().optional().nullable(),
+  delivery_date: z10.string().min(1, "Delivery date is required"),
+  remarks: z10.string().optional().nullable(),
+  items: z10.array(stockInItemSchema).min(1, "At least one item is required")
 });
-var stockAdjustmentSchema = z9.object({
-  product_id: z9.number().int().positive(),
-  type: z9.enum(["Damaged", "Lost", "Expired", "Correction"]),
-  quantity: z9.number().min(0),
-  reason: z9.string().min(1, "Reason is required")
+var stockAdjustmentSchema = z10.object({
+  product_id: z10.number().int().positive(),
+  type: z10.enum(["Damaged", "Lost", "Expired", "Correction"]),
+  quantity: z10.number().min(0),
+  reason: z10.string().min(1, "Reason is required")
 });
 router10.post("/stock-in", async (req, res) => {
   if (!requireAdminOrClerk(req, res)) return;
@@ -3849,35 +3998,35 @@ var reports_default = router12;
 // server/routes/settings.ts
 init_db();
 import { Router as Router13 } from "express";
-import { z as z10 } from "zod";
+import { z as z11 } from "zod";
 init_auditLogger();
 var router13 = Router13();
 router13.use(authenticate);
-function requireAdmin6(req, res) {
+function requireAdmin7(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
     return false;
   }
   return true;
 }
-var settingsSchema = z10.object({
+var settingsSchema = z11.object({
   // General
-  store_name: z10.string().max(150).optional(),
-  store_fb: z10.string().max(150).optional(),
-  store_phone: z10.string().max(50).optional(),
-  store_address: z10.string().max(255).optional(),
-  currency: z10.string().max(10).optional(),
+  store_name: z11.string().max(150).optional(),
+  store_fb: z11.string().max(150).optional(),
+  store_phone: z11.string().max(50).optional(),
+  store_address: z11.string().max(255).optional(),
+  currency: z11.string().max(10).optional(),
   // Business / taxpayer
-  registered_taxpayer_name: z10.string().max(200).optional(),
-  tin: z10.string().max(30).optional(),
-  business_license: z10.string().max(100).optional(),
+  registered_taxpayer_name: z11.string().max(200).optional(),
+  tin: z11.string().max(30).optional(),
+  business_license: z11.string().max(100).optional(),
   // kept for backward compat
-  document_type: z10.string().max(60).optional(),
-  tax_rate: z10.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot exceed 100").optional(),
-  vat_registered: z10.boolean().optional(),
+  document_type: z11.string().max(60).optional(),
+  tax_rate: z11.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot exceed 100").optional(),
+  vat_registered: z11.boolean().optional(),
   // POS machine
-  pos_min: z10.string().max(30).optional(),
-  pos_serial: z10.string().max(30).optional()
+  pos_min: z11.string().max(30).optional(),
+  pos_serial: z11.string().max(30).optional()
 });
 router13.get("/", async (req, res) => {
   try {
@@ -3895,7 +4044,7 @@ router13.get("/", async (req, res) => {
   }
 });
 router13.put("/", async (req, res) => {
-  if (!requireAdmin6(req, res)) return;
+  if (!requireAdmin7(req, res)) return;
   const parsed = settingsSchema.safeParse(req.body);
   if (!parsed.success) {
     const errors = parsed.error.issues.map((i) => ({
@@ -3969,11 +4118,11 @@ var settings_default = router13;
 // server/routes/commodityPrices.ts
 init_db();
 import { Router as Router14 } from "express";
-import { z as z11 } from "zod";
+import { z as z12 } from "zod";
 init_auditLogger();
 var router14 = Router14();
 router14.use(authenticate);
-function requireAdmin7(req, res) {
+function requireAdmin8(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
     return false;
@@ -3994,40 +4143,40 @@ function requireCashierOrAdmin(req, res) {
   }
   return true;
 }
-var setPriceSchema = z11.object({
-  price_per_unit: z11.number().positive("Price must be greater than 0"),
-  reason: z11.string().optional().nullable()
+var setPriceSchema = z12.object({
+  price_per_unit: z12.number().positive("Price must be greater than 0"),
+  reason: z12.string().optional().nullable()
 });
-var purchaseSchema = z11.object({
-  product_id: z11.number().int().positive(),
-  supplier_id: z11.number().int().positive().optional().nullable(),
-  seller_name: z11.string().max(150).optional().nullable(),
-  quantity: z11.number().positive("Quantity must be greater than 0"),
+var purchaseSchema = z12.object({
+  product_id: z12.number().int().positive(),
+  supplier_id: z12.number().int().positive().optional().nullable(),
+  seller_name: z12.string().max(150).optional().nullable(),
+  quantity: z12.number().positive("Quantity must be greater than 0"),
   // NEW: deducted_quantity replaces deduction_per_unit
   // This is the physical quantity to deduct (e.g., 3 kg)
-  deducted_quantity: z11.number().min(0).default(0),
+  deducted_quantity: z12.number().min(0).default(0),
   // Keep deduction_per_unit for backwards compatibility with old API calls
   // but it will be ignored in favor of deducted_quantity for new transactions
-  deduction_per_unit: z11.number().min(0).optional().default(0),
-  transaction_date: z11.string().min(1, "Transaction date is required"),
-  remarks: z11.string().max(500).optional().nullable(),
+  deduction_per_unit: z12.number().min(0).optional().default(0),
+  transaction_date: z12.string().min(1, "Transaction date is required"),
+  remarks: z12.string().max(500).optional().nullable(),
   // Payment fields — recorded at purchase time
-  payment_status: z11.enum(["UNPAID", "PARTIALLY_PAID", "PAID"]).default("UNPAID"),
-  amount_paid: z11.number().min(0).default(0),
-  payment_method: z11.string().max(50).optional().nullable(),
-  payment_reference: z11.string().max(100).optional().nullable(),
+  payment_status: z12.enum(["UNPAID", "PARTIALLY_PAID", "PAID"]).default("UNPAID"),
+  amount_paid: z12.number().min(0).default(0),
+  payment_method: z12.string().max(50).optional().nullable(),
+  payment_reference: z12.string().max(100).optional().nullable(),
   // Frontend-submitted calculated totals are accepted for schema validation only.
   // The backend recalculates all monetary values from DB data and ignores these.
-  submitted_reference_price: z11.number().min(0).optional(),
-  submitted_gross_amount: z11.number().min(0).optional(),
-  submitted_total_deduction: z11.number().min(0).optional(),
-  submitted_final_amount: z11.number().min(0).optional()
+  submitted_reference_price: z12.number().min(0).optional(),
+  submitted_gross_amount: z12.number().min(0).optional(),
+  submitted_total_deduction: z12.number().min(0).optional(),
+  submitted_final_amount: z12.number().min(0).optional()
 });
-var recordPaymentSchema = z11.object({
-  amount: z11.number().positive("Payment amount must be greater than 0"),
-  payment_method: z11.string().max(50).optional().nullable(),
-  payment_reference: z11.string().max(100).optional().nullable(),
-  notes: z11.string().max(500).optional().nullable()
+var recordPaymentSchema = z12.object({
+  amount: z12.number().positive("Payment amount must be greater than 0"),
+  payment_method: z12.string().max(50).optional().nullable(),
+  payment_reference: z12.string().max(100).optional().nullable(),
+  notes: z12.string().max(500).optional().nullable()
 });
 router14.get("/products", async (req, res) => {
   if (!requireAdminOrClerk2(req, res)) return;
@@ -4129,7 +4278,7 @@ router14.get("/:productId/history", async (req, res) => {
   }
 });
 router14.post("/:productId/set-price", async (req, res) => {
-  if (!requireAdmin7(req, res)) return;
+  if (!requireAdmin8(req, res)) return;
   const productId = parseInt(req.params.productId, 10);
   if (isNaN(productId)) {
     res.status(400).json({ message: "Invalid product ID." });
@@ -4371,7 +4520,7 @@ router14.post("/purchase", async (req, res) => {
   }
 });
 router14.get("/purchases/pending", async (req, res) => {
-  if (!requireAdmin7(req, res)) return;
+  if (!requireAdmin8(req, res)) return;
   try {
     const [countCheck] = await pool.execute(`
       SELECT status, COUNT(*) as cnt FROM commodity_purchases GROUP BY status
@@ -4757,7 +4906,7 @@ router14.get("/purchases", async (req, res) => {
   }
 });
 router14.post("/purchases/:id/approve", async (req, res) => {
-  if (!requireAdmin7(req, res)) return;
+  if (!requireAdmin8(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
     res.status(400).json({ message: "Invalid purchase ID." });
@@ -4861,11 +5010,11 @@ router14.post("/purchases/:id/approve", async (req, res) => {
     conn.release();
   }
 });
-var rejectSchema2 = z11.object({
-  rejection_reason: z11.string().min(1, "Rejection reason is required").max(500)
+var rejectSchema2 = z12.object({
+  rejection_reason: z12.string().min(1, "Rejection reason is required").max(500)
 });
 router14.post("/purchases/:id/reject", async (req, res) => {
-  if (!requireAdmin7(req, res)) return;
+  if (!requireAdmin8(req, res)) return;
   const purchaseId = parseInt(req.params.id, 10);
   if (isNaN(purchaseId)) {
     res.status(400).json({ message: "Invalid purchase ID." });
@@ -4938,36 +5087,36 @@ var commodityPrices_default = router14;
 // server/routes/externalProcessing.ts
 init_db();
 import { Router as Router15 } from "express";
-import { z as z12 } from "zod";
+import { z as z13 } from "zod";
 init_auditLogger();
 var router15 = Router15();
 router15.use(authenticate);
-function requireAdmin8(req, res) {
+function requireAdmin9(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
     return false;
   }
   return true;
 }
-var createCompanySchema = z12.object({
-  name: z12.string().min(1, "Company name is required").max(200),
-  address: z12.string().max(500).optional().nullable(),
-  contact: z12.string().max(100).optional().nullable()
+var createCompanySchema = z13.object({
+  name: z13.string().min(1, "Company name is required").max(200),
+  address: z13.string().max(500).optional().nullable(),
+  contact: z13.string().max(100).optional().nullable()
 });
-var recordDeliverySchema = z12.object({
-  product_id: z12.number().int().positive("Product is required"),
-  quantity: z12.number().positive("Quantity must be greater than 0"),
-  company_id: z12.number().int().positive().optional().nullable().default(null),
-  company_name: z12.string().min(1).max(200).optional(),
-  delivery_date: z12.string().min(1, "Delivery date is required"),
-  delivered_by: z12.string().max(200).optional().nullable(),
-  remarks: z12.string().max(500).optional().nullable()
+var recordDeliverySchema = z13.object({
+  product_id: z13.number().int().positive("Product is required"),
+  quantity: z13.number().positive("Quantity must be greater than 0"),
+  company_id: z13.number().int().positive().optional().nullable().default(null),
+  company_name: z13.string().min(1).max(200).optional(),
+  delivery_date: z13.string().min(1, "Delivery date is required"),
+  delivered_by: z13.string().max(200).optional().nullable(),
+  remarks: z13.string().max(500).optional().nullable()
 }).refine((d) => d.company_id || d.company_name?.trim(), {
   message: "Processing company is required",
   path: ["company_name"]
 });
 router15.get("/companies", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   try {
     const [rows] = await pool.execute(
       `SELECT id, name, address, contact, is_active, created_at
@@ -4982,7 +5131,7 @@ router15.get("/companies", async (req, res) => {
   }
 });
 router15.get("/companies/all", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   try {
     const [rows] = await pool.execute(
       `SELECT id, name, address, contact, is_active, created_at
@@ -4996,7 +5145,7 @@ router15.get("/companies/all", async (req, res) => {
   }
 });
 router15.post("/companies", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const parsed = createCompanySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
@@ -5039,7 +5188,7 @@ router15.post("/companies", async (req, res) => {
   }
 });
 router15.put("/companies/:id", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ message: "Invalid company ID." });
@@ -5087,7 +5236,7 @@ router15.put("/companies/:id", async (req, res) => {
   }
 });
 router15.delete("/companies/:id", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ message: "Invalid company ID." });
@@ -5138,7 +5287,7 @@ router15.delete("/companies/:id", async (req, res) => {
   }
 });
 router15.post("/deliveries", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const parsed = recordDeliverySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
@@ -5313,7 +5462,7 @@ router15.post("/deliveries", async (req, res) => {
   }
 });
 router15.get("/deliveries", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const limit = Math.min(1e3, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const offset = Math.max(0, parseInt(req.query.offset || "0", 10));
   const { product_id, company_id, date_from, date_to, search } = req.query;
@@ -5378,7 +5527,7 @@ router15.get("/deliveries", async (req, res) => {
   }
 });
 router15.get("/deliveries/:id", async (req, res) => {
-  if (!requireAdmin8(req, res)) return;
+  if (!requireAdmin9(req, res)) return;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ message: "Invalid delivery ID." });
@@ -5427,26 +5576,26 @@ var externalProcessing_default = router15;
 // server/routes/suspendedSales.ts
 init_db();
 import { Router as Router16 } from "express";
-import { z as z13 } from "zod";
+import { z as z14 } from "zod";
 var router16 = Router16();
-var suspendedItemSchema = z13.object({
-  product_id: z13.number().int().positive(),
-  name: z13.string(),
-  barcode: z13.string(),
-  quantity: z13.number().positive(),
-  unitPrice: z13.number().positive(),
-  subtotal: z13.number().positive(),
-  tax_type: z13.enum(["VATABLE", "VAT_EXEMPT", "ZERO_RATED", "NON_TAXABLE"]).optional(),
-  tax_rate: z13.number().min(0).max(100).optional(),
-  taxable_amount: z13.number().min(0).optional(),
-  vat_amount: z13.number().min(0).optional()
+var suspendedItemSchema = z14.object({
+  product_id: z14.number().int().positive(),
+  name: z14.string(),
+  barcode: z14.string(),
+  quantity: z14.number().positive(),
+  unitPrice: z14.number().positive(),
+  subtotal: z14.number().positive(),
+  tax_type: z14.enum(["VATABLE", "VAT_EXEMPT", "ZERO_RATED", "NON_TAXABLE"]).optional(),
+  tax_rate: z14.number().min(0).max(100).optional(),
+  taxable_amount: z14.number().min(0).optional(),
+  vat_amount: z14.number().min(0).optional()
 });
-var suspendSaleSchema = z13.object({
-  customer_name: z13.string().min(0).default(""),
-  customer_address: z13.string().optional(),
-  customer_tin: z13.string().optional(),
-  cart_items: z13.array(suspendedItemSchema).min(1),
-  label: z13.string().optional()
+var suspendSaleSchema = z14.object({
+  customer_name: z14.string().min(0).default(""),
+  customer_address: z14.string().optional(),
+  customer_tin: z14.string().optional(),
+  cart_items: z14.array(suspendedItemSchema).min(1),
+  label: z14.string().optional()
 });
 router16.get(
   "/",
@@ -5920,10 +6069,10 @@ var suspendedSales_default = router16;
 init_db();
 import { Router as Router17 } from "express";
 init_auditLogger();
-import { z as z14 } from "zod";
+import { z as z15 } from "zod";
 var router17 = Router17();
 router17.use(authenticate);
-function requireAdmin9(req, res) {
+function requireAdmin10(req, res) {
   if (req.user?.role !== "Admin") {
     res.status(403).json({ message: "Forbidden" });
     return false;
@@ -5931,7 +6080,7 @@ function requireAdmin9(req, res) {
   return true;
 }
 router17.get("/pending", async (req, res) => {
-  if (!requireAdmin9(req, res)) return;
+  if (!requireAdmin10(req, res)) return;
   try {
     const [stockCountStandard] = await pool.execute(`
       SELECT
@@ -5947,10 +6096,13 @@ router17.get("/pending", async (req, res) => {
         scar.remarks,
         scar.status,
         scar.system_quantity,
-        scar.physical_quantity
+        scar.physical_quantity,
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
       FROM stock_count_adjustment_requests scar
       JOIN products p ON p.id = scar.product_id
       LEFT JOIN users u ON u.id = scar.prepared_by
+      LEFT JOIN units ON units.id = p.unit_id
       WHERE scar.status = 'PENDING_APPROVAL'
     `);
     const [stockCountMarket] = await pool.execute(`
@@ -5967,10 +6119,13 @@ router17.get("/pending", async (req, res) => {
         mbar.remarks,
         mbar.status,
         mbar.system_quantity,
-        mbar.physical_quantity
+        mbar.physical_quantity,
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
       FROM market_based_adjustment_requests mbar
       JOIN products p ON p.id = mbar.product_id
       LEFT JOIN users u ON u.id = mbar.prepared_by
+      LEFT JOIN units ON units.id = p.unit_id
       WHERE mbar.status = 'PENDING_APPROVAL'
     `);
     const [voidRequests] = await pool.execute(`
@@ -6035,7 +6190,7 @@ router17.get("/pending", async (req, res) => {
   }
 });
 router17.get("/history", async (req, res) => {
-  if (!requireAdmin9(req, res)) return;
+  if (!requireAdmin10(req, res)) return;
   const { type, status, date_from, date_to, search, limit, offset } = req.query;
   let where = "WHERE 1=1";
   const params = [];
@@ -6085,10 +6240,13 @@ router17.get("/history", async (req, res) => {
           scar.remarks,
           scar.status,
           scar.system_quantity,
-          scar.physical_quantity
+          scar.physical_quantity,
+          p.quantity_type,
+          COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
         FROM stock_count_adjustment_requests scar
         JOIN products p ON p.id = scar.product_id
         LEFT JOIN users u ON u.id = scar.prepared_by
+        LEFT JOIN units ON units.id = p.unit_id
         ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR scar.reference LIKE ?)" : ""}
         ORDER BY scar.prepared_at DESC
@@ -6124,10 +6282,13 @@ router17.get("/history", async (req, res) => {
           mbar.remarks,
           mbar.status,
           mbar.system_quantity,
-          mbar.physical_quantity
+          mbar.physical_quantity,
+          p.quantity_type,
+          COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
         FROM market_based_adjustment_requests mbar
         JOIN products p ON p.id = mbar.product_id
         LEFT JOIN users u ON u.id = mbar.prepared_by
+        LEFT JOIN units ON units.id = p.unit_id
         ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR mbar.reference LIKE ?)" : ""}
         ORDER BY mbar.prepared_at DESC
@@ -6180,8 +6341,9 @@ router17.get("/history", async (req, res) => {
       if (status && status !== "all") {
         const statusMap = {
           "PENDING_APPROVAL": "pending",
-          "APPROVED": "approved",
-          "REJECTED": "rejected"
+          "APPROVED": "waiting_for_cashier",
+          "REJECTED": "rejected",
+          "COMPLETED": "completed"
         };
         const statusStr = String(status);
         const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
@@ -6220,7 +6382,7 @@ router17.get("/history", async (req, res) => {
   }
 });
 router17.get("/kpi", async (req, res) => {
-  if (!requireAdmin9(req, res)) return;
+  if (!requireAdmin10(req, res)) return;
   try {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const [pendingStandard] = await pool.execute(
@@ -6248,7 +6410,7 @@ router17.get("/kpi", async (req, res) => {
       [today]
     );
     const [approvedTodayReturn] = await pool.execute(
-      "SELECT COUNT(*) as count FROM returns WHERE status = 'approved' AND DATE(resolved_at) = ?",
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'waiting_for_cashier' AND DATE(resolved_at) = ?",
       [today]
     );
     const [rejectedTodayStandard] = await pool.execute(
@@ -6281,12 +6443,12 @@ router17.get("/kpi", async (req, res) => {
     res.status(500).json({ message: "An unexpected error occurred." });
   }
 });
-var createStockCountRequestSchema = z14.object({
-  product_id: z14.number(),
-  system_quantity: z14.number(),
-  physical_quantity: z14.number(),
-  reason: z14.enum(["Inventory Miscount", "Damaged Items", "Lost Items", "Newly Found Stock", "Encoding Error", "Other"]),
-  remarks: z14.string().optional()
+var createStockCountRequestSchema = z15.object({
+  product_id: z15.number(),
+  system_quantity: z15.number(),
+  physical_quantity: z15.number(),
+  reason: z15.enum(["Inventory Miscount", "Damaged Items", "Lost Items", "Newly Found Stock", "Encoding Error", "Other"]),
+  remarks: z15.string().optional()
 });
 router17.post("/stock-count-standard", async (req, res) => {
   const userId = req.user?.id;
@@ -6328,7 +6490,7 @@ router17.post("/stock-count-standard", async (req, res) => {
   }
 });
 router17.post("/:type/:id/approve", async (req, res) => {
-  if (!requireAdmin9(req, res)) return;
+  if (!requireAdmin10(req, res)) return;
   const { type, id } = req.params;
   const adminId = req.user?.id;
   const adminUsername = req.user?.username;
@@ -6406,7 +6568,7 @@ router17.post("/:type/:id/approve", async (req, res) => {
       res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
     } else if (type === "return") {
       await pool.execute(
-        "UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?",
+        "UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?",
         [adminId, requestId]
       );
       await logAuditEvent({
@@ -6426,7 +6588,7 @@ router17.post("/:type/:id/approve", async (req, res) => {
   }
 });
 router17.post("/:type/:id/reject", async (req, res) => {
-  if (!requireAdmin9(req, res)) return;
+  if (!requireAdmin10(req, res)) return;
   const { type, id } = req.params;
   const adminId = req.user?.id;
   const adminUsername = req.user?.username;

@@ -101,6 +101,9 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(s.supplier_name, '—')  AS supplier,
         COALESCE(u.unit_name, '')        AS unit,
         COALESCE(u.abbreviation, '')     AS unit_abbreviation,
+        COALESCE(u.unit_type, 'Other')  AS unit_type,
+        COALESCE(u.allow_decimal, 0)    AS unit_allow_decimal,
+        COALESCE(u.status, 'Active')    AS unit_status,
         p.quantity,
         p.reorder_level,
         p.damaged_stock,
@@ -154,6 +157,9 @@ router.get("/logs", async (req: Request, res: Response) => {
         il.product_id,
         p.product_name,
         p.barcode,
+        COALESCE(units.abbreviation, '') AS unit_abbreviation,
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal,
         il.transaction_type,
         il.action,
         il.quantity_change,
@@ -164,6 +170,7 @@ router.get("/logs", async (req: Request, res: Response) => {
         COALESCE(u.full_name, '—') AS performed_by
       FROM inventory_logs il
       LEFT JOIN products p ON p.id = il.product_id
+      LEFT JOIN units ON units.id = p.unit_id
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC

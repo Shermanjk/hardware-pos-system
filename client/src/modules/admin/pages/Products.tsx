@@ -546,7 +546,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                       <SelectValue placeholder="Select unit" />
                     </SelectTrigger>
                     <SelectContent>
-                      {units.map((u) => (
+                      {units.filter((u) => u.status === "Active").map((u) => (
                         <SelectItem key={u.id} value={String(u.id)}>
                           {u.unit_name} ({u.abbreviation})
                         </SelectItem>
@@ -714,7 +714,7 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
                 : `₱${Number(product.selling_price).toFixed(2)}`}
             </div>
             <div><span className="font-medium text-gray-500">Stock:</span> {(() => {
-              const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+              const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type, product.unit_allow_decimal);
               return (
                 <span className="font-bold text-gray-900">
                   {parts.number}
@@ -1086,7 +1086,7 @@ export default function Products() {
                       </td>
                       <td className="py-3.5 px-5 text-center">
                         {(() => {
-                          const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+                          const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type, product.unit_allow_decimal);
                           return (
                             <div className="flex items-center justify-center gap-0.5">
                               <span className={`text-base font-bold tabular-nums ${

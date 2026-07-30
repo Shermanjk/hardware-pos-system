@@ -239,7 +239,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                       <p className="font-bold text-gray-900 text-sm">{selectedProduct.product_name}</p>
                       <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
                       <p className="text-xs mt-1">
-                        Current stock: <strong className="text-blue-700 text-sm">{formatQuantity(selectedProduct.quantity, selectedProduct.unit_abbreviation, selectedProduct.quantity_type)}</strong>
+                        Current stock: <strong className="text-blue-700 text-sm">{formatQuantity(selectedProduct.quantity, selectedProduct.unit_abbreviation, selectedProduct.quantity_type, selectedProduct.unit_allow_decimal)}</strong>
                       </p>
                     </div>
                   </div>

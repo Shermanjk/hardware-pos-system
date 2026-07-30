@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, FolderOpen, X, AlertCircle, RefreshCw, Tag, Package } from "lucide-react";
+import { Plus, Edit2, Trash2, FolderOpen, X, AlertCircle, RefreshCw, Tag, Package, Check, X as XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,10 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   getCategories, createCategory, updateCategory, deleteCategory,
   getUnits, createUnit, updateUnit, deleteUnit,
@@ -140,17 +144,25 @@ interface UnitFormModalProps {
 function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalProps) {
   const [unitName,    setUnitName]    = useState("");
   const [abbreviation, setAbbreviation] = useState("");
+  const [unitType,    setUnitType]    = useState<"Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other">("Other");
+  const [allowDecimal, setAllowDecimal] = useState<boolean>(false);
   const [description, setDescription] = useState("");
+  const [status,      setStatus]      = useState<"Active" | "Inactive">("Active");
   const [error,       setError]       = useState<string | null>(null);
   const [isLoading,   setIsLoading]   = useState(false);
+  const [isLocked,    setIsLocked]    = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setUnitName(initial?.unit_name ?? "");
     setAbbreviation(initial?.abbreviation ?? "");
+    setUnitType(initial?.unit_type ?? "Other");
+    setAllowDecimal(initial?.allow_decimal ?? false);
     setDescription(initial?.description ?? "");
+    setStatus(initial?.status ?? "Active");
     setError(null);
-  }, [open, initial]);
+    setIsLocked(mode === "edit" && (initial?.product_count ?? 0) > 0);
+  }, [open, initial, mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,7 +171,14 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
     setError(null);
     setIsLoading(true);
     try {
-      const payload = { unit_name: unitName.trim(), abbreviation: abbreviation.trim(), description: description.trim() || undefined };
+      const payload = {
+        unit_name: unitName.trim(),
+        abbreviation: abbreviation.trim(),
+        unit_type: unitType,
+        allow_decimal: allowDecimal,
+        description: description.trim() || undefined,
+        status
+      };
       const saved = mode === "add"
         ? await createUnit(payload)
         : await updateUnit(initial!.id, payload);
@@ -207,6 +226,63 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
               placeholder="e.g. kg"
               disabled={isLoading}
             />
+          </div>
+          <div>
+            <Label className="mb-1.5 block font-semibold">
+              Unit Type <span className="text-red-500">*</span>
+            </Label>
+            <Select value={unitType} onValueChange={(value: any) => setUnitType(value)} disabled={isLoading || isLocked}>
+              <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
+                <SelectValue placeholder="Select unit type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Count">Count</SelectItem>
+                <SelectItem value="Weight">Weight</SelectItem>
+                <SelectItem value="Volume">Volume</SelectItem>
+                <SelectItem value="Length">Length</SelectItem>
+                <SelectItem value="Area">Area</SelectItem>
+                <SelectItem value="Packaging">Packaging</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {isLocked && (
+              <p className="text-xs text-amber-600 mt-1">
+                Unit Type cannot be changed because this unit is assigned to products.
+              </p>
+            )}
+          </div>
+          <div>
+            <Label className="mb-1.5 block font-semibold">
+              Decimal Support <span className="text-red-500">*</span>
+            </Label>
+            <Select value={allowDecimal ? "1" : "0"} onValueChange={(value: "0" | "1") => setAllowDecimal(value === "1")} disabled={isLoading || isLocked}>
+              <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
+                <SelectValue placeholder="Select option" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Whole Numbers Only</SelectItem>
+                <SelectItem value="1">Allow Decimal Quantities</SelectItem>
+              </SelectContent>
+            </Select>
+            {isLocked && (
+              <p className="text-xs text-amber-600 mt-1">
+                Decimal Support cannot be changed because this unit is assigned to products.
+              </p>
+            )}
+          </div>
+          <div>
+            <Label className="mb-1.5 block font-semibold">
+              Status <span className="text-red-500">*</span>
+            </Label>
+            <Select value={status} onValueChange={(value: "Active" | "Inactive") => setStatus(value)} disabled={isLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="mb-1.5 block font-semibold">
@@ -306,14 +382,46 @@ interface UnitDeleteDialogProps {
 function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error,     setError]     = useState<string | null>(null);
+  const [canMarkInactive, setCanMarkInactive] = useState(false);
 
-  useEffect(() => { if (unit) setError(null); }, [unit]);
+  useEffect(() => {
+    if (unit) {
+      setError(null);
+      setCanMarkInactive(false);
+    }
+  }, [unit]);
 
   const handleConfirm = async () => {
     if (!unit) return;
     setIsLoading(true);
     try {
       await deleteUnit(unit.id);
+      onDeleted(unit.id);
+      onClose();
+    } catch (err) {
+      const errorMsg = extractError(err);
+      setError(errorMsg);
+      // Check if error message suggests marking as inactive
+      if (errorMsg.includes("mark it as Inactive") || errorMsg.includes("assigned to")) {
+        setCanMarkInactive(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMarkInactive = async () => {
+    if (!unit) return;
+    setIsLoading(true);
+    try {
+      await updateUnit(unit.id, {
+        unit_name: unit.unit_name,
+        abbreviation: unit.abbreviation,
+        unit_type: unit.unit_type ?? "Other",
+        allow_decimal: unit.allow_decimal ?? false,
+        description: unit.description ?? undefined,
+        status: "Inactive"
+      });
       onDeleted(unit.id);
       onClose();
     } catch (err) {
@@ -342,14 +450,25 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleConfirm}
-            disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-          >
-            {isLoading && <Spinner className="mr-2 text-white" />}
-            {isLoading ? "Deleting…" : "Delete"}
-          </AlertDialogAction>
+          {canMarkInactive ? (
+            <Button
+              onClick={handleMarkInactive}
+              disabled={isLoading}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading ? "Marking Inactive…" : "Mark as Inactive"}
+            </Button>
+          ) : (
+            <AlertDialogAction
+              onClick={handleConfirm}
+              disabled={isLoading}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -639,16 +758,33 @@ export default function Categories() {
                 >
                   {/* Icon + name */}
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center shrink-0 group-hover:bg-purple-100 transition-colors">
-                      <Package className="h-5 w-5 text-purple-600" />
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:opacity-80 transition-colors ${unit.status === "Active" ? "bg-purple-50" : "bg-gray-100"}`}>
+                      <Package className={`h-5 w-5 ${unit.status === "Active" ? "text-purple-600" : "text-gray-400"}`} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{unit.unit_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{unit.unit_name}</p>
+                        <Badge variant={unit.status === "Active" ? "default" : "secondary"} className="text-xs">
+                          {unit.status}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-gray-500 mt-0.5 font-mono">{unit.abbreviation}</p>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {unit.unit_type}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs font-normal flex items-center gap-1">
+                          {unit.allow_decimal ? <Check className="h-3 w-3" /> : <XIcon className="h-3 w-3" />}
+                          Decimal
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Used by {unit.product_count || 0} {unit.product_count === 1 ? 'Product' : 'Products'}
+                      </p>
                       {unit.description ? (
-                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{unit.description}</p>
+                        <p className="text-xs text-gray-400 mt-1 line-clamp-2">{unit.description}</p>
                       ) : (
-                        <p className="text-xs text-gray-300 mt-0.5 italic">No description</p>
+                        <p className="text-xs text-gray-300 mt-1 italic">No description</p>
                       )}
                     </div>
                   </div>

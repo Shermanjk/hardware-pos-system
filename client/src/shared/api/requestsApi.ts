@@ -28,6 +28,7 @@ export interface UnifiedRequest {
   total_amount?: number;
   unit_price?: number;
   quantity_type?: 'WHOLE_UNIT' | 'WEIGHTED';
+  unit_allow_decimal?: boolean;
 }
 
 export interface RequestKPI {

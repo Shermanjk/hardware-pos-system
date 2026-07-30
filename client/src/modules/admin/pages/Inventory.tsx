@@ -167,7 +167,7 @@ function StockTable({
                   </td>
                   <td className="py-3.5 px-5 text-center">
                     {(() => {
-                      const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                      const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
                       return (
                         <div className="flex items-center justify-center gap-0.5">
                           <span className={`text-base font-bold tabular-nums ${

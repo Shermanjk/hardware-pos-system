@@ -45,6 +45,7 @@ interface CountRow {
   unit: string;
   unit_abbreviation?: string;
   quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_allow_decimal?: boolean;
   pricing_type?: "FIXED_PRICE" | "MARKET_BASED";
   systemQty: number;
   physicalCount: string; // string so input can be blank
@@ -53,13 +54,13 @@ interface CountRow {
 }
 
 // ─── Difference badge ─────────────────────────────────────────────────────────
-function DiffCell({ system, physical, quantityType }: { system: number; physical: string; quantityType?: "WHOLE_UNIT" | "WEIGHTED" }) {
+function DiffCell({ system, physical, quantityType, allowDecimal }: { system: number; physical: string; quantityType?: "WHOLE_UNIT" | "WEIGHTED"; allowDecimal?: boolean }) {
   if (physical === "") {
     return <span className="text-gray-300 text-sm font-mono">—</span>;
   }
   const physNum = parseFloat(physical);
   const diff = physNum - system;
-  const isWeighted = quantityType === "WEIGHTED";
+  const useDecimal = allowDecimal ?? quantityType === "WEIGHTED";
 
   if (diff === 0) return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-bold text-xs">
@@ -68,12 +69,12 @@ function DiffCell({ system, physical, quantityType }: { system: number; physical
   );
   if (diff > 0) return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
-      <TrendingUp className="h-3.5 w-3.5" /> +{isWeighted ? diff.toFixed(3) : Math.round(diff)} over
+      <TrendingUp className="h-3.5 w-3.5" /> +{useDecimal ? diff.toFixed(3) : Math.round(diff)} over
     </span>
   );
   return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-xs">
-      <TrendingDown className="h-3.5 w-3.5" /> {isWeighted ? diff.toFixed(3) : Math.round(diff)} short
+      <TrendingDown className="h-3.5 w-3.5" /> {useDecimal ? diff.toFixed(3) : Math.round(diff)} short
     </span>
   );
 }
@@ -510,7 +511,7 @@ export default function ClerkStockCount() {
 
                       {/* Difference */}
                       <td className="py-3.5 px-4 text-center">
-                        <DiffCell system={row.systemQty} physical={row.physicalCount} quantityType={row.quantity_type} />
+                        <DiffCell system={row.systemQty} physical={row.physicalCount} quantityType={row.quantity_type} allowDecimal={row.unit_allow_decimal} />
                       </td>
 
                       {/* Reason (for products with discrepancy) */}

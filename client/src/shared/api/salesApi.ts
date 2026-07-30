@@ -18,6 +18,7 @@ export interface SaleItem {
   quantity: number;
   quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   unit_abbreviation?: string;
+  unit_allow_decimal?: boolean;
   unit_price: number;
   subtotal: number;
   quantity_returned: number;

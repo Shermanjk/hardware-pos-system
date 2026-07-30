@@ -135,16 +135,16 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
               <div className="grid grid-cols-3 gap-4">
                 <div><span className="text-gray-500">Product:</span> <span className="font-medium">{req.product_name}</span></div>
                 <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold">{(() => {
-                  const isWeighted = req.quantity_type === "WEIGHTED";
-                  return isWeighted ? req.system_quantity?.toFixed(3) : req.system_quantity;
+                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
+                  return allowDecimal ? req.system_quantity?.toFixed(3) : req.system_quantity;
                 })()}</span></div>
                 <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold">{(() => {
-                  const isWeighted = req.quantity_type === "WEIGHTED";
-                  return isWeighted ? req.physical_quantity?.toFixed(3) : req.physical_quantity;
+                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
+                  return allowDecimal ? req.physical_quantity?.toFixed(3) : req.physical_quantity;
                 })()}</span></div>
                 <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{(() => {
-                  const isWeighted = req.quantity_type === "WEIGHTED";
-                  const displayDiff = isWeighted ? req.difference?.toFixed(3) : Math.round(req.difference || 0);
+                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
+                  const displayDiff = allowDecimal ? req.difference?.toFixed(3) : Math.round(req.difference || 0);
                   return displayDiff;
                 })()}</span></div>
               </div>
@@ -391,8 +391,8 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
                   <td className="py-3.5 px-5 font-bold text-gray-900 tabular-nums">
                     {r.difference !== undefined
                       ? (() => {
-                          const isWeighted = r.quantity_type === "WEIGHTED";
-                          const displayDiff = isWeighted ? r.difference.toFixed(3) : Math.round(r.difference);
+                          const allowDecimal = r.unit_allow_decimal ?? r.quantity_type === "WEIGHTED";
+                          const displayDiff = allowDecimal ? r.difference.toFixed(3) : Math.round(r.difference);
                           return displayDiff;
                         })()
                       : r.amount !== undefined ? fmtPeso(r.amount) : "—"}

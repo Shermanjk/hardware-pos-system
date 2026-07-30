@@ -1056,6 +1056,9 @@ router.get(
            p.product_name, p.barcode, p.is_returnable,
            si.quantity, si.unit_price, si.subtotal,
            si.tax_type, si.tax_rate, si.taxable_amount, si.vat_amount AS item_vat_amount,
+           COALESCE(u.abbreviation, '') AS unit_abbreviation,
+           COALESCE(p.quantity_type, 'WHOLE_UNIT') AS quantity_type,
+           COALESCE(u.allow_decimal, 0) AS unit_allow_decimal,
            (
              SELECT COALESCE(SUM(ri.quantity_returned), 0)
              FROM return_items ri
@@ -1065,6 +1068,7 @@ router.get(
            ) AS quantity_returned
          FROM sale_items si
          JOIN products p ON p.id = si.product_id
+         LEFT JOIN units u ON u.id = p.unit_id
          WHERE si.sale_id = ?`,
         [sale.id]
       );

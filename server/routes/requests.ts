@@ -36,10 +36,12 @@ router.get("/pending", async (req: Request, res: Response) => {
         scar.status,
         scar.system_quantity,
         scar.physical_quantity,
-        p.quantity_type
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
       FROM stock_count_adjustment_requests scar
       JOIN products p ON p.id = scar.product_id
       LEFT JOIN users u ON u.id = scar.prepared_by
+      LEFT JOIN units ON units.id = p.unit_id
       WHERE scar.status = 'PENDING_APPROVAL'
     `);
 
@@ -58,10 +60,12 @@ router.get("/pending", async (req: Request, res: Response) => {
         mbar.status,
         mbar.system_quantity,
         mbar.physical_quantity,
-        p.quantity_type
+        p.quantity_type,
+        COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
       FROM market_based_adjustment_requests mbar
       JOIN products p ON p.id = mbar.product_id
       LEFT JOIN users u ON u.id = mbar.prepared_by
+      LEFT JOIN units ON units.id = p.unit_id
       WHERE mbar.status = 'PENDING_APPROVAL'
     `);
 
@@ -194,10 +198,12 @@ router.get("/history", async (req: Request, res: Response) => {
           scar.status,
           scar.system_quantity,
           scar.physical_quantity,
-          p.quantity_type
+          p.quantity_type,
+          COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
         FROM stock_count_adjustment_requests scar
         JOIN products p ON p.id = scar.product_id
         LEFT JOIN users u ON u.id = scar.prepared_by
+        LEFT JOIN units ON units.id = p.unit_id
         ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR scar.reference LIKE ?)" : ""}
         ORDER BY scar.prepared_at DESC
@@ -237,10 +243,12 @@ router.get("/history", async (req: Request, res: Response) => {
           mbar.status,
           mbar.system_quantity,
           mbar.physical_quantity,
-          p.quantity_type
+          p.quantity_type,
+          COALESCE(units.allow_decimal, 0) AS unit_allow_decimal
         FROM market_based_adjustment_requests mbar
         JOIN products p ON p.id = mbar.product_id
         LEFT JOIN users u ON u.id = mbar.prepared_by
+        LEFT JOIN units ON units.id = p.unit_id
         ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR mbar.reference LIKE ?)" : ""}
         ORDER BY mbar.prepared_at DESC

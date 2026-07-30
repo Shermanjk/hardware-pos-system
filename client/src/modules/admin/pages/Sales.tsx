@@ -113,7 +113,7 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                       </td>
                       <td className="py-2.5 px-4 text-center">
                         {(() => {
-                          const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type);
+                          const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
                           return (
                             <div className="flex items-center justify-center gap-0.5">
                               <span className="font-semibold text-gray-800">{parts.number}</span>

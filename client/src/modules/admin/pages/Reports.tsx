@@ -18,6 +18,7 @@ interface InventoryRow {
   barcode: string; product_name: string; category: string;
   supplier: string; unit: string; quantity: number;
   quantity_type?: QuantityType;
+  unit_allow_decimal?: boolean;
   reorder_level: number; damaged_stock: number;
   cost_price: number; selling_price: number; stock_status: string;
 }
@@ -114,10 +115,10 @@ function generateExcel(data: ReportData, store: StoreSettings) {
   add("By Cashier", ["Cashier","Transactions","Revenue (₱)"],
     data.by_cashier.map((r) => [r.cashier, r.transactions, Number(r.revenue)]));
   add("Inventory", ["Barcode","Product","Category","Supplier","Unit","Stock","Reorder","Damaged","Cost (₱)","Selling (₱)","Status"],
-    data.inventory.map((r) => [r.barcode, r.product_name, r.category, r.supplier, r.unit, formatQuantityForTable(r.quantity, r.unit, r.quantity_type), r.reorder_level, r.damaged_stock, Number(r.cost_price), Number(r.selling_price), r.stock_status]));
+    data.inventory.map((r) => [r.barcode, r.product_name, r.category, r.supplier, r.unit, formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal), r.reorder_level, r.damaged_stock, Number(r.cost_price), Number(r.selling_price), r.stock_status]));
   add("Low Stock", ["Barcode","Product","Category","Stock","Reorder Level","Units Needed","Status"],
     data.low_stock.length > 0
-      ? data.low_stock.map((r) => [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type), r.reorder_level, Math.max(0, r.reorder_level - r.quantity), r.stock_status])
+      ? data.low_stock.map((r) => [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal), r.reorder_level, Math.max(0, r.reorder_level - r.quantity), r.stock_status])
       : [["All products are sufficiently stocked"]]);
   XLSX.writeFile(wb, `${storeName.replace(/\s+/g, "_")}_Report_${data.period.date_from}_to_${data.period.date_to}.xlsx`);
 }
@@ -308,7 +309,7 @@ function generatePDF(data: ReportData, store: StoreSettings) {
         r.barcode,
         r.product_name,
         r.category,
-        formatQuantityForTable(r.quantity, r.unit, r.quantity_type),
+        formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal),
         fmt(r.cost_price),
         fmt(r.selling_price),
         r.stock_status,
@@ -348,7 +349,7 @@ function generatePDF(data: ReportData, store: StoreSettings) {
             r.barcode,
             r.product_name,
             r.category,
-            formatQuantityForTable(r.quantity, r.unit, r.quantity_type),
+            formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal),
             String(r.reorder_level),
             String(Math.max(0, r.reorder_level - r.quantity)),
             r.stock_status,
@@ -479,7 +480,7 @@ function printReport(data: ReportData, store: StoreSettings) {
       ${data.inventory
         .map((r) =>
           tr(
-            [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type), fmt(r.cost_price), fmt(r.selling_price), r.stock_status],
+            [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal), fmt(r.cost_price), fmt(r.selling_price), r.stock_status],
             ["", "", "", "c", "r", "r", sc(r.stock_status)]
           )
         )
@@ -493,7 +494,7 @@ function printReport(data: ReportData, store: StoreSettings) {
           : data.low_stock
               .map((r) =>
                 tr(
-                  [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type), String(r.reorder_level), String(Math.max(0, r.reorder_level - r.quantity)), r.stock_status],
+                  [r.barcode, r.product_name, r.category, formatQuantityForTable(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal), String(r.reorder_level), String(Math.max(0, r.reorder_level - r.quantity)), r.stock_status],
                   ["", "", "", "c", "c", "c", sc(r.stock_status)]
                 )
               )
@@ -996,7 +997,7 @@ export default function Reports() {
                               </span>
                             </td>
                             <td className={`py-3 px-4 text-center font-bold tabular-nums ${urgencyColor(r.stock_status)}`}>
-                              {formatQuantity(r.quantity, r.unit, r.quantity_type)}
+                              {formatQuantity(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal)}
                             </td>
                             <td className="py-3 px-4 text-right text-gray-700 tabular-nums">
                               {fmt(r.cost_price)}
@@ -1058,7 +1059,7 @@ export default function Reports() {
                             </span>
                           </td>
                           <td className={`py-3 px-4 text-center font-bold tabular-nums ${urgencyColor(r.stock_status)}`}>
-                            {formatQuantity(r.quantity, r.unit, r.quantity_type)}
+                            {formatQuantity(r.quantity, r.unit, r.quantity_type, r.unit_allow_decimal)}
                           </td>
                           <td className="py-3 px-4 text-center text-gray-500 tabular-nums">
                             {r.reorder_level}

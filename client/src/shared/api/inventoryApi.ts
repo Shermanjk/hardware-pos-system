@@ -25,6 +25,9 @@ export interface InventoryItem {
   supplier: string;
   unit: string;
   unit_abbreviation: string;
+  unit_type?: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  unit_allow_decimal?: boolean;
+  unit_status?: "Active" | "Inactive";
   quantity: number;
   quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   pricing_type?: "FIXED_PRICE" | "MARKET_BASED";
@@ -40,6 +43,9 @@ export interface InventoryLog {
   product_id: number;
   product_name: string;
   barcode: string;
+  unit_abbreviation?: string;
+  quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
+  unit_allow_decimal?: boolean;
   transaction_type: string | null;
   action: string | null;
   quantity_change: number | null;

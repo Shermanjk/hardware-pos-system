@@ -23,7 +23,11 @@ export interface Unit {
   id: number;
   unit_name: string;
   abbreviation: string;
+  unit_type?: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  allow_decimal?: boolean;
   description?: string | null;
+  status?: "Active" | "Inactive";
+  product_count?: number;
 }
 
 export type TaxType = "VATABLE" | "VAT_EXEMPT" | "ZERO_RATED" | "NON_TAXABLE";
@@ -44,6 +48,9 @@ export interface ProductRecord {
   unit_id: number | null;
   unit: string;
   unit_abbreviation: string;
+  unit_type?: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  unit_allow_decimal?: boolean;
+  unit_status?: "Active" | "Inactive";
   cost_price: number;
   selling_price: number;
   quantity: number;
@@ -190,12 +197,26 @@ export async function getUnits(): Promise<Unit[]> {
   return res.data;
 }
 
-export async function createUnit(payload: { unit_name: string; abbreviation: string; description?: string }): Promise<Unit> {
+export async function createUnit(payload: { 
+  unit_name: string; 
+  abbreviation: string; 
+  unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  allow_decimal: boolean;
+  description?: string;
+  status?: "Active" | "Inactive";
+}): Promise<Unit> {
   const res = await axios.post<Unit>("/api/units", payload, { headers: authHeaders() });
   return res.data;
 }
 
-export async function updateUnit(id: number, payload: { unit_name: string; abbreviation: string; description?: string }): Promise<Unit> {
+export async function updateUnit(id: number, payload: { 
+  unit_name: string; 
+  abbreviation: string; 
+  unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  allow_decimal: boolean;
+  description?: string;
+  status?: "Active" | "Inactive";
+}): Promise<Unit> {
   const res = await axios.put<Unit>(`/api/units/${id}`, payload, { headers: authHeaders() });
   return res.data;
 }
@@ -214,6 +235,9 @@ export interface CashierProduct {
   quantity: number;       // current stock
   unit: string;
   unit_abbreviation: string;
+  unit_type?: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+  unit_allow_decimal?: boolean;
+  unit_status?: "Active" | "Inactive";
   quantity_type?: "WHOLE_UNIT" | "WEIGHTED";
   is_returnable: boolean;
   tax_type: TaxType;
