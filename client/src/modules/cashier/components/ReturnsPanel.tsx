@@ -146,7 +146,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   const handleFetchForResolution = async (returnId: number) => {
     try {
       const ret = await getReturnById(returnId);
-      if (ret.status !== "approved") {
+      if (ret.status !== "waiting_for_cashier") {
         toast.error("Not approved yet.");
         return;
       }
@@ -230,7 +230,8 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                       <div
                         key={ret.id}
                         className={`border-2 rounded-lg p-3 shadow-sm ${
-                          ret.status === "approved" ? "bg-green-50 border-green-200" :
+                          ret.status === "waiting_for_cashier" ? "bg-green-50 border-green-200" :
+                          ret.status === "completed" ? "bg-blue-50 border-blue-200" :
                           ret.status === "rejected" ? "bg-red-50 border-red-200" :
                           "bg-gray-50 border-gray-200"
                         }`}
@@ -239,8 +240,10 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-semibold font-mono text-gray-900">{ret.return_number}</p>
-                              {ret.status === "approved" ? (
+                              {ret.status === "waiting_for_cashier" ? (
                                 <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : ret.status === "completed" ? (
+                                <CheckCircle className="h-4 w-4 text-blue-600" />
                               ) : ret.status === "rejected" ? (
                                 <XCircle className="h-4 w-4 text-red-600" />
                               ) : null}
@@ -249,7 +252,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                             <p className="text-xs text-gray-500">Customer: {ret.customer_name}</p>
                             {ret.admin_name && (
                               <p className="text-xs text-gray-400 mt-0.5">
-                                {ret.status === "approved" ? "Approved" : "Rejected"} by {ret.admin_name}
+                                {ret.status === "waiting_for_cashier" ? "Approved" : ret.status === "completed" ? "Completed" : "Rejected"} by {ret.admin_name}
                               </p>
                             )}
                             {ret.status === "rejected" && ret.return_reason && (
@@ -258,7 +261,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                               </p>
                             )}
                           </div>
-                          {ret.status === "approved" && !ret.resolved_at && (
+                          {ret.status === "waiting_for_cashier" && !ret.resolved_at && (
                             <Button
                               size="sm"
                               className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs"

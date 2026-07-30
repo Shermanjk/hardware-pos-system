@@ -30,7 +30,7 @@ export interface Return {
   cashier_name: string;
   approved_by: number | null;
   admin_name: string | null;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "waiting_for_cashier" | "completed";
   resolution: "refund" | "replacement" | null;
   item_condition: "good" | "damaged" | null;
   return_reason: string;
@@ -70,6 +70,14 @@ export interface ApprovedReturnSummary {
 }
 
 export async function searchApprovedReturns(customer_name: string): Promise<ApprovedReturnSummary[]> {
+  const response = await axios.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
+    headers: authHeaders(),
+    params: { customer_name },
+  });
+  return response.data;
+}
+
+export async function getWaitingForCashierReturns(customer_name: string): Promise<ApprovedReturnSummary[]> {
   const response = await axios.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
     headers: authHeaders(),
     params: { customer_name },

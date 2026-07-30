@@ -97,7 +97,7 @@ export default function Cashier() {
 
   // WebSocket return decisions
   useReturnDecisions((n: ReturnDecisionNotification) => {
-    setHeldReturns((prev) => prev.map((hr) => hr.returnId === n.id ? { ...hr, decision: n.decision, adminName: n.admin_name } : hr));
+    setHeldReturns((prev) => prev.map((hr) => hr.returnId === n.id ? { ...hr, decision: n.decision === "approved" ? "waiting_for_cashier" : n.decision, adminName: n.admin_name } : hr));
     if (n.decision === "approved") toast.success(`Return ${n.return_number} approved by ${n.admin_name}`, { description: `Invoice ${n.invoice_number} · ${n.customer_name}`, duration: 8000 });
     else toast.error(`Return ${n.return_number} rejected by ${n.admin_name}`, { description: `Invoice ${n.invoice_number} · ${n.customer_name}`, duration: 8000 });
   });
@@ -141,7 +141,7 @@ export default function Cashier() {
           returnNumber: r.return_number,
           invoiceNumber: r.invoice_number,
           customerName: r.customer_name,
-          decision: r.status === "approved" ? "approved" : r.status === "rejected" ? "rejected" : undefined,
+          decision: r.status === "waiting_for_cashier" ? "waiting_for_cashier" : r.status === "completed" ? "completed" : r.status === "rejected" ? "rejected" : undefined,
           adminName: r.admin_name || undefined,
         }));
         setHeldReturns(mappedHeldReturns);
@@ -155,7 +155,7 @@ export default function Cashier() {
   const handleProcessReturn = async (hr: HeldReturn) => {
     setShowHeldReturns(false);
     const ret = await getReturnById(hr.returnId).catch(() => { toast.error("Failed."); throw new Error("fail"); });
-    if (ret.status !== "approved") { toast.error("Not approved."); throw new Error("not_approved"); }
+    if (ret.status !== "waiting_for_cashier") { toast.error("Not approved yet."); throw new Error("not_approved"); }
     setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
     setHeldReturns((prev) => prev.filter((r) => r.id !== hr.id));
   };
@@ -184,7 +184,7 @@ export default function Cashier() {
           returnNumber: r.return_number,
           invoiceNumber: r.invoice_number,
           customerName: r.customer_name,
-          decision: r.status === "approved" ? "approved" : undefined,
+          decision: r.status === "waiting_for_cashier" || r.status === "approved" ? "waiting_for_cashier" : undefined,
         }));
         setHeldReturns(held);
       } catch {

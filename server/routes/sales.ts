@@ -864,6 +864,22 @@ router.get(
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const returnableFilter = `
+        AND s.id IN (
+          SELECT DISTINCT si.sale_id
+          FROM sale_items si
+          JOIN products p ON p.id = si.product_id
+          WHERE p.is_returnable = 1
+            AND si.quantity > COALESCE((
+              SELECT COALESCE(SUM(ri.quantity_returned), 0)
+              FROM return_items ri
+              JOIN returns r ON ri.return_id = r.id
+              WHERE ri.sale_item_id = si.id
+                AND r.status IN ('pending', 'waiting_for_cashier', 'completed')
+            ), 0)
+        )
+      `;
+      const finalWhere = where ? `${where} ${returnableFilter}` : `WHERE 1=1 ${returnableFilter}`;
 
       const [rows] = await pool.execute<any[]>(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
@@ -872,7 +888,7 @@ router.get(
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
-         ${where}
+         ${finalWhere}
          ORDER BY s.created_at DESC
          LIMIT 200`,
         params
@@ -1045,7 +1061,7 @@ router.get(
              FROM return_items ri
              JOIN returns r ON ri.return_id = r.id
              WHERE ri.sale_item_id = si.id
-               AND r.status IN ('pending', 'approved')
+               AND r.status IN ('pending', 'waiting_for_cashier', 'completed')
            ) AS quantity_returned
          FROM sale_items si
          JOIN products p ON p.id = si.product_id

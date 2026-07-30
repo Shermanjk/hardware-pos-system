@@ -8,7 +8,7 @@ export interface HeldReturn {
   returnNumber: string;
   invoiceNumber: string;
   customerName: string;
-  decision?: "approved" | "rejected";
+  decision?: "approved" | "rejected" | "waiting_for_cashier" | "completed";
   adminName?: string;
 }
 
@@ -49,7 +49,8 @@ export default function PendingReturnsPanel({
           ) : (
             heldReturns.map((hr) => (
               <div key={hr.id} className={`border rounded-xl p-4 space-y-3 ${
-                hr.decision === "approved" ? "bg-green-50 border-green-200" :
+                hr.decision === "waiting_for_cashier" ? "bg-green-50 border-green-200" :
+                hr.decision === "completed" ? "bg-blue-50 border-blue-200" :
                 hr.decision === "rejected" ? "bg-red-50 border-red-200" :
                 "bg-gray-50 border-gray-200"
               }`}>
@@ -62,8 +63,10 @@ export default function PendingReturnsPanel({
                       Parked at {hr.heldAt.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
-                  {hr.decision === "approved" ? (
+                  {hr.decision === "waiting_for_cashier" ? (
                     <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded px-2 py-0.5">✓ Approved</span>
+                  ) : hr.decision === "completed" ? (
+                    <span className="shrink-0 text-xs font-semibold text-blue-700 bg-blue-100 border border-blue-300 rounded px-2 py-0.5">✓ Completed</span>
                   ) : hr.decision === "rejected" ? (
                     <span className="shrink-0 text-xs font-semibold text-red-700 bg-red-100 border border-red-300 rounded px-2 py-0.5">✗ Rejected</span>
                   ) : (
@@ -76,10 +79,10 @@ export default function PendingReturnsPanel({
                   </p>
                 )}
                 <div className="flex gap-2">
-                  {hr.decision !== "rejected" && (
+                  {hr.decision === "waiting_for_cashier" && (
                     <Button size="sm" className="flex-1 h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5" onClick={() => onProcess(hr)}>
                       <PlayCircle className="h-3.5 w-3.5" />
-                      {hr.decision === "approved" ? "Process Now" : "Process"}
+                      Process Now
                     </Button>
                   )}
                   <Button size="sm" variant="outline" className="flex-1 h-8 text-red-600 border-red-200 hover:bg-red-50 text-xs gap-1.5" onClick={() => onDiscard(hr.id)}>

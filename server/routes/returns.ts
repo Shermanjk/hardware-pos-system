@@ -215,8 +215,7 @@ router.get(
            r.created_at
          FROM returns r
          JOIN sales s ON s.id = r.sale_id
-         WHERE r.status = 'approved'
-           AND r.resolution IS NULL
+         WHERE r.status = 'waiting_for_cashier'
            AND s.customer_name LIKE ?
          ORDER BY r.created_at DESC`,
         [`%${customer_name.trim()}%`]
@@ -255,7 +254,7 @@ router.get(
          JOIN sales s ON s.id = r.sale_id
          LEFT JOIN users u ON u.id = r.approved_by
          WHERE r.processed_by = ?
-           AND r.status IN ('approved', 'rejected')
+           AND r.status IN ('completed', 'rejected')
       `;
       const params: any[] = [req.user!.id];
 
@@ -294,7 +293,7 @@ router.get(
          FROM returns r
          JOIN sales s ON s.id = r.sale_id
          WHERE r.processed_by = ?
-           AND r.status = 'pending'
+           AND r.status IN ('pending', 'waiting_for_cashier', 'approved')
          ORDER BY r.created_at DESC`,
         [req.user!.id]
       );
@@ -453,7 +452,7 @@ router.patch(
       }
 
       await conn.execute(
-        `UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
+        `UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
         [req.user!.id, id]
       );
 
@@ -618,7 +617,7 @@ router.patch(
         res.status(404).json({ message: "Return not found." });
         return;
       }
-      if (returnRow.status !== "approved") {
+      if (returnRow.status !== "waiting_for_cashier" && returnRow.status !== "approved") {
         await conn.rollback();
         res.status(422).json({ message: "Return must be approved before resolution." });
         return;
@@ -667,7 +666,7 @@ router.patch(
 
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'refund', item_condition = ?, refund_amount = ?, resolved_at = NOW()
+           SET resolution = 'refund', item_condition = ?, refund_amount = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
           [item_condition, refund_amount.toFixed(2), id]
         );
@@ -726,7 +725,7 @@ router.patch(
 
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'replacement', item_condition = ?, resolved_at = NOW()
+           SET resolution = 'replacement', item_condition = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
           [item_condition, id]
         );

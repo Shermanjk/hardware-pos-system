@@ -21,7 +21,7 @@ export interface UnifiedRequest {
   amount?: number;
   reason: string;
   remarks?: string;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'pending' | 'approved' | 'rejected';
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'pending' | 'approved' | 'rejected' | 'waiting_for_cashier' | 'completed';
   system_quantity?: number;
   physical_quantity?: number;
   customer_name?: string;

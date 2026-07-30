@@ -378,7 +378,7 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
                   </div>
                 </td></tr>
               ) : filtered.map((r) => (
-                <tr key={`${r.type}-${r.id}`} className="hover:bg-blue-50/40 transition-colors">
+                <tr key={`${r.type}-${r.id}`} className={`hover:bg-blue-50/40 transition-colors ${r.status.toUpperCase() === "APPROVED" || r.status === "waiting_for_cashier" ? "bg-green-50 border-l-4 border-l-green-500" : ""}`}>
                   <td className="py-3.5 px-5"><TypeBadge type={r.type} /></td>
                   <td className="py-3.5 px-5">
                     <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{r.reference}</span>

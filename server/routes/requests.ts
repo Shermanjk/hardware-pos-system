@@ -300,8 +300,9 @@ router.get("/history", async (req: Request, res: Response) => {
         // Return table uses lowercase status
         const statusMap: Record<string, string> = {
           "PENDING_APPROVAL": "pending",
-          "APPROVED": "approved",
+          "APPROVED": "waiting_for_cashier",
           "REJECTED": "rejected",
+          "COMPLETED": "completed",
         };
         const statusStr = String(status);
         const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
@@ -377,7 +378,7 @@ router.get("/kpi", async (req: Request, res: Response) => {
       [today]
     );
     const [approvedTodayReturn] = await pool.execute<any[]>(
-      "SELECT COUNT(*) as count FROM returns WHERE status = 'approved' AND DATE(resolved_at) = ?",
+      "SELECT COUNT(*) as count FROM returns WHERE status = 'waiting_for_cashier' AND DATE(resolved_at) = ?",
       [today]
     );
 
@@ -592,7 +593,7 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
       res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
     } else if (type === "return") {
       await pool.execute(
-        "UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?",
+        "UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?",
         [adminId, requestId]
       );
 
