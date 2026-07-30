@@ -190,6 +190,20 @@ export async function getUnits(): Promise<Unit[]> {
   return res.data;
 }
 
+export async function createUnit(payload: { unit_name: string; abbreviation: string; description?: string }): Promise<Unit> {
+  const res = await axios.post<Unit>("/api/units", payload, { headers: authHeaders() });
+  return res.data;
+}
+
+export async function updateUnit(id: number, payload: { unit_name: string; abbreviation: string; description?: string }): Promise<Unit> {
+  const res = await axios.put<Unit>(`/api/units/${id}`, payload, { headers: authHeaders() });
+  return res.data;
+}
+
+export async function deleteUnit(id: number): Promise<void> {
+  await axios.delete(`/api/units/${id}`, { headers: authHeaders() });
+}
+
 // ─── Cashier product lookup — search by barcode or name ──────────────────────
 
 export interface CashierProduct {

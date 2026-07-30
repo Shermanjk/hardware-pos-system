@@ -224,7 +224,7 @@ export default function Dashboard() {
         <KpiCard icon={TrendingDown} label="Low Stock"         value={(kpis?.low_stock ?? 0).toString()}
           sub="At or below reorder level" color="text-amber-600" bg="bg-amber-50" loading={loading} href="/inventory" />
         <KpiCard icon={RotateCcw}    label="Pending Returns"   value={(kpis?.pending_returns ?? 0).toString()}
-          sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/returns" />
+          sub="Awaiting admin review" color="text-orange-600" bg="bg-orange-50" loading={loading} href="/requests" />
       </div>
 
       {/* Requires Attention Section - Database-backed pending items */}

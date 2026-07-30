@@ -47,14 +47,8 @@ const navStructure: (NavItem | NavGroup)[] = [
     ],
   } as NavGroup,
 
-  // Sales group
-  {
-    label: "Sales",
-    icon: TrendingUp,
-    items: [
-      { icon: TrendingUp, label: "Sales", href: "/sales" },
-    ],
-  } as NavGroup,
+  // Sales - standalone
+  { icon: TrendingUp, label: "Sales", href: "/sales" },
 
   // Reports - standalone
   { icon: BarChart3, label: "Reports", href: "/reports" },

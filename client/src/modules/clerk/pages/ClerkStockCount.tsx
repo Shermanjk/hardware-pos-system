@@ -68,12 +68,12 @@ function DiffCell({ system, physical, quantityType }: { system: number; physical
   );
   if (diff > 0) return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
-      <TrendingUp className="h-3.5 w-3.5" /> +{isWeighted ? diff.toFixed(3) : diff} over
+      <TrendingUp className="h-3.5 w-3.5" /> +{isWeighted ? diff.toFixed(3) : Math.round(diff)} over
     </span>
   );
   return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-xs">
-      <TrendingDown className="h-3.5 w-3.5" /> {isWeighted ? diff.toFixed(3) : diff} short
+      <TrendingDown className="h-3.5 w-3.5" /> {isWeighted ? diff.toFixed(3) : Math.round(diff)} short
     </span>
   );
 }
@@ -599,7 +599,7 @@ export default function ClerkStockCount() {
           </AlertDialogHeader>
 
           {/* Mini summary in confirm dialog */}
-          {countedRows.filter((r) => parseInt(r.physicalCount, 10) !== r.systemQty).length > 0 && (
+          {countedRows.filter((r) => parseFloat(r.physicalCount) !== r.systemQty).length > 0 && (
             <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
               <table className="w-full text-xs">
                 <thead>
@@ -612,16 +612,19 @@ export default function ClerkStockCount() {
                 </thead>
                 <tbody>
                   {countedRows
-                    .filter((r) => parseInt(r.physicalCount, 10) !== r.systemQty)
+                    .filter((r) => parseFloat(r.physicalCount) !== r.systemQty)
                     .map((r) => {
-                      const diff = parseInt(r.physicalCount, 10) - r.systemQty;
+                      const physNum = parseFloat(r.physicalCount);
+                      const diff = physNum - r.systemQty;
+                      const isWeighted = r.quantity_type === "WEIGHTED";
+                      const displayDiff = isWeighted ? diff.toFixed(3) : Math.round(diff);
                       return (
                         <tr key={r.productId} className="border-b border-gray-50 last:border-0">
                           <td className="py-2 px-3 font-medium text-gray-800 truncate max-w-[140px]">{r.productName}</td>
                           <td className="py-2 px-2 text-center text-gray-500">{r.systemQty}</td>
                           <td className="py-2 px-2 text-center font-bold text-gray-800">{r.physicalCount}</td>
                           <td className={`py-2 px-2 text-center font-bold ${diff > 0 ? "text-blue-600" : "text-red-600"}`}>
-                            {diff > 0 ? `+${diff}` : diff}
+                            {diff > 0 ? `+${displayDiff}` : displayDiff}
                           </td>
                         </tr>
                       );
