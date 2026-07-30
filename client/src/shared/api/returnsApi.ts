@@ -146,3 +146,11 @@ export async function getMyPendingReturns(): Promise<Return[]> {
   });
   return response.data;
 }
+
+export async function getMyReturnHistory(search?: string): Promise<Return[]> {
+  const response = await axios.get<Return[]>("/api/returns/my-history", {
+    headers: authHeaders(),
+    params: { search },
+  });
+  return response.data;
+}

@@ -229,6 +229,52 @@ router.get(
   }
 );
 
+// ─── GET /my-history — Cashier: load their return history (approved/rejected) ─────────────
+router.get(
+  "/my-history",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const { search } = req.query as Record<string, string | undefined>;
+    try {
+      let query = `
+        SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.status,
+           r.resolution,
+           r.item_condition,
+           r.return_reason,
+           r.refund_amount,
+           r.created_at,
+           r.resolved_at,
+           u.full_name AS admin_name
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         LEFT JOIN users u ON u.id = r.approved_by
+         WHERE r.processed_by = ?
+           AND r.status IN ('approved', 'rejected')
+      `;
+      const params: any[] = [req.user!.id];
+
+      if (search) {
+        query += ` AND (s.invoice_number LIKE ? OR s.customer_name LIKE ?)`;
+        params.push(`%${search}%`, `%${search}%`);
+      }
+
+      query += ` ORDER BY r.created_at DESC`;
+
+      const [rows] = await pool.execute<any[]>(query, params);
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/my-history] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
 // ─── GET /my-pending — Cashier: load their pending returns ─────────────
 router.get(
   "/my-pending",

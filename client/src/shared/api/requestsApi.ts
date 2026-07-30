@@ -26,6 +26,7 @@ export interface UnifiedRequest {
   physical_quantity?: number;
   customer_name?: string;
   total_amount?: number;
+  unit_price?: number;
 }
 
 export interface RequestKPI {

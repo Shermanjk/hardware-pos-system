@@ -1926,6 +1926,47 @@ router5.get(
   }
 );
 router5.get(
+  "/my-history",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req, res) => {
+    const { search } = req.query;
+    try {
+      let query = `
+        SELECT
+           r.id,
+           r.return_number,
+           s.invoice_number,
+           s.customer_name,
+           r.status,
+           r.resolution,
+           r.item_condition,
+           r.return_reason,
+           r.refund_amount,
+           r.created_at,
+           r.resolved_at,
+           u.full_name AS admin_name
+         FROM returns r
+         JOIN sales s ON s.id = r.sale_id
+         LEFT JOIN users u ON u.id = r.approved_by
+         WHERE r.processed_by = ?
+           AND r.status IN ('approved', 'rejected')
+      `;
+      const params = [req.user.id];
+      if (search) {
+        query += ` AND (s.invoice_number LIKE ? OR s.customer_name LIKE ?)`;
+        params.push(`%${search}%`, `%${search}%`);
+      }
+      query += ` ORDER BY r.created_at DESC`;
+      const [rows] = await pool.execute(query, params);
+      res.status(200).json(rows);
+    } catch (err) {
+      console.error("[GET /api/returns/my-history] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+router5.get(
   "/my-pending",
   authenticate,
   requireRole("Cashier", "Admin"),
@@ -5946,7 +5987,10 @@ router17.get("/pending", async (req, res) => {
         '' as remarks,
         sv.status,
         0 as system_quantity,
-        0 as physical_quantity
+        0 as physical_quantity,
+        s.invoice_number,
+        s.customer_name,
+        s.total_amount as amount
       FROM sale_voids sv
       JOIN sales s ON s.id = sv.sale_id
       LEFT JOIN users u ON u.id = sv.requested_by
@@ -5957,17 +6001,24 @@ router17.get("/pending", async (req, res) => {
         'RETURN' as type,
         r.id,
         r.return_number as reference,
-        '' as product_name,
-        '' as barcode,
+        p.product_name,
+        p.barcode,
         COALESCE(u.full_name, '\u2014') AS requested_by_name,
         r.created_at as prepared_at,
         0 as difference,
         r.return_reason as reason,
-        '' as remarks,
+        CONCAT('Resolution: ', COALESCE(r.resolution, 'N/A'), ', Condition: ', COALESCE(r.item_condition, 'N/A')) as remarks,
         r.status,
         0 as system_quantity,
-        0 as physical_quantity
+        ri.quantity_returned as physical_quantity,
+        s.invoice_number,
+        s.customer_name,
+        r.refund_amount as amount,
+        ri.unit_price
       FROM returns r
+      LEFT JOIN return_items ri ON ri.return_id = r.id
+      LEFT JOIN sales s ON s.id = r.sale_id
+      LEFT JOIN products p ON p.id = ri.product_id
       LEFT JOIN users u ON u.id = r.processed_by
       WHERE r.status = 'pending' AND r.resolution IS NULL
     `);
@@ -6007,6 +6058,19 @@ router17.get("/history", async (req, res) => {
   try {
     let allRequests = [];
     if (!type || type === "all" || type === "STOCK_COUNT_STANDARD") {
+      let stockWhere = where;
+      const stockParams = [...params];
+      if (status && status !== "all") {
+        const statusMap = {
+          "pending": "PENDING_APPROVAL",
+          "approved": "APPROVED",
+          "rejected": "REJECTED"
+        };
+        const statusStr = String(status).toLowerCase();
+        const mappedStatus = statusMap[statusStr] || String(status);
+        stockWhere = "WHERE 1=1 AND scar.status = ?";
+        stockParams[0] = mappedStatus;
+      }
       const [rows] = await pool.execute(`
         SELECT
           'STOCK_COUNT_STANDARD' as type,
@@ -6025,14 +6089,27 @@ router17.get("/history", async (req, res) => {
         FROM stock_count_adjustment_requests scar
         JOIN products p ON p.id = scar.product_id
         LEFT JOIN users u ON u.id = scar.prepared_by
-        ${where}
+        ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR scar.reference LIKE ?)" : ""}
         ORDER BY scar.prepared_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
+      `, [...stockParams, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
       allRequests.push(...rows);
     }
     if (!type || type === "all" || type === "STOCK_COUNT_MARKET") {
+      let stockWhere = where;
+      const stockParams = [...params];
+      if (status && status !== "all") {
+        const statusMap = {
+          "pending": "PENDING_APPROVAL",
+          "approved": "APPROVED",
+          "rejected": "REJECTED"
+        };
+        const statusStr = String(status).toLowerCase();
+        const mappedStatus = statusMap[statusStr] || String(status);
+        stockWhere = "WHERE 1=1 AND mbar.status = ?";
+        stockParams[0] = mappedStatus;
+      }
       const [rows] = await pool.execute(`
         SELECT
           'STOCK_COUNT_MARKET' as type,
@@ -6051,14 +6128,27 @@ router17.get("/history", async (req, res) => {
         FROM market_based_adjustment_requests mbar
         JOIN products p ON p.id = mbar.product_id
         LEFT JOIN users u ON u.id = mbar.prepared_by
-        ${where}
+        ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR mbar.reference LIKE ?)" : ""}
         ORDER BY mbar.prepared_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
+      `, [...stockParams, ...search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []]);
       allRequests.push(...rows);
     }
     if (!type || type === "all" || type === "VOID") {
+      let voidWhere = where;
+      const voidParams = [...params];
+      if (status && status !== "all") {
+        const statusMap = {
+          "PENDING_APPROVAL": "pending",
+          "APPROVED": "approved",
+          "REJECTED": "rejected"
+        };
+        const statusStr = String(status);
+        const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
+        voidWhere = "WHERE 1=1 AND sv.status = ?";
+        voidParams[0] = mappedStatus;
+      }
       const [rows] = await pool.execute(`
         SELECT
           'VOID' as type,
@@ -6077,14 +6167,27 @@ router17.get("/history", async (req, res) => {
         FROM sale_voids sv
         JOIN sales s ON s.id = sv.sale_id
         LEFT JOIN users u ON u.id = sv.requested_by
-        ${where}
+        ${voidWhere}
         ${search ? "AND (s.invoice_number LIKE ?)" : ""}
         ORDER BY sv.created_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...search ? [`%${search}%`] : []]);
+      `, [...voidParams, ...search ? [`%${search}%`] : []]);
       allRequests.push(...rows);
     }
     if (!type || type === "all" || type === "RETURN") {
+      let returnWhere = where;
+      const returnParams = [...params];
+      if (status && status !== "all") {
+        const statusMap = {
+          "PENDING_APPROVAL": "pending",
+          "APPROVED": "approved",
+          "REJECTED": "rejected"
+        };
+        const statusStr = String(status);
+        const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
+        returnWhere = "WHERE 1=1 AND r.status = ?";
+        returnParams[0] = mappedStatus;
+      }
       const [rows] = await pool.execute(`
         SELECT
           'RETURN' as type,
@@ -6102,11 +6205,11 @@ router17.get("/history", async (req, res) => {
           0 as physical_quantity
         FROM returns r
         LEFT JOIN users u ON u.id = r.processed_by
-        ${where}
+        ${returnWhere}
         ${search ? "AND (r.return_number LIKE ?)" : ""}
         ORDER BY r.created_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...search ? [`%${search}%`] : []]);
+      `, [...returnParams, ...search ? [`%${search}%`] : []]);
       allRequests.push(...rows);
     }
     allRequests.sort((a, b) => new Date(b.prepared_at).getTime() - new Date(a.prepared_at).getTime());
@@ -6302,7 +6405,18 @@ router17.post("/:type/:id/approve", async (req, res) => {
     } else if (type === "void") {
       res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
     } else if (type === "return") {
-      res.status(501).json({ message: "Return approval not yet implemented in unified endpoint." });
+      await pool.execute(
+        "UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?",
+        [adminId, requestId]
+      );
+      await logAuditEvent({
+        action: "RETURN_APPROVED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "return",
+        entityId: requestId
+      });
+      res.status(200).json({ message: "Request approved." });
     } else {
       res.status(400).json({ message: "Invalid request type." });
     }
@@ -6358,7 +6472,19 @@ router17.post("/:type/:id/reject", async (req, res) => {
     } else if (type === "void") {
       res.status(501).json({ message: "Void rejection not yet implemented in unified endpoint." });
     } else if (type === "return") {
-      res.status(501).json({ message: "Return rejection not yet implemented in unified endpoint." });
+      await pool.execute(
+        "UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ? WHERE id = ?",
+        [adminId, rejection_reason, requestId]
+      );
+      await logAuditEvent({
+        action: "RETURN_REJECTED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "return",
+        entityId: requestId,
+        reason: rejection_reason
+      });
+      res.status(200).json({ message: "Request rejected." });
     } else {
       res.status(400).json({ message: "Invalid request type." });
     }

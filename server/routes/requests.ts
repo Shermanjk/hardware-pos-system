@@ -77,7 +77,10 @@ router.get("/pending", async (req: Request, res: Response) => {
         '' as remarks,
         sv.status,
         0 as system_quantity,
-        0 as physical_quantity
+        0 as physical_quantity,
+        s.invoice_number,
+        s.customer_name,
+        s.total_amount as amount
       FROM sale_voids sv
       JOIN sales s ON s.id = sv.sale_id
       LEFT JOIN users u ON u.id = sv.requested_by
@@ -89,17 +92,24 @@ router.get("/pending", async (req: Request, res: Response) => {
         'RETURN' as type,
         r.id,
         r.return_number as reference,
-        '' as product_name,
-        '' as barcode,
+        p.product_name,
+        p.barcode,
         COALESCE(u.full_name, '—') AS requested_by_name,
         r.created_at as prepared_at,
         0 as difference,
         r.return_reason as reason,
-        '' as remarks,
+        CONCAT('Resolution: ', COALESCE(r.resolution, 'N/A'), ', Condition: ', COALESCE(r.item_condition, 'N/A')) as remarks,
         r.status,
         0 as system_quantity,
-        0 as physical_quantity
+        ri.quantity_returned as physical_quantity,
+        s.invoice_number,
+        s.customer_name,
+        r.refund_amount as amount,
+        ri.unit_price
       FROM returns r
+      LEFT JOIN return_items ri ON ri.return_id = r.id
+      LEFT JOIN sales s ON s.id = r.sale_id
+      LEFT JOIN products p ON p.id = ri.product_id
       LEFT JOIN users u ON u.id = r.processed_by
       WHERE r.status = 'pending' AND r.resolution IS NULL
     `);
@@ -152,6 +162,21 @@ router.get("/history", async (req: Request, res: Response) => {
 
     // Stock Count Standard
     if (!type || type === "all" || type === "STOCK_COUNT_STANDARD") {
+      let stockWhere = where;
+      const stockParams = [...params];
+      if (status && status !== "all") {
+        // Map frontend status to stock count table status
+        const statusMap: Record<string, string> = {
+          "pending": "PENDING_APPROVAL",
+          "approved": "APPROVED",
+          "rejected": "REJECTED",
+        };
+        const statusStr = String(status).toLowerCase();
+        const mappedStatus = statusMap[statusStr] || String(status);
+        stockWhere = "WHERE 1=1 AND scar.status = ?";
+        stockParams[0] = mappedStatus;
+      }
+      
       const [rows] = await pool.execute<any[]>(`
         SELECT
           'STOCK_COUNT_STANDARD' as type,
@@ -170,16 +195,30 @@ router.get("/history", async (req: Request, res: Response) => {
         FROM stock_count_adjustment_requests scar
         JOIN products p ON p.id = scar.product_id
         LEFT JOIN users u ON u.id = scar.prepared_by
-        ${where}
+        ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR scar.reference LIKE ?)" : ""}
         ORDER BY scar.prepared_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...(search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [])]);
+      `, [...stockParams, ...(search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [])]);
       allRequests.push(...rows);
     }
 
     // Stock Count Market
     if (!type || type === "all" || type === "STOCK_COUNT_MARKET") {
+      let stockWhere = where;
+      const stockParams = [...params];
+      if (status && status !== "all") {
+        const statusMap: Record<string, string> = {
+          "pending": "PENDING_APPROVAL",
+          "approved": "APPROVED",
+          "rejected": "REJECTED",
+        };
+        const statusStr = String(status).toLowerCase();
+        const mappedStatus = statusMap[statusStr] || String(status);
+        stockWhere = "WHERE 1=1 AND mbar.status = ?";
+        stockParams[0] = mappedStatus;
+      }
+      
       const [rows] = await pool.execute<any[]>(`
         SELECT
           'STOCK_COUNT_MARKET' as type,
@@ -198,16 +237,31 @@ router.get("/history", async (req: Request, res: Response) => {
         FROM market_based_adjustment_requests mbar
         JOIN products p ON p.id = mbar.product_id
         LEFT JOIN users u ON u.id = mbar.prepared_by
-        ${where}
+        ${stockWhere}
         ${search ? "AND (p.product_name LIKE ? OR p.barcode LIKE ? OR mbar.reference LIKE ?)" : ""}
         ORDER BY mbar.prepared_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...(search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [])]);
+      `, [...stockParams, ...(search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [])]);
       allRequests.push(...rows);
     }
 
     // Void Requests
     if (!type || type === "all" || type === "VOID") {
+      let voidWhere = where;
+      const voidParams = [...params];
+      if (status && status !== "all") {
+        // Void table uses lowercase status
+        const statusMap: Record<string, string> = {
+          "PENDING_APPROVAL": "pending",
+          "APPROVED": "approved",
+          "REJECTED": "rejected",
+        };
+        const statusStr = String(status);
+        const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
+        voidWhere = "WHERE 1=1 AND sv.status = ?";
+        voidParams[0] = mappedStatus;
+      }
+      
       const [rows] = await pool.execute<any[]>(`
         SELECT
           'VOID' as type,
@@ -226,16 +280,31 @@ router.get("/history", async (req: Request, res: Response) => {
         FROM sale_voids sv
         JOIN sales s ON s.id = sv.sale_id
         LEFT JOIN users u ON u.id = sv.requested_by
-        ${where}
+        ${voidWhere}
         ${search ? "AND (s.invoice_number LIKE ?)" : ""}
         ORDER BY sv.created_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...(search ? [`%${search}%`] : [])]);
+      `, [...voidParams, ...(search ? [`%${search}%`] : [])]);
       allRequests.push(...rows);
     }
 
     // Return Requests
     if (!type || type === "all" || type === "RETURN") {
+      let returnWhere = where;
+      const returnParams = [...params];
+      if (status && status !== "all") {
+        // Return table uses lowercase status
+        const statusMap: Record<string, string> = {
+          "PENDING_APPROVAL": "pending",
+          "APPROVED": "approved",
+          "REJECTED": "rejected",
+        };
+        const statusStr = String(status);
+        const mappedStatus = statusMap[statusStr] || statusStr.toLowerCase();
+        returnWhere = "WHERE 1=1 AND r.status = ?";
+        returnParams[0] = mappedStatus;
+      }
+      
       const [rows] = await pool.execute<any[]>(`
         SELECT
           'RETURN' as type,
@@ -253,11 +322,11 @@ router.get("/history", async (req: Request, res: Response) => {
           0 as physical_quantity
         FROM returns r
         LEFT JOIN users u ON u.id = r.processed_by
-        ${where}
+        ${returnWhere}
         ${search ? "AND (r.return_number LIKE ?)" : ""}
         ORDER BY r.created_at DESC
         LIMIT ${limitVal} OFFSET ${offsetVal}
-      `, [...params, ...(search ? [`%${search}%`] : [])]);
+      `, [...returnParams, ...(search ? [`%${search}%`] : [])]);
       allRequests.push(...rows);
     }
 
@@ -516,13 +585,22 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
 
       res.status(200).json({ message: "Request approved." });
     } else if (type === "void") {
-      // Approve void request - delegate to existing void endpoint
-      // This would call the existing approveVoid logic
       res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
     } else if (type === "return") {
-      // Approve return request - delegate to existing return endpoint
-      // This would call the existing approveReturn logic
-      res.status(501).json({ message: "Return approval not yet implemented in unified endpoint." });
+      await pool.execute(
+        "UPDATE returns SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?",
+        [adminId, requestId]
+      );
+
+      await logAuditEvent({
+        action: "RETURN_APPROVED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "return",
+        entityId: requestId,
+      });
+
+      res.status(200).json({ message: "Request approved." });
     } else {
       res.status(400).json({ message: "Invalid request type." });
     }
@@ -588,7 +666,21 @@ router.post("/:type/:id/reject", async (req: Request, res: Response) => {
     } else if (type === "void") {
       res.status(501).json({ message: "Void rejection not yet implemented in unified endpoint." });
     } else if (type === "return") {
-      res.status(501).json({ message: "Return rejection not yet implemented in unified endpoint." });
+      await pool.execute(
+        "UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ? WHERE id = ?",
+        [adminId, rejection_reason, requestId]
+      );
+
+      await logAuditEvent({
+        action: "RETURN_REJECTED",
+        performedById: adminId,
+        performedByUsername: adminUsername || "Unknown",
+        entityType: "return",
+        entityId: requestId,
+        reason: rejection_reason,
+      });
+
+      res.status(200).json({ message: "Request rejected." });
     } else {
       res.status(400).json({ message: "Invalid request type." });
     }

@@ -93,7 +93,7 @@ interface DetailDialogProps {
 function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: DetailDialogProps) {
   if (!req) return null;
   
-  const isPending = req.status === "PENDING" || req.status === "PENDING_APPROVAL";
+  const isPending = req.status.toLowerCase() === "pending" || req.status === "PENDING_APPROVAL";
   const typeMap: Record<string, string> = {
     "STOCK_COUNT_STANDARD": "stock-count-standard",
     "STOCK_COUNT_MARKET": "stock-count-market",
@@ -146,6 +146,7 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
               <div className="grid grid-cols-2 gap-4">
                 <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
                 <div><span className="text-gray-500">Amount:</span> <span className="font-bold">{fmtPeso(req.amount || 0)}</span></div>
+                <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name || 'N/A'}</span></div>
               </div>
             </div>
           )}
@@ -154,7 +155,13 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
             <div className="p-3 bg-green-50 rounded-lg text-sm border border-green-200">
               <div className="grid grid-cols-2 gap-4">
                 <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold">{req.return_number}</span></div>
-                <div><span className="text-gray-500">Amount:</span> <span className="font-bold">{fmtPeso(req.amount || 0)}</span></div>
+                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
+                <div><span className="text-gray-500">Product:</span> <span className="font-medium">{req.product_name}</span></div>
+                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono">{req.barcode}</span></div>
+                <div><span className="text-gray-500">Quantity Returned:</span> <span className="font-semibold">{req.physical_quantity}</span></div>
+                <div><span className="text-gray-500">Unit Price:</span> <span className="font-semibold">{fmtPeso(req.unit_price || 0)}</span></div>
+                <div><span className="text-gray-500">Refund Amount:</span> <span className="font-bold">{fmtPeso(req.amount || 0)}</span></div>
+                <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name || 'N/A'}</span></div>
               </div>
             </div>
           )}
