@@ -176,7 +176,7 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
         abbreviation: abbreviation.trim(),
         unit_type: unitType,
         allow_decimal: allowDecimal,
-        description: description.trim() || undefined,
+        description: description.trim() || null,
         status
       };
       const saved = mode === "add"
@@ -419,7 +419,7 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
         abbreviation: unit.abbreviation,
         unit_type: unit.unit_type ?? "Other",
         allow_decimal: unit.allow_decimal ?? false,
-        description: unit.description ?? undefined,
+        description: unit.description ?? null,
         status: "Inactive"
       });
       onDeleted(unit.id);

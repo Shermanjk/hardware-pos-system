@@ -60,7 +60,16 @@ export type AuditAction =
   // ── System / settings ───────────────────────────────────────────────────────
   | "SYSTEM_SETTINGS_UPDATED"
   | "TAX_CONFIGURATION_UPDATED"
-  | "BUSINESS_INFORMATION_UPDATED";
+  | "BUSINESS_INFORMATION_UPDATED"
+  // ── Backup & Update ───────────────────────────────────────────────────────────
+  | "BACKUP_CREATED"
+  | "BACKUP_UPLOADED"
+  | "BACKUP_FAILED"
+  | "MIGRATION_STARTED"
+  | "MIGRATION_COMPLETED"
+  | "MIGRATION_FAILED"
+  | "RESTORE_EXECUTED"
+  | "UPDATE_INSTALLED";
 
 export interface AuditEventParams {
   action: AuditAction;

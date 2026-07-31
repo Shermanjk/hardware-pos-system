@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, FolderOpen, Boxes, Truck,
   TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing,
+  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing, Download, Upload,
 } from "lucide-react";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
@@ -60,9 +60,11 @@ const navStructure: (NavItem | NavGroup)[] = [
     items: [
       { icon: FolderOpen, label: "Categories", href: "/categories" },
       { icon: Users, label: "Users", href: "/users" },
-      { icon: Settings, label: "Settings", href: "/settings" },
     ],
   } as NavGroup,
+
+  // Settings - standalone
+  { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 // ─── Hook: fetch low stock count every 2 minutes ─────────────────────────────

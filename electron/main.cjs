@@ -5,7 +5,7 @@ Module._resolveFilename = function(request, ...args) {
   return originalResolve.call(this, request, ...args);
 };
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -112,3 +112,17 @@ app.on('window-all-closed', () => {
   if (serverProcess) serverProcess.kill();
   if (process.platform !== 'darwin') app.quit();
 });
+
+// ─── IPC Handler for Restart ─────────────────────────────────────────────────────
+ipcMain.handle('restart-app', () => {
+  app.relaunch();
+  app.exit();
+});
+
+// ─── Watch for restart flag file ─────────────────────────────────────────────────
+const restartFlagPath = path.join(__dirname, '../.restart-flag');
+if (fs.existsSync(restartFlagPath)) {
+  fs.unlinkSync(restartFlagPath);
+  app.relaunch();
+  app.exit();
+}

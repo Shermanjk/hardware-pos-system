@@ -202,7 +202,7 @@ export async function createUnit(payload: {
   abbreviation: string; 
   unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
   allow_decimal: boolean;
-  description?: string;
+  description?: string | null;
   status?: "Active" | "Inactive";
 }): Promise<Unit> {
   const res = await axios.post<Unit>("/api/units", payload, { headers: authHeaders() });
@@ -214,7 +214,7 @@ export async function updateUnit(id: number, payload: {
   abbreviation: string; 
   unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
   allow_decimal: boolean;
-  description?: string;
+  description?: string | null;
   status?: "Active" | "Inactive";
 }): Promise<Unit> {
   const res = await axios.put<Unit>(`/api/units/${id}`, payload, { headers: authHeaders() });

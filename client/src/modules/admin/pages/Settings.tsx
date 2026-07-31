@@ -12,6 +12,9 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import { saveToken } from "@/shared/utils/auth";
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import axios from "axios";
+import SystemUpdate from "./SystemUpdate";
+import BackupSettings from "./BackupSettings";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -436,12 +439,39 @@ function SecurityTab() {
 export default function Settings() {
   const [settings,  setSettings]  = useState<StoreSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("general");
+  const [hasUnsavedBackupChanges, setHasUnsavedBackupChanges] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
 
   useEffect(() => {
     getSettings()
       .then(setSettings)
       .catch(() => setLoadError("Failed to load settings. Please refresh the page."));
   }, []);
+
+  const handleTabChange = (newTab: string) => {
+    if (hasUnsavedBackupChanges && activeTab === "backup-settings") {
+      setPendingTab(newTab);
+      setShowUnsavedDialog(true);
+    } else {
+      setActiveTab(newTab);
+    }
+  };
+
+  const handleDiscardChanges = () => {
+    setHasUnsavedBackupChanges(false);
+    setShowUnsavedDialog(false);
+    if (pendingTab) {
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+  };
+
+  const handleKeepEditing = () => {
+    setShowUnsavedDialog(false);
+    setPendingTab(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -457,17 +487,41 @@ export default function Settings() {
         </div>
       )}
 
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="business">Business</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="system-update">System Update</TabsTrigger>
+          <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
         <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
         <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
+        <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
+        <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
       </Tabs>
+
+      {/* Unsaved Changes Dialog */}
+      <Dialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes to your backup settings. Do you want to discard these changes and switch to another tab?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleKeepEditing}>
+              Keep Editing
+            </Button>
+            <Button variant="destructive" onClick={handleDiscardChanges}>
+              Discard Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

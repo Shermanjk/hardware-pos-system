@@ -314,9 +314,9 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col">
         {/* ── Header ── */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-gray-900">
               {mode === "add" ? "Add New Product" : "Edit Product"}
@@ -327,7 +327,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
           </DialogHeader>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
           {errors.general && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -647,7 +647,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
           </div>
 
           {/* ── Footer ── */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex-shrink-0 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="px-5">
               Cancel
             </Button>

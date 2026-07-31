@@ -22,6 +22,8 @@ import commodityPricesRoutes from "./routes/commodityPrices.js";
 import externalProcessingRoutes from "./routes/externalProcessing.js";
 import suspendedSalesRoutes from "./routes/suspendedSales.js";
 import requestsRoutes from "./routes/requests.js";
+import systemUpdateRoutes from "./routes/systemUpdate.js";
+import backupRoutes from "./routes/backup.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +53,8 @@ async function startServer() {
   app.use("/api/external-processing", externalProcessingRoutes);
   app.use("/api/suspended-sales", suspendedSalesRoutes);
   app.use("/api/requests", requestsRoutes);
+  app.use("/api/system-update", systemUpdateRoutes);
+  app.use("/api/backup", backupRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   // When bundled to server-dist/index.js, static files are at ../dist/public

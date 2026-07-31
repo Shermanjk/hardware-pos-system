@@ -6,7 +6,7 @@ import {
 import {
   TrendingUp, AlertCircle, Package, Truck,
   ShoppingCart, RefreshCw, RotateCcw,
-  AlertTriangle, TrendingDown, CheckCircle, XCircle,
+  AlertTriangle, TrendingDown, CheckCircle, XCircle, Clock, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -119,6 +119,12 @@ export default function Dashboard() {
   });
   const [pendingLoading, setPendingLoading] = useState(true);
 
+  // Backup status
+  const [backupStatus, setBackupStatus] = useState<{
+    exists: boolean;
+    lastBackup?: string;
+  } | null>(null);
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -149,6 +155,12 @@ export default function Dashboard() {
         }));
       } catch { /* silent */ }
       setPendingLoading(false);
+
+      // Load backup status
+      try {
+        const backupRes = await axios.get("/api/backup/today-status", { headers: authHeaders() });
+        setBackupStatus(backupRes.data);
+      } catch { /* silent */ }
     } catch (err) {
       setError(axios.isAxiosError(err) ? (err.response?.data?.message ?? "Failed to load dashboard.") : "Failed to load dashboard.");
     } finally {
@@ -304,6 +316,44 @@ export default function Dashboard() {
         <p className="text-xs text-gray-400 mt-3">
           These counts are loaded from the database and persist across system restarts.
         </p>
+      </div>
+
+      {/* Today's Backup Status */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Upload className="h-5 w-5 text-blue-600" />
+          <h2 className="text-base font-bold text-gray-900">Today's Backup</h2>
+          <span className="ml-auto text-xs text-gray-500">Database backup status</span>
+        </div>
+        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-blue-200">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            backupStatus?.exists ? "bg-green-100" : "bg-red-100"
+          }`}>
+            {backupStatus?.exists ? (
+              <CheckCircle className="h-5 w-5 text-green-600" />
+            ) : (
+              <Clock className="h-5 w-5 text-red-600" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-500 font-medium">Status</p>
+            {backupStatus === null ? (
+              <Spinner className="text-blue-500 mt-1" />
+            ) : (
+              <p className={`text-sm font-bold ${backupStatus?.exists ? "text-green-700" : "text-red-700"}`}>
+                {backupStatus?.exists ? "Completed" : "Not Yet Created"}
+              </p>
+            )}
+          </div>
+          {backupStatus?.lastBackup && (
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Last Backup</p>
+              <p className="text-sm text-gray-700">
+                {new Date(backupStatus.lastBackup).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Charts row */}
