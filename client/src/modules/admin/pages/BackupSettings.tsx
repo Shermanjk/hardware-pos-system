@@ -115,7 +115,11 @@ export default function BackupSettings({ onUnsavedChange }: BackupSettingsProps)
       });
       toast.dismiss();
       if (response.data.success) {
-        toast.success("Backup created successfully");
+        const stats = response.data.stats;
+        const message = stats
+          ? `Backup created successfully (${stats.tables} tables, ${stats.rows} records, ${(response.data.fileSize / 1024 / 1024).toFixed(2)} MB)`
+          : "Backup created successfully";
+        toast.success(message);
         // Dispatch event to notify other components
         window.dispatchEvent(new CustomEvent('backup-created'));
       } else {

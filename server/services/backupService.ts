@@ -16,6 +16,10 @@ interface BackupResult {
   filePath?: string;
   fileSize?: number;
   error?: string;
+  stats?: {
+    tables: number;
+    rows: number;
+  };
 }
 
 interface BackupMetadata {
@@ -69,8 +73,8 @@ export async function createBackup(
     // Path to mysqldump
     const mysqldumpPath = "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe";
 
-    // Build mysqldump command as a single string
-    const command = `"${mysqldumpPath}" --host=${dbHost} --port=${dbPort} --user=${dbUser} --password=${dbPassword} --single-transaction --routines --triggers --events --result-file="${filePath}" ${dbName}`;
+    // Build mysqldump command as a single string with comprehensive options
+    const command = `"${mysqldumpPath}" --host=${dbHost} --port=${dbPort} --user=${dbUser} --password=${dbPassword} --single-transaction --routines --triggers --events --add-drop-database --databases ${dbName} --result-file="${filePath}"`;
 
     exec(command, async (error, stdout, stderr) => {
       if (error) {
@@ -146,6 +150,10 @@ export async function createBackup(
             filename,
             filePath,
             fileSize: stats.size,
+            stats: {
+              tables: verification.stats?.tables || 0,
+              rows: verification.stats?.rows || 0,
+            },
           });
         } else {
           resolve({

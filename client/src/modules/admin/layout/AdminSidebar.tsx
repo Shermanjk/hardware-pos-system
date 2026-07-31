@@ -33,6 +33,9 @@ const navStructure: (NavItem | NavGroup)[] = [
   // Dashboard - standalone
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
 
+  // Sales - standalone
+  { icon: TrendingUp, label: "Sales", href: "/sales" },
+
   // Operations group
   {
     label: "Operations",
@@ -47,12 +50,6 @@ const navStructure: (NavItem | NavGroup)[] = [
     ],
   } as NavGroup,
 
-  // Sales - standalone
-  { icon: TrendingUp, label: "Sales", href: "/sales" },
-
-  // Reports - standalone
-  { icon: BarChart3, label: "Reports", href: "/reports" },
-
   // Management group
   {
     label: "Management",
@@ -62,6 +59,9 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: Users, label: "Users", href: "/users" },
     ],
   } as NavGroup,
+
+  // Reports - standalone
+  { icon: BarChart3, label: "Reports", href: "/reports" },
 
   // Settings - standalone
   { icon: Settings, label: "Settings", href: "/settings" },
