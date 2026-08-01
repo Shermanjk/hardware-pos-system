@@ -217,7 +217,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
         <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
           <DialogTitle className="sr-only">Confirm Approval</DialogTitle>
           {/* Emerald header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-emerald-600 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-emerald-400 rounded-t-lg">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <CheckCircle2 className="h-5 w-5 text-white" />
             </div>
@@ -288,7 +288,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
         <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
           <DialogTitle className="sr-only">Reject Purchase</DialogTitle>
           {/* Red header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <XCircle className="h-5 w-5 text-white" />
             </div>
@@ -373,7 +373,7 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Set Reference Price</DialogTitle>
         {/* Amber header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-amber-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <TrendingUp className="h-5 w-5 text-white" />
           </div>

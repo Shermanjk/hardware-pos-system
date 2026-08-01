@@ -65,7 +65,7 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
       <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
         <DialogTitle className="sr-only">Sale Details</DialogTitle>
         {/* Slate header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Receipt className="h-5 w-5 text-white" />
           </div>

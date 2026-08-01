@@ -171,7 +171,7 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
         <DialogTitle className="sr-only">{tempPassword ? "Account Created" : "Add New User"}</DialogTitle>
 
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${tempPassword ? "bg-emerald-600" : "bg-blue-600"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${tempPassword ? "bg-emerald-400" : "bg-blue-400"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             {tempPassword
               ? <CheckCircle2 className="h-5 w-5 text-white" />
@@ -327,7 +327,7 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Edit User</DialogTitle>
         {/* Gray header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-gray-700 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-gray-500 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <UserCog className="h-5 w-5 text-white" />
           </div>
@@ -431,7 +431,7 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
         <DialogTitle className="sr-only">{step === "confirm" ? "Reset Password" : "Password Reset Successful"}</DialogTitle>
 
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${step === "done" ? "bg-emerald-600" : "bg-amber-600"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${step === "done" ? "bg-emerald-400" : "bg-amber-400"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             {step === "done"
               ? <CheckCircle2 className="h-5 w-5 text-white" />
@@ -517,7 +517,7 @@ function DeactivateDialog({ user, onClose, onDeactivated }: DeactivateDialogProp
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Deactivate Account</DialogTitle>
         {/* Red header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <ShieldOff className="h-5 w-5 text-white" />
           </div>

@@ -61,7 +61,7 @@ function RejectDialog({ open, onConfirm, onCancel, loading }: RejectDialogProps)
       <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Reject Request</DialogTitle>
         {/* Red header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <XCircle className="h-5 w-5 text-white" />
           </div>
@@ -120,10 +120,10 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
 
   // Dynamic header config per type
   const headerConfig = req.type.startsWith("STOCK_COUNT")
-    ? { bg: "bg-slate-700", icon: <Package className="h-5 w-5 text-white" />, title: req.type === "STOCK_COUNT_MARKET" ? "Market-Based Stock Count" : "Stock Count Request" }
+    ? { bg: "bg-slate-500", icon: <Package className="h-5 w-5 text-white" />, title: req.type === "STOCK_COUNT_MARKET" ? "Market-Based Stock Count" : "Stock Count Request" }
     : req.type === "VOID"
-    ? { bg: "bg-slate-700", icon: <Ban className="h-5 w-5 text-white" />, title: "Void Request" }
-    : { bg: "bg-slate-700", icon: <RotateCcw className="h-5 w-5 text-white" />, title: "Return Request" };
+    ? { bg: "bg-slate-500", icon: <Ban className="h-5 w-5 text-white" />, title: "Void Request" }
+    : { bg: "bg-slate-500", icon: <RotateCcw className="h-5 w-5 text-white" />, title: "Return Request" };
 
   return (
     <Dialog open={!!req} onOpenChange={(o) => { if (!o) onClose(); }}>

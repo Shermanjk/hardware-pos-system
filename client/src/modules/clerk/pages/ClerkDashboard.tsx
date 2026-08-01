@@ -128,9 +128,9 @@ export default function ClerkDashboard() {
         setLowStockProducts(allProducts.filter((p) => p.quantity <= p.reorder_level).slice(0, 6));
 
         setStats({
-          totalProducts: summary.total_products,
-          totalQty: summary.total_units,
-          lowStockCount: summary.low_stock + summary.critical + summary.out_of_stock,
+          totalProducts: summary.total_products ?? 0,
+          totalQty: Number(summary.total_units ?? 0),
+          lowStockCount: (summary.low_stock ?? 0) + (summary.critical ?? 0) + (summary.out_of_stock ?? 0),
           todayStockIn: inventoryLogs.filter(
             (l) =>
               l.action === "Received Stock" &&

@@ -83,7 +83,7 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{isAdd ? "Add New Category" : "Edit Category"}</DialogTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <FolderOpen className="h-5 w-5 text-white" />
           </div>
@@ -210,7 +210,7 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{isAdd ? "Add New Unit" : "Edit Unit"}</DialogTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Ruler className="h-5 w-5 text-white" />
           </div>
@@ -394,7 +394,7 @@ function DeleteDialog({ category, onClose, onDeleted }: DeleteDialogProps) {
       <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Delete Category</DialogTitle>
         {/* Red header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Trash2 className="h-5 w-5 text-white" />
           </div>
@@ -500,7 +500,7 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
       <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Delete Unit</DialogTitle>
         {/* Red header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Trash2 className="h-5 w-5 text-white" />
           </div>

@@ -8,7 +8,7 @@ export interface InventorySummary {
   critical: number;
   low_stock: number;
   in_stock: number;
-  total_units: number;
+  total_units: number | null;
 }
 
 export interface InventoryItem {

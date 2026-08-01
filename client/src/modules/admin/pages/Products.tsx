@@ -190,7 +190,7 @@ function PrintLabelDialog({ product, onClose }: { product: ProductRecord | null;
       <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Print Barcode Label</DialogTitle>
         {/* Blue header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-blue-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-blue-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Printer className="h-5 w-5 text-white" />
           </div>
@@ -338,7 +338,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
         <DialogTitle className="sr-only">{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
 
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${mode === "add" ? "bg-blue-600" : "bg-gray-700"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${mode === "add" ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Package className="h-5 w-5 text-white" />
           </div>

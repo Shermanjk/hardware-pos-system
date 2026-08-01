@@ -121,7 +121,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
       <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{isAdd ? "Add New Supplier" : "Edit Supplier"}</DialogTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Truck className="h-5 w-5 text-white" />
           </div>
@@ -149,7 +149,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
               </Label>
               <Input value={form.supplier_name} onChange={(e) => set("supplier_name", e.target.value)}
                 placeholder="e.g. BuildCo Supplies" disabled={isLoading} autoFocus
-                className={errors.supplier_name ? "border-red-400" : ""} />
+                className={`border-2 ${errors.supplier_name ? "border-red-400" : "border-gray-300 hover:border-blue-400 focus:border-blue-500"}`} />
               {errors.supplier_name && <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>}
             </div>
 
@@ -160,14 +160,16 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
                   Contact Person <span className="text-gray-400 font-normal">(optional)</span>
                 </Label>
                 <Input value={form.contact_person} onChange={(e) => set("contact_person", e.target.value)}
-                  placeholder="e.g. Juan dela Cruz" disabled={isLoading} />
+                  placeholder="e.g. Juan dela Cruz" disabled={isLoading}
+                  className="border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500" />
               </div>
               <div>
                 <Label className="mb-1.5 block font-semibold text-sm">
                   Contact Number <span className="text-gray-400 font-normal">(optional)</span>
                 </Label>
                 <Input value={form.contact_number} onChange={(e) => set("contact_number", e.target.value)}
-                  placeholder="e.g. 09171234567" disabled={isLoading} />
+                  placeholder="e.g. 09171234567" disabled={isLoading}
+                  className="border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500" />
               </div>
             </div>
 
@@ -178,7 +180,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
               </Label>
               <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)}
                 placeholder="e.g. supplier@example.com" disabled={isLoading}
-                className={errors.email ? "border-red-400" : ""} />
+                className={`border-2 ${errors.email ? "border-red-400" : "border-gray-300 hover:border-blue-400 focus:border-blue-500"}`} />
               {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
             </div>
 
@@ -190,7 +192,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
               <textarea value={form.address} onChange={(e) => set("address", e.target.value)}
                 rows={2} disabled={isLoading}
                 placeholder="Street, City, Province"
-                className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+                className="w-full border-2 border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-blue-400 disabled:opacity-50" />
             </div>
 
             {/* Status */}
@@ -252,7 +254,7 @@ function DeleteDialog({ supplier, onClose, onDeleted }: DeleteDialogProps) {
       <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Delete Supplier</DialogTitle>
         {/* Red header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Trash2 className="h-5 w-5 text-white" />
           </div>
@@ -304,7 +306,7 @@ function ViewModal({ supplier, onClose, onEdit }: {
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Supplier Details</DialogTitle>
         {/* Slate header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Truck className="h-5 w-5 text-white" />
           </div>

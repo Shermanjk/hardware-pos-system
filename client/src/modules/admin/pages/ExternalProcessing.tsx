@@ -354,7 +354,7 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
         <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
           <DialogTitle className="sr-only">Processing Companies</DialogTitle>
           {/* Blue header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-blue-600 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-blue-400 rounded-t-lg">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Building2 className="h-5 w-5 text-white" />
             </div>
@@ -445,7 +445,7 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
         <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
           <DialogTitle className="sr-only">Remove Company</DialogTitle>
           {/* Red header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Trash2 className="h-5 w-5 text-white" />
             </div>
@@ -611,7 +611,7 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
         <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
           <DialogTitle className="sr-only">Delivery Details</DialogTitle>
           {/* Slate header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Truck className="h-5 w-5 text-white" />
             </div>
