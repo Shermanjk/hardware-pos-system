@@ -170,6 +170,13 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
+  // Auto-refresh every 5 minutes so KPIs stay current throughout the business day
+  // without requiring a manual page reload.
+  useEffect(() => {
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const kpis = data?.kpis;
 
   // Build weekly chart — fill missing days with 0

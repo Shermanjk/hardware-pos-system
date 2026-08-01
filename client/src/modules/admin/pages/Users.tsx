@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit2, RotateCcw, Lock, Eye, EyeOff, Copy, Printer, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { Plus, Edit2, RotateCcw, Lock, Eye, EyeOff, Copy, Printer, AlertCircle, CheckCircle2, X, UserPlus, UserCog, KeyRound, ShieldOff } from "lucide-react";
 import { getUsers, createUser, updateUser, resetPassword, deactivateUser } from "@/shared/api/usersApi";
 import type { UserRecord, CreateUserPayload, UpdateUserPayload } from "@/shared/api/usersApi";
 import axios from "axios";
@@ -71,26 +70,23 @@ function TempPasswordDisplay({ password, username, onDone }: TempPasswordDisplay
   };
 
   return (
-    <div className="space-y-4">
-      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-        <p className="text-sm text-amber-800 font-medium mb-1">
-          Save this password — it will not be shown again.
-        </p>
-        <p className="text-xs text-amber-700">
-          The employee must change it on first login.
-        </p>
+    <div className="px-6 py-5 space-y-4">
+      <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm text-amber-800 font-medium">Save this password — it will not be shown again.</p>
+          <p className="text-xs text-amber-700 mt-0.5">The employee must change it on first login.</p>
+        </div>
       </div>
 
       <div>
-        <Label className="text-sm font-semibold text-gray-900 mb-1.5 block">
-          Temporary Password
-        </Label>
+        <Label className="text-sm font-semibold text-gray-900 mb-1.5 block">Temporary Password</Label>
         <div className="relative">
           <Input
             readOnly
             type={showPwd ? "text" : "password"}
             value={password}
-            className="pr-10 font-mono bg-gray-50 select-all"
+            className="pr-10 text-lg font-mono bg-gray-50 select-all tracking-widest"
           />
           <button
             type="button"
@@ -114,7 +110,9 @@ function TempPasswordDisplay({ password, username, onDone }: TempPasswordDisplay
         </Button>
       </div>
 
-      <Button className="w-full" onClick={onDone}>Done</Button>
+      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 -mx-6 -mb-5 mt-2">
+        <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={onDone}>Done</Button>
+      </div>
     </div>
   );
 }
@@ -169,87 +167,105 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{tempPassword ? "Account Created" : "Add New User"}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{tempPassword ? "Account Created" : "Add New User"}</DialogTitle>
+
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${tempPassword ? "bg-emerald-600" : "bg-blue-600"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            {tempPassword
+              ? <CheckCircle2 className="h-5 w-5 text-white" />
+              : <UserPlus className="h-5 w-5 text-white" />
+            }
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">
+              {tempPassword ? "Account Created" : "Add New User"}
+            </h2>
+            <p className={`text-xs mt-0.5 ${tempPassword ? "text-emerald-100" : "text-blue-100"}`}>
+              {tempPassword ? "Share credentials with the employee" : "Create a new employee account"}
+            </p>
+          </div>
+        </div>
 
         {tempPassword ? (
           <TempPasswordDisplay password={tempPassword} username={createdUsername} onDone={handleClose} />
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {errors.general && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                <p className="text-sm text-red-700">{errors.general}</p>
-              </div>
-            )}
+          <form onSubmit={handleSubmit}>
+            <div className="px-6 py-5 space-y-4">
+              {errors.general && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-700">{errors.general}</p>
+                </div>
+              )}
 
-            <div>
-              <Label htmlFor="cu-fullname" className="mb-1.5 block font-semibold">
-                Full Name <span className="text-red-500">*</span>
-              </Label>
-              <Input id="cu-fullname" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Juan dela Cruz" disabled={isLoading}
-                className={errors.full_name ? "border-red-400" : ""} />
-              {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
-            </div>
-
-            <div>
-              <Label htmlFor="cu-username" className="mb-1.5 block font-semibold">
-                Username <span className="text-red-500">*</span>
-              </Label>
-              <Input id="cu-username" value={username} onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. juan.cruz" disabled={isLoading}
-                className={errors.username ? "border-red-400" : ""} />
-              {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
-            </div>
-
-            <div>
-              <Label htmlFor="cu-empid" className="mb-1.5 block font-semibold">
-                Employee ID <span className="text-gray-400 font-normal">(optional)</span>
-              </Label>
-              <Input id="cu-empid" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
-                placeholder="e.g. EMP-001" disabled={isLoading} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-1.5 block font-semibold">Role <span className="text-red-500">*</span></Label>
-                <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Cashier">Cashier</SelectItem>
-                    <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.role && <p className="mt-1 text-xs text-red-600">{errors.role}</p>}
+                <Label htmlFor="cu-fullname" className="mb-1.5 block font-semibold">
+                  Full Name <span className="text-red-500">*</span>
+                </Label>
+                <Input id="cu-fullname" value={fullName} onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Juan dela Cruz" disabled={isLoading}
+                  className={errors.full_name ? "border-red-400" : ""} />
+                {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
               </div>
+
               <div>
-                <Label className="mb-1.5 block font-semibold">Status <span className="text-red-500">*</span></Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={isLoading}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="cu-username" className="mb-1.5 block font-semibold">
+                  Username <span className="text-red-500">*</span>
+                </Label>
+                <Input id="cu-username" value={username} onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g. juan.cruz" disabled={isLoading}
+                  className={errors.username ? "border-red-400" : ""} />
+                {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
+              </div>
+
+              <div>
+                <Label htmlFor="cu-empid" className="mb-1.5 block font-semibold">
+                  Employee ID <span className="text-gray-400 font-normal">(optional)</span>
+                </Label>
+                <Input id="cu-empid" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
+                  placeholder="e.g. EMP-001" disabled={isLoading} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block font-semibold">Role <span className="text-red-500">*</span></Label>
+                  <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cashier">Cashier</SelectItem>
+                      <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.role && <p className="mt-1 text-xs text-red-600">{errors.role}</p>}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block font-semibold">Status <span className="text-red-500">*</span></Label>
+                  <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={isLoading}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  A secure temporary password will be generated automatically. The employee must change it on first login.
+                </p>
               </div>
             </div>
 
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-              <p className="text-xs text-blue-700">
-                A secure temporary password will be generated automatically. The employee must change it on first login.
-              </p>
-            </div>
-
-            <DialogFooter className="pt-2">
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
                 {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
                 {isLoading ? "Creating…" : "Save User"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         )}
       </DialogContent>
@@ -308,54 +324,68 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
 
   return (
     <Dialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {errors.general && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-700">{errors.general}</p>
-            </div>
-          )}
-          <div>
-            <Label className="mb-1.5 block font-semibold">Full Name</Label>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)}
-              disabled={isLoading} className={errors.full_name ? "border-red-400" : ""} />
-            {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Edit User</DialogTitle>
+        {/* Gray header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-gray-700 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <UserCog className="h-5 w-5 text-white" />
           </div>
           <div>
-            <Label className="mb-1.5 block font-semibold">Employee ID <span className="text-gray-400 font-normal">(optional)</span></Label>
-            <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} disabled={isLoading} />
+            <h2 className="text-base font-bold text-white">Edit User</h2>
+            <p className="text-xs text-gray-300 mt-0.5">Update account details</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-5 space-y-4">
+            {errors.general && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700">{errors.general}</p>
+              </div>
+            )}
             <div>
-              <Label className="mb-1.5 block font-semibold">Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cashier">Cashier</SelectItem>
-                  <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="mb-1.5 block font-semibold">Full Name</Label>
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)}
+                disabled={isLoading} className={errors.full_name ? "border-red-400" : ""} />
+              {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
             </div>
             <div>
-              <Label className="mb-1.5 block font-semibold">Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={isLoading}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="mb-1.5 block font-semibold">Employee ID <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} disabled={isLoading} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="mb-1.5 block font-semibold">Role</Label>
+                <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cashier">Cashier</SelectItem>
+                    <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1.5 block font-semibold">Status</Label>
+                <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={isLoading}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-          <DialogFooter className="pt-2">
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} className="bg-gray-800 hover:bg-gray-900">
               {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
               {isLoading ? "Saving…" : "Save Changes"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -397,36 +427,53 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
 
   return (
     <Dialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {step === "confirm" ? "Reset Password" : "Password Reset Successful"}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{step === "confirm" ? "Reset Password" : "Password Reset Successful"}</DialogTitle>
+
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${step === "done" ? "bg-emerald-600" : "bg-amber-600"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            {step === "done"
+              ? <CheckCircle2 className="h-5 w-5 text-white" />
+              : <KeyRound className="h-5 w-5 text-white" />
+            }
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">
+              {step === "done" ? "Password Reset" : "Reset Password"}
+            </h2>
+            <p className={`text-xs mt-0.5 ${step === "done" ? "text-emerald-100" : "text-amber-100"}`}>
+              {step === "done" ? "Share credentials with the employee" : "A new temporary password will be generated"}
+            </p>
+          </div>
+        </div>
 
         {step === "confirm" ? (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-700">
-              Reset password for <span className="font-semibold">{user.full_name}</span>{" "}
-              (<span className="font-mono text-gray-600">{user.username}</span>)?
-            </p>
-            <p className="text-sm text-gray-600">
-              A new temporary password will be generated. The employee must change it on next login.
-            </p>
-            {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                <p className="text-sm text-red-700">{error}</p>
+          <>
+            <div className="px-6 py-5 space-y-4">
+              {/* User info card */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                <p className="font-semibold text-gray-900">{user.full_name}</p>
+                <p className="font-mono text-xs text-gray-500 mt-0.5">{user.username}</p>
               </div>
-            )}
-            <DialogFooter>
+              <p className="text-sm text-gray-600">
+                A new temporary password will be generated. The employee must change it on next login.
+              </p>
+              {error && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
               <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
               <Button variant="destructive" onClick={handleConfirm} disabled={isLoading}>
                 {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
                 {isLoading ? "Resetting…" : "Reset Password"}
               </Button>
-            </DialogFooter>
-          </div>
+            </div>
+          </>
         ) : (
           <TempPasswordDisplay password={tempPassword} username={user.username} onDone={onClose} />
         )}
@@ -466,35 +513,50 @@ function DeactivateDialog({ user, onClose, onDeactivated }: DeactivateDialogProp
   };
 
   return (
-    <AlertDialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Deactivate Account?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will deactivate{" "}
-            <span className="font-semibold text-gray-900">{user?.full_name}</span>'s account.
-            They will no longer be able to log in.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg mt-2">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+    <Dialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Deactivate Account</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <ShieldOff className="h-5 w-5 text-white" />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+          <div>
+            <h2 className="text-base font-bold text-white">Deactivate Account</h2>
+            <p className="text-xs text-red-100 mt-0.5">This action will prevent the user from logging in</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* User info card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+            <p className="font-semibold text-gray-900">{user?.full_name}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{user?.role} · <span className="font-mono">{user?.username}</span></p>
+          </div>
+          <p className="text-sm text-gray-700">
+            Are you sure you want to deactivate this account? The user will no longer be able to log in.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
+            {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
             {isLoading ? "Deactivating…" : "Deactivate"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -582,7 +644,7 @@ export default function Users() {
                 <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Username</th>
                 <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Role</th>
                 <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
-                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Last Login</th>
+                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Password Changed</th>
                 <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
               </tr>
             </thead>

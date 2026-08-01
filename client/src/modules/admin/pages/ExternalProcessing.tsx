@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Truck, Package, RefreshCw, AlertCircle, X, Search, Plus, Building2,
@@ -351,14 +351,20 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-blue-600" /> Manage Processing Companies
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Processing Companies</DialogTitle>
+          {/* Blue header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-blue-600 rounded-t-lg">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <Building2 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Processing Companies</h2>
+              <p className="text-xs text-blue-100 mt-0.5">Manage external processing partners</p>
+            </div>
+          </div>
 
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
             {/* Add form */}
             {showAdd ? (
               <CompanyForm
@@ -368,7 +374,7 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
                 error={formError}
               />
             ) : (
-              <Button variant="outline" size="sm" className="w-full gap-2 border-dashed border-gray-300 text-gray-600"
+              <Button variant="outline" size="sm" className="w-full gap-2 border-dashed border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600"
                 onClick={() => { setShowAdd(true); setEditingId(null); setFormError(null); }}>
                 <Plus className="h-4 w-4" /> Add New Company
               </Button>
@@ -380,7 +386,7 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
                 <Spinner className="text-blue-500" /> Loading…
               </div>
             ) : companies.length === 0 ? (
-              <p className="text-center text-sm text-gray-400 py-4">No companies yet.</p>
+              <p className="text-center text-sm text-gray-400 py-4">No companies yet. Add one above.</p>
             ) : (
               <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
                 {companies.map((c) => (
@@ -396,8 +402,10 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
-                        <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
+                      <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <Building2 className="h-4 w-4 text-blue-600" />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm text-gray-900 truncate">{c.name}</p>
                           {(c.address || c.contact) && (
@@ -407,18 +415,14 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
                           )}
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <button
-                            title="Edit"
+                          <button title="Edit"
                             onClick={() => { setEditingId(c.id); setShowAdd(false); setFormError(null); }}
-                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          >
+                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <button
-                            title="Remove"
+                          <button title="Remove"
                             onClick={() => setConfirmDelete(c)}
-                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                          >
+                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -430,30 +434,46 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
             )}
           </div>
 
-          <DialogFooter>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
             <Button variant="outline" onClick={onClose}>Close</Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Confirm delete */}
+      {/* Confirm delete nested dialog */}
       <Dialog open={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" /> Remove Company
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-gray-700">
-            Remove <span className="font-semibold">{confirmDelete?.name}</span>? If it has existing deliveries it will be deactivated instead of permanently deleted.
-          </p>
-          <DialogFooter>
+        <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Remove Company</DialogTitle>
+          {/* Red header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <Trash2 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Remove Company</h2>
+              <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm font-semibold text-gray-900">{confirmDelete?.name}</p>
+              {(confirmDelete?.address || confirmDelete?.contact) && (
+                <p className="text-xs text-gray-500 mt-0.5">{[confirmDelete?.address, confirmDelete?.contact].filter(Boolean).join(" · ")}</p>
+              )}
+            </div>
+            <p className="text-sm text-gray-700">
+              If this company has existing delivery records, it will be <strong>deactivated</strong> instead of permanently deleted.
+            </p>
+          </div>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>Cancel</Button>
-            <Button onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700 gap-2">
+            <Button onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700 text-white gap-2">
               {deleting && <Spinner className="text-white" />}
               {deleting ? "Removing…" : "Remove"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>
@@ -588,37 +608,42 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
 
       {/* View Detail Modal */}
       <Dialog open={!!selectedDelivery} onOpenChange={(o) => { if (!o) setSelectedDelivery(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-blue-600" /> Delivery Details
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Delivery Details</DialogTitle>
+          {/* Slate header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <Truck className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Delivery Details</h2>
+              <p className="text-xs text-slate-300 mt-0.5 font-mono">{selectedDelivery?.delivery_reference ?? ""}</p>
+            </div>
+          </div>
           {selectedDelivery && (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-gray-900">{selectedDelivery.delivery_reference}</span>
-                <span className="text-xs text-gray-500">{fmtDateTime(selectedDelivery.created_at)}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-700">
-                <div><span className="font-medium text-gray-500">Product:</span> {selectedDelivery.product_name}</div>
-                <div><span className="font-medium text-gray-500">Quantity:</span> {Number(selectedDelivery.quantity).toLocaleString("en-PH", { maximumFractionDigits: 3 })} {selectedDelivery.unit_abbreviation}</div>
-                <div><span className="font-medium text-gray-500">Company:</span> {selectedDelivery.company_name}</div>
-                <div><span className="font-medium text-gray-500">Delivery Date:</span> {fmtDate(selectedDelivery.delivery_date)}</div>
-                <div><span className="font-medium text-gray-500">Delivered By:</span> {selectedDelivery.delivered_by || "—"}</div>
-                <div><span className="font-medium text-gray-500">Recorded By:</span> {selectedDelivery.recorded_by_name}</div>
+            <div className="px-6 py-5 space-y-4 text-sm">
+              {/* Transaction info */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div><span className="text-gray-500 text-xs block mb-0.5">Reference</span><span className="font-mono font-bold text-gray-900">{selectedDelivery.delivery_reference}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Recorded At</span><span className="font-medium text-gray-800">{fmtDateTime(selectedDelivery.created_at)}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Product</span><span className="font-semibold text-gray-900">{selectedDelivery.product_name}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Quantity</span><span className="font-bold text-gray-900">{Number(selectedDelivery.quantity).toLocaleString("en-PH", { maximumFractionDigits: 3 })} {selectedDelivery.unit_abbreviation}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Company</span><span className="font-medium text-gray-800">{selectedDelivery.company_name}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Delivery Date</span><span className="font-medium text-gray-800">{fmtDate(selectedDelivery.delivery_date)}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Delivered By</span><span className="font-medium text-gray-800">{selectedDelivery.delivered_by || "—"}</span></div>
+                <div><span className="text-gray-500 text-xs block mb-0.5">Recorded By</span><span className="font-medium text-gray-800">{selectedDelivery.recorded_by_name}</span></div>
               </div>
               {selectedDelivery.remarks && (
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="font-medium text-gray-500 mb-1">Remarks</p>
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Remarks</p>
                   <p className="text-gray-700">{selectedDelivery.remarks}</p>
                 </div>
               )}
             </div>
           )}
-          <DialogFooter>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
             <Button variant="outline" onClick={() => setSelectedDelivery(null)}>Close</Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>

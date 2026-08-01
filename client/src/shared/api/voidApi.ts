@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Admin types ──────────────────────────────────────────────────────────────
 
@@ -64,24 +58,19 @@ export interface MyVoidRequest {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function getMyVoidRequests(): Promise<MyVoidRequest[]> {
-  const res = await axios.get<MyVoidRequest[]>("/api/sales/my-void-requests", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<MyVoidRequest[]>("/api/sales/my-void-requests");
   return res.data;
 }
 
 export async function getVoidRequests(): Promise<VoidRequest[]> {
-  const res = await axios.get<VoidRequest[]>("/api/sales/void-requests", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<VoidRequest[]>("/api/sales/void-requests");
   return res.data;
 }
 
 export async function approveVoid(voidId: number): Promise<{ message: string }> {
-  const res = await axios.patch<{ message: string }>(
+  const res = await httpClient.patch<{ message: string }>(
     `/api/sales/${voidId}/void-approve`,
-    {},
-    { headers: authHeaders() }
+    {}
   );
   return res.data;
 }
@@ -90,10 +79,9 @@ export async function rejectVoid(
   voidId: number,
   rejection_reason: string
 ): Promise<{ message: string }> {
-  const res = await axios.patch<{ message: string }>(
+  const res = await httpClient.patch<{ message: string }>(
     `/api/sales/${voidId}/void-reject`,
-    { rejection_reason },
-    { headers: authHeaders() }
+    { rejection_reason }
   );
   return res.data;
 }

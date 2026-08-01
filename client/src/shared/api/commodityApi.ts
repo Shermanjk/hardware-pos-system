@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,11 +42,9 @@ export interface CommodityPurchase {
   quantity: number;
   unit_name: string;
   reference_price: number;
-  // New fields for physical quantity deduction model
   deducted_quantity: number;
   payable_quantity: number;
   deduction_amount: number;
-  // Legacy fields for backwards compatibility
   deduction_per_unit: number;
   final_unit_price: number;
   gross_amount: number;
@@ -98,10 +90,7 @@ export interface RecordPurchasePayload {
   supplier_id?: number | null;
   seller_name?: string | null;
   quantity: number;
-  // NEW: Physical quantity to deduct (e.g., 3 kg)
-  // This replaces the old deduction_per_unit field
   deducted_quantity?: number;
-  // Legacy: keep for backwards compatibility but deprecated
   deduction_per_unit?: number;
   transaction_date: string;
   remarks?: string | null;
@@ -123,12 +112,10 @@ export interface PurchaseResult {
   id: number;
   product_id: number;
   quantity: number;
-  // New fields for physical quantity deduction
   deducted_quantity: number;
   payable_quantity: number;
   deduction_amount: number;
   reference_price: number;
-  // Legacy fields for backwards compatibility
   deduction_per_unit: number;
   final_unit_price: number;
   gross_amount: number;
@@ -167,24 +154,20 @@ export interface PaymentResult {
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function getCommodityProducts(): Promise<CommodityProduct[]> {
-  const res = await axios.get<CommodityProduct[]>("/api/commodity-prices/products", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<CommodityProduct[]>("/api/commodity-prices/products");
   return res.data;
 }
 
 export async function getCurrentPrice(productId: number): Promise<CommodityCurrentPrice> {
-  const res = await axios.get<CommodityCurrentPrice>(
-    `/api/commodity-prices/${productId}/current`,
-    { headers: authHeaders() }
+  const res = await httpClient.get<CommodityCurrentPrice>(
+    `/api/commodity-prices/${productId}/current`
   );
   return res.data;
 }
 
 export async function getPriceHistory(productId: number): Promise<CommodityPriceRecord[]> {
-  const res = await axios.get<CommodityPriceRecord[]>(
-    `/api/commodity-prices/${productId}/history`,
-    { headers: authHeaders() }
+  const res = await httpClient.get<CommodityPriceRecord[]>(
+    `/api/commodity-prices/${productId}/history`
   );
   return res.data;
 }
@@ -193,55 +176,57 @@ export async function setPrice(
   productId: number,
   payload: SetPricePayload
 ): Promise<{ message: string; id: number; price_per_unit: number; previous_price: number | null }> {
-  const res = await axios.post(
+  const res = await httpClient.post(
     `/api/commodity-prices/${productId}/set-price`,
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
-export async function submitCommodityPurchase(payload: RecordPurchasePayload): Promise<PurchaseResult> {
-  const res = await axios.post<PurchaseResult>(
+export async function submitCommodityPurchase(
+  payload: RecordPurchasePayload
+): Promise<PurchaseResult> {
+  const res = await httpClient.post<PurchaseResult>(
     "/api/commodity-prices/purchase",
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
 export async function getPendingCommodityPurchases(): Promise<CommodityPurchase[]> {
-  const res = await axios.get<CommodityPurchase[]>(
-    "/api/commodity-prices/purchases/pending",
-    { headers: authHeaders() }
+  const res = await httpClient.get<CommodityPurchase[]>(
+    "/api/commodity-prices/purchases/pending"
   );
   return res.data;
 }
 
-export async function getApprovedCommodityPurchases(payment_status?: PaymentStatus): Promise<CommodityPurchase[]> {
+export async function getApprovedCommodityPurchases(
+  payment_status?: PaymentStatus
+): Promise<CommodityPurchase[]> {
   const params: Record<string, string> = {};
   if (payment_status) params.payment_status = payment_status;
-  const res = await axios.get<CommodityPurchase[]>(
+  const res = await httpClient.get<CommodityPurchase[]>(
     "/api/commodity-prices/purchases/approved",
-    { headers: authHeaders(), params }
+    { params }
   );
   return res.data;
 }
 
 export async function approveCommodityPurchase(purchaseId: number): Promise<ApproveResult> {
-  const res = await axios.post<ApproveResult>(
+  const res = await httpClient.post<ApproveResult>(
     `/api/commodity-prices/purchases/${purchaseId}/approve`,
-    {},
-    { headers: authHeaders() }
+    {}
   );
   return res.data;
 }
 
-export async function rejectCommodityPurchase(purchaseId: number, rejection_reason: string): Promise<RejectResult> {
-  const res = await axios.post<RejectResult>(
+export async function rejectCommodityPurchase(
+  purchaseId: number,
+  rejection_reason: string
+): Promise<RejectResult> {
+  const res = await httpClient.post<RejectResult>(
     `/api/commodity-prices/purchases/${purchaseId}/reject`,
-    { rejection_reason },
-    { headers: authHeaders() }
+    { rejection_reason }
   );
   return res.data;
 }
@@ -253,30 +238,30 @@ export async function recordPayment(
   purchaseId: number,
   payload: RecordPaymentPayload
 ): Promise<PaymentResult> {
-  const res = await axios.post<PaymentResult>(
+  const res = await httpClient.post<PaymentResult>(
     `/api/commodity-prices/purchases/${purchaseId}/payment`,
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
 export async function getPaymentHistory(purchaseId: number): Promise<CommodityPaymentEvent[]> {
-  const res = await axios.get<CommodityPaymentEvent[]>(
-    `/api/commodity-prices/purchases/${purchaseId}/payments`,
-    { headers: authHeaders() }
+  const res = await httpClient.get<CommodityPaymentEvent[]>(
+    `/api/commodity-prices/purchases/${purchaseId}/payments`
   );
   return res.data;
 }
 
-export async function getPurchaseHistory(filters: {
-  product_id?: number;
-  date_from?: string;
-  date_to?: string;
-  payment_status?: PaymentStatus;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<CommodityPurchase[]> {
+export async function getPurchaseHistory(
+  filters: {
+    product_id?: number;
+    date_from?: string;
+    date_to?: string;
+    payment_status?: PaymentStatus;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<CommodityPurchase[]> {
   const params: Record<string, string> = {};
   if (filters.product_id)    params.product_id    = String(filters.product_id);
   if (filters.date_from)     params.date_from     = filters.date_from;
@@ -285,10 +270,10 @@ export async function getPurchaseHistory(filters: {
   if (filters.limit)         params.limit         = String(filters.limit);
   if (filters.offset)        params.offset        = String(filters.offset);
 
-  const res = await axios.get<CommodityPurchase[]>("/api/commodity-prices/purchases", {
-    headers: authHeaders(),
-    params,
-  });
+  const res = await httpClient.get<CommodityPurchase[]>(
+    "/api/commodity-prices/purchases",
+    { params }
+  );
   return res.data;
 }
 
@@ -352,57 +337,61 @@ export interface RecordDeliveryResult {
 }
 
 export async function getEprCompanies(): Promise<ExternalProcessingCompany[]> {
-  const res = await axios.get<ExternalProcessingCompany[]>(
-    "/api/external-processing/companies",
-    { headers: authHeaders() }
+  const res = await httpClient.get<ExternalProcessingCompany[]>(
+    "/api/external-processing/companies"
   );
   return res.data;
 }
 
-export async function updateEprCompany(id: number, payload: CreateCompanyPayload): Promise<ExternalProcessingCompany> {
-  const res = await axios.put<ExternalProcessingCompany>(
+export async function updateEprCompany(
+  id: number,
+  payload: CreateCompanyPayload
+): Promise<ExternalProcessingCompany> {
+  const res = await httpClient.put<ExternalProcessingCompany>(
     `/api/external-processing/companies/${id}`,
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
 export async function deleteEprCompany(id: number): Promise<{ message: string }> {
-  const res = await axios.delete<{ message: string }>(
-    `/api/external-processing/companies/${id}`,
-    { headers: authHeaders() }
+  const res = await httpClient.delete<{ message: string }>(
+    `/api/external-processing/companies/${id}`
   );
   return res.data;
 }
 
-export async function createEprCompany(payload: CreateCompanyPayload): Promise<ExternalProcessingCompany> {
-  const res = await axios.post<ExternalProcessingCompany>(
+export async function createEprCompany(
+  payload: CreateCompanyPayload
+): Promise<ExternalProcessingCompany> {
+  const res = await httpClient.post<ExternalProcessingCompany>(
     "/api/external-processing/companies",
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
-export async function recordEprDelivery(payload: RecordDeliveryPayload): Promise<RecordDeliveryResult> {
-  const res = await axios.post<RecordDeliveryResult>(
+export async function recordEprDelivery(
+  payload: RecordDeliveryPayload
+): Promise<RecordDeliveryResult> {
+  const res = await httpClient.post<RecordDeliveryResult>(
     "/api/external-processing/deliveries",
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return res.data;
 }
 
-export async function getEprDeliveries(filters: {
-  product_id?: number;
-  company_id?: number;
-  date_from?: string;
-  date_to?: string;
-  search?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<ExternalProcessingDelivery[]> {
+export async function getEprDeliveries(
+  filters: {
+    product_id?: number;
+    company_id?: number;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<ExternalProcessingDelivery[]> {
   const params: Record<string, string> = {};
   if (filters.product_id) params.product_id = String(filters.product_id);
   if (filters.company_id) params.company_id = String(filters.company_id);
@@ -412,17 +401,16 @@ export async function getEprDeliveries(filters: {
   if (filters.limit)      params.limit      = String(filters.limit);
   if (filters.offset)     params.offset     = String(filters.offset);
 
-  const res = await axios.get<ExternalProcessingDelivery[]>(
+  const res = await httpClient.get<ExternalProcessingDelivery[]>(
     "/api/external-processing/deliveries",
-    { headers: authHeaders(), params }
+    { params }
   );
   return res.data;
 }
 
 export async function getEprDelivery(id: number): Promise<ExternalProcessingDelivery> {
-  const res = await axios.get<ExternalProcessingDelivery>(
-    `/api/external-processing/deliveries/${id}`,
-    { headers: authHeaders() }
+  const res = await httpClient.get<ExternalProcessingDelivery>(
+    `/api/external-processing/deliveries/${id}`
   );
   return res.data;
 }

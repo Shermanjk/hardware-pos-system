@@ -589,8 +589,9 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
 
   const addOrUpdate = () => {
     if (!matched) return;
-    const qty = parseInt(qtyInput, 10);
-    if (!qty || qty < 1) { toast.error("Quantity must be at least 1."); return; }
+    // BUG-07 FIX: Use parseFloat instead of parseInt so decimal quantities (e.g. 2.5 kg) are not truncated
+    const qty = parseFloat(qtyInput);
+    if (!qty || qty <= 0) { toast.error("Quantity must be greater than 0."); return; }
 
     setItems((() => {
       const existing = items.findIndex((i) => i.productId === matched.id);
@@ -598,7 +599,7 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
         const updated = [...items];
         updated[existing] = {
           ...updated[existing],
-          quantityReceived: updated[existing].quantityReceived + qty,
+          quantityReceived: Math.round((updated[existing].quantityReceived + qty) * 10000) / 10000,
         };
         toast.success(`${matched.product_name} — quantity updated to ${updated[existing].quantityReceived}`);
         return updated;
@@ -624,7 +625,9 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
   const removeItem = (id: number) => setItems(items.filter((i) => i.productId !== id));
 
   const updateItem = (id: number, value: string) => {
-    setItems(items.map((i) => i.productId === id ? { ...i, quantityReceived: parseInt(value) || 1 } : i));
+    // BUG-07 FIX: Use parseFloat so decimal quantities are preserved
+    const parsed = parseFloat(value);
+    setItems(items.map((i) => i.productId === id ? { ...i, quantityReceived: parsed > 0 ? parsed : i.quantityReceived } : i));
   };
 
   const totalQty = items.reduce((s, i) => s + i.quantityReceived, 0);
@@ -1141,7 +1144,7 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">
-                        +{log.quantity_change ?? log.quantity ?? 0}
+                        +{log.quantity_change ?? 0}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -1223,6 +1226,12 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
                     </td>
                     <td className="py-3.5 px-4 text-xs text-gray-700">
                       {req.seller || "—"}
+                      {/* WORKFLOW-01 FIX: Show rejection reason when request was rejected */}
+                      {req.approval_status === "REJECTED" && req.rejection_reason && (
+                        <p className="text-xs text-red-600 mt-0.5 font-medium">
+                          Reason: {req.rejection_reason}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}

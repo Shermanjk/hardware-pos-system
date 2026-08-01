@@ -22,8 +22,6 @@ import Settings from "./modules/admin/pages/Settings";
 import CommodityPrices from "./modules/admin/pages/CommodityPrices";
 import ExternalProcessing from "./modules/admin/pages/ExternalProcessing";
 import Requests from "./modules/admin/pages/Requests";
-import SystemUpdate from "./modules/admin/pages/SystemUpdate";
-import BackupSettings from "./modules/admin/pages/BackupSettings";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import Cashier from "./modules/cashier/pages/Cashier";

@@ -21,4 +21,11 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // ─── Long-session resilience ─────────────────────────────────────────────
+  // enableKeepAlive prevents idle pool connections from being silently dropped
+  // by MySQL's wait_timeout (default 8h) or intermediate network equipment.
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000, // 10 s — send first keepalive after 10s idle
+  // connectTimeout: how long to wait for a new connection to be established.
+  connectTimeout: 10000,       // 10 s
 });

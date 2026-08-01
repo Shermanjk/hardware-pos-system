@@ -1,5 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
+import httpClient from "@/shared/api/httpClient";
 
 export interface StoreSettings {
   // General
@@ -11,7 +10,7 @@ export interface StoreSettings {
   // Business / taxpayer
   registered_taxpayer_name: string;
   tin:                      string;
-  business_license:         string; // kept for backward compat
+  business_license:         string;
   document_type:            string;
   tax_rate:                 number;
   vat_registered:           boolean;
@@ -20,20 +19,15 @@ export interface StoreSettings {
   pos_serial:               string | undefined;
 }
 
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 export async function getSettings(): Promise<StoreSettings> {
-  const res = await axios.get<StoreSettings>("/api/settings", {
-    headers: { ...authHeaders(), "Cache-Control": "no-cache" },
+  const res = await httpClient.get<StoreSettings>("/api/settings", {
+    headers: { "Cache-Control": "no-cache" },
     params: { _t: Date.now() },
   });
   return res.data;
 }
 
 export async function updateSettings(payload: Partial<StoreSettings>): Promise<StoreSettings> {
-  const res = await axios.put<StoreSettings>("/api/settings", payload, { headers: authHeaders() });
+  const res = await httpClient.put<StoreSettings>("/api/settings", payload);
   return res.data;
 }

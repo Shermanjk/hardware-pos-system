@@ -52,10 +52,59 @@ export interface VoidDecisionNotification {
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
+// ─── Heartbeat constants ──────────────────────────────────────────────────────
+// Every 30 s we ping each connected socket. If no pong arrives within 10 s we
+// terminate the connection. This prevents zombie sockets from accumulating in
+// adminClients / cashierClients over a long business day.
+const HEARTBEAT_INTERVAL_MS = 30_000; // how often we ping
+const PONG_TIMEOUT_MS        = 10_000; // how long we wait for pong before terminating
+
 // Track connected Admin sockets
 const adminClients = new Set<WebSocket>();
 // Track cashier sockets keyed by userId so we can route decisions back
 const cashierClients = new Map<number, Set<WebSocket>>();
+
+// ─── Per-socket heartbeat setup ───────────────────────────────────────────────
+// Attach a ping/pong heartbeat to a freshly opened WebSocket. Returns a
+// cleanup function that clears both timers — call it from the "close" handler.
+function attachHeartbeat(ws: WebSocket): () => void {
+  let pongTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Kick off a recurring ping every HEARTBEAT_INTERVAL_MS.
+  const heartbeatInterval = setInterval(() => {
+    // If the socket is no longer open, clear everything and bail.
+    if (ws.readyState !== WebSocket.OPEN) {
+      cleanup();
+      return;
+    }
+
+    ws.ping();
+
+    // If the client doesn't respond with a pong within PONG_TIMEOUT_MS,
+    // terminate the connection so it is removed from the client Sets.
+    pongTimer = setTimeout(() => {
+      ws.terminate(); // triggers "close" event → removes from adminClients/cashierClients
+    }, PONG_TIMEOUT_MS);
+  }, HEARTBEAT_INTERVAL_MS);
+
+  // Reset the pong timer whenever the client responds.
+  ws.on("pong", () => {
+    if (pongTimer) {
+      clearTimeout(pongTimer);
+      pongTimer = null;
+    }
+  });
+
+  function cleanup() {
+    clearInterval(heartbeatInterval);
+    if (pongTimer) {
+      clearTimeout(pongTimer);
+      pongTimer = null;
+    }
+  }
+
+  return cleanup;
+}
 
 export function initWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -75,18 +124,26 @@ export function initWebSocket(server: Server): void {
       return;
     }
 
+    // ── Start heartbeat immediately on connection ────────────────────────────
+    const stopHeartbeat = attachHeartbeat(ws);
+
     if (payload.role === "Admin") {
       adminClients.add(ws);
-      ws.on("close", () => adminClients.delete(ws));
+      ws.on("close", () => {
+        stopHeartbeat();
+        adminClients.delete(ws);
+      });
     } else if (payload.role === "Cashier") {
       const uid = payload.id;
       if (!cashierClients.has(uid)) cashierClients.set(uid, new Set());
       cashierClients.get(uid)!.add(ws);
       ws.on("close", () => {
+        stopHeartbeat();
         cashierClients.get(uid)?.delete(ws);
         if (cashierClients.get(uid)?.size === 0) cashierClients.delete(uid);
       });
     } else {
+      stopHeartbeat();
       ws.close(1008, "Forbidden");
     }
   });

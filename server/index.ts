@@ -24,6 +24,7 @@ import suspendedSalesRoutes from "./routes/suspendedSales.js";
 import requestsRoutes from "./routes/requests.js";
 import systemUpdateRoutes from "./routes/systemUpdate.js";
 import backupRoutes from "./routes/backup.js";
+import notificationsRoutes from "./routes/notifications.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,13 @@ async function startServer() {
 
   // ─── Body parsing ────────────────────────────────────────────────────────────
   app.use(express.json({ limit: "100kb" }));
+
+  // ─── Health check (unauthenticated liveness probe) ───────────────────────────
+  // Placed before all other routes so it's always reachable. The Cashier
+  // terminal polls this every 15 s to detect server unreachability early.
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
 
   // ─── API routes (must come before static file handler) ───────────────────────
   app.use("/api/auth", authRoutes);
@@ -55,6 +63,7 @@ async function startServer() {
   app.use("/api/requests", requestsRoutes);
   app.use("/api/system-update", systemUpdateRoutes);
   app.use("/api/backup", backupRoutes);
+  app.use("/api/notifications", notificationsRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   // When bundled to server-dist/index.js, static files are at ../dist/public

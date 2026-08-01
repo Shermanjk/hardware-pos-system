@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getProducts, lookupProduct, type ProductRecord,
+  lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
 import { submitStockAdjustment, getInventoryLogs } from "@/shared/api/inventoryApi";
 import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
@@ -61,7 +61,9 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [allProducts, setAllProducts] = useState<ProductRecord[]>([]);
+  // BUG-13 FIX: Remove allProducts state — search via API instead of loading entire catalog
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -69,20 +71,27 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
       setAdjType(""); setQty(""); setReason("");
       setErrors({}); setLookupError("");
       setSearchInput(""); setBarcodeInput(""); setSearchResults([]);
-      getProducts().then(setAllProducts).catch(() => toast.error("Failed to load products"));
     }
   }, [open, prefillProduct]);
 
-  // Live name search — filter allProducts client-side as clerk types
+  // BUG-13 FIX: Debounced API search instead of filtering allProducts client-side
   useEffect(() => {
-    const q = searchInput.trim().toLowerCase();
+    const q = searchInput.trim();
     if (!q) { setSearchResults([]); return; }
-    setSearchResults(
-      allProducts.filter((p) =>
-        p.product_name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q)
-      ).slice(0, 20)
-    );
-  }, [searchInput, allProducts]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const results = await lookupProduct(q);
+        setSearchResults(results.slice(0, 20) as unknown as ProductRecord[]);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchInput]);
 
   const selectProduct = (p: ProductRecord) => {
     setSelectedProduct(p);
@@ -91,7 +100,7 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
     setErrors((e) => ({ ...e, product: "" }));
   };
 
-  // Barcode scan — exact match only
+  // Barcode scan — exact match only, via API lookup
   const handleBarcodeScan = useCallback(async (val: string) => {
     if (!val.trim()) return;
     setLookupError("");
@@ -99,15 +108,14 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
       const results = await lookupProduct(val.trim());
       const exact = results.find((r) => r.barcode === val.trim());
       if (exact) {
-        const full = allProducts.find((p) => p.id === exact.id);
-        selectProduct(full ?? ({ ...exact, reorder_level: 0, cost_price: 0, category_id: null, category: "", supplier_id: null, supplier: "", unit_id: null, unit_abbreviation: exact.unit, description: null, image: null, status: "Active", barcode_source: "store", supplier_barcode: null, damaged_stock: 0, created_at: null, updated_at: null } as ProductRecord));
+        selectProduct(exact as unknown as ProductRecord);
       } else {
         setLookupError("Barcode not registered. Please contact the Administrator.");
       }
     } catch {
       setLookupError("Failed to scan barcode.");
     }
-  }, [allProducts]);
+  }, []);
 
   // Derived new quantity preview
   const qtyNum = parseInt(qty, 10) || 0;

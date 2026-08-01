@@ -161,8 +161,8 @@ router.post(
         newValues: { return_number, sale_id, return_reason },
       });
 
-      // Fetch cashier name + invoice/customer for the broadcast
-      const [saleRows] = await conn.execute<any[]>(
+      // BUG-12 FIX: Use pool (not conn) after commit to avoid using a committed connection
+      const [saleRows] = await pool.execute<any[]>(
         `SELECT s.invoice_number, s.customer_name, u.full_name AS cashier_name
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
@@ -735,11 +735,16 @@ router.patch(
 
       // Move activity_logs and audit logging outside transaction
       if (resolution === "refund") {
-        await pool.execute(
-          `INSERT INTO activity_logs (user_id, action, reference)
-           VALUES (?, 'return_refund', ?)`,
-          [req.user!.id, returnRow.return_number]
-        );
+        // WORKFLOW-02 FIX: Wrap activity_logs insert in try/catch — table may not exist in all deployments
+        try {
+          await pool.execute(
+            `INSERT INTO activity_logs (user_id, action, reference)
+             VALUES (?, 'return_refund', ?)`,
+            [req.user!.id, returnRow.return_number]
+          );
+        } catch {
+          // Non-fatal: activity_logs table may not exist; return is already completed
+        }
 
         await logAuditEvent({
           action: "REFUND_PROCESSED",
@@ -750,11 +755,16 @@ router.patch(
           newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition },
         });
       } else {
-        await pool.execute(
-          `INSERT INTO activity_logs (user_id, action, reference)
-           VALUES (?, 'return_replacement', ?)`,
-          [req.user!.id, returnRow.return_number]
-        );
+        // WORKFLOW-02 FIX: Wrap activity_logs insert in try/catch — table may not exist in all deployments
+        try {
+          await pool.execute(
+            `INSERT INTO activity_logs (user_id, action, reference)
+             VALUES (?, 'return_replacement', ?)`,
+            [req.user!.id, returnRow.return_number]
+          );
+        } catch {
+          // Non-fatal: activity_logs table may not exist; return is already completed
+        }
 
         await logAuditEvent({
           action: "EXCHANGE_COMPLETED",

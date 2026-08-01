@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   TrendingUp, History, RefreshCw, AlertCircle, X, Edit2, Clock,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -213,87 +214,115 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
 
       {/* Approve Confirmation Modal */}
       <Dialog open={!!showApproveModal} onOpenChange={(o) => { if (!o) setShowApproveModal(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-700">
-              <TrendingUp className="h-5 w-5" />
-              Approve Purchase
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-800 font-medium">
-                ⚠️ Inventory has not been updated yet. Approval will add the received quantity to inventory.
+        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Confirm Approval</DialogTitle>
+          {/* Emerald header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-emerald-600 rounded-t-lg">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Confirm Approval</h2>
+              <p className="text-xs text-emerald-100 mt-0.5">Inventory will be updated upon approval</p>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            {/* Amber warning banner */}
+            <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-700">
+                Inventory has not been updated yet. Approving will add the received quantity to inventory immediately.
               </p>
             </div>
-            <p className="text-sm text-gray-600">
-              Are you sure you want to approve this commodity purchase? The approved quantity will be added to inventory.
-            </p>
-            {showApproveModal && purchases.find(p => p.id === showApproveModal) && (
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
-                <p className="font-semibold text-gray-900">
-                  {purchases.find(p => p.id === showApproveModal)?.product_name}
-                </p>
-                <p className="text-gray-500 text-xs mt-1">
-                  Seller: {purchases.find(p => p.id === showApproveModal)?.seller || "—"} · 
-                  Qty: {Number(purchases.find(p => p.id === showApproveModal)?.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {purchases.find(p => p.id === showApproveModal)?.unit_name}
-                </p>
-                <p className="font-bold text-amber-700 mt-2">
-                  Final Amount: {fmt(purchases.find(p => p.id === showApproveModal)?.final_amount)}
-                </p>
-              </div>
-            )}
+
+            {/* Purchase info card */}
+            {showApproveModal && (() => {
+              const p = purchases.find(x => x.id === showApproveModal);
+              if (!p) return null;
+              return (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm space-y-1.5">
+                  <p className="font-semibold text-gray-900">{p.product_name}</p>
+                  <p className="text-xs text-gray-500 font-mono">{p.barcode}</p>
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <span className="text-xs text-gray-500">Seller</span>
+                    <span className="text-xs font-medium text-gray-700">{p.seller || "—"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Qty Received</span>
+                    <span className="text-xs font-semibold text-gray-900">{Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}</span>
+                  </div>
+                  {Number(p.deducted_quantity) > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Deducted</span>
+                      <span className="text-xs font-semibold text-red-600">−{Number(p.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <span className="text-xs font-bold text-gray-700">Final Amount</span>
+                    <span className="text-sm font-bold text-emerald-700">{fmt(p.final_amount)}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-          <DialogFooter>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowApproveModal(null)} disabled={approvingId !== null}>
               Cancel
             </Button>
             <Button
               onClick={handleApprove}
               disabled={approvingId !== null}
-              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
             >
               {approvingId !== null && <Spinner className="text-white" />}
-              {approvingId !== null ? "Approving..." : "Confirm Approval"}
+              {approvingId !== null ? "Approving…" : "Confirm Approval"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Reject Modal */}
       <Dialog open={!!showRejectModal} onOpenChange={(o) => { if (!o) { setShowRejectModal(null); setRejectReason(""); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reject Purchase</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Please provide a reason for rejecting this purchase request.
-            </p>
-            <div>
-              <Label>Rejection Reason <span className="text-red-500">*</span></Label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="e.g. Invalid quantity, wrong product, etc."
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mt-1"
-              />
+        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+          <DialogTitle className="sr-only">Reject Purchase</DialogTitle>
+          {/* Red header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <XCircle className="h-5 w-5 text-white" />
             </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Reject Purchase</h2>
+              <p className="text-xs text-red-100 mt-0.5">This action will notify the clerk</p>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-3">
+            <Label className="font-semibold">Rejection Reason <span className="text-red-500">*</span></Label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Invalid quantity, wrong product, documentation missing…"
+              rows={3}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+            />
             {rejectReason.trim() === "" && (
               <p className="text-xs text-red-500">Rejection reason is required.</p>
             )}
           </div>
-          <DialogFooter>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setShowRejectModal(null); setRejectReason(""); }}>Cancel</Button>
             <Button
               onClick={handleReject}
               disabled={!rejectReason.trim() || rejectingId !== null}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 hover:bg-red-700 text-white gap-2"
             >
+              {rejectingId !== null && <Spinner className="text-white" />}
               {rejectingId !== null ? "Rejecting…" : "Confirm Reject"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>
@@ -341,25 +370,31 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
 
   return (
     <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-amber-600" />
-            Update Buying Price
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Set Reference Price</DialogTitle>
+        {/* Amber header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <TrendingUp className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Set Reference Price</h2>
+            <p className="text-xs text-amber-100 mt-0.5 truncate max-w-[220px]">{product?.product_name ?? ""}</p>
+          </div>
+        </div>
 
         {product && (
-          <div className="space-y-4">
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="font-semibold text-gray-900">{product.product_name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Unit: {product.unit} ({product.unit_abbreviation})
-                {product.current_price != null && (
-                  <> · Current: <span className="font-semibold text-amber-700">{fmtShort(product.current_price)}/{product.unit_abbreviation}</span></>
-                )}
-              </p>
-            </div>
+          <div className="px-6 py-5 space-y-4">
+            {/* Current price card */}
+            {product.current_price != null && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-xs text-amber-600 font-semibold uppercase tracking-wide">Current Reference Price</p>
+                <p className="text-2xl font-bold text-amber-700 tabular-nums mt-0.5">
+                  {fmtShort(product.current_price)}
+                  <span className="text-sm font-normal text-gray-500"> / {product.unit_abbreviation}</span>
+                </p>
+              </div>
+            )}
 
             <div>
               <Label className="mb-1.5 block font-semibold text-sm">
@@ -370,7 +405,7 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
                 value={price}
                 onChange={(e) => setPrice_(e.target.value)}
                 placeholder="e.g. 40.00"
-                className="h-10"
+                className="h-11 text-lg font-bold"
                 autoFocus
               />
             </div>
@@ -384,12 +419,15 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. Market price increase, new supplier rate…"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               />
             </div>
 
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
-              <strong>Historical transactions are not affected.</strong> Only new purchases will use this price.
+            <div className="flex items-start gap-2.5 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-blue-700">
+                <strong>Historical transactions are not affected.</strong> Only new purchases will use this price.
+              </p>
             </div>
 
             {error && (
@@ -400,13 +438,13 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
           </div>
         )}
 
-        <DialogFooter>
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white gap-2">
             {saving && <Spinner className="text-white" />}
-            {saving ? "Saving…" : "Save Price"}
+            {saving ? "Saving…" : "Set Price"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -433,49 +471,56 @@ function PriceHistoryPanel({ productId, productName, unitAbbr, onClose }: {
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <History className="h-5 w-5 text-blue-600" />
-            Price History — {productName}
-          </DialogTitle>
-        </DialogHeader>
-
-        {loading ? (
-          <div className="py-8 text-center text-gray-400 flex items-center justify-center gap-2">
-            <Spinner className="text-blue-500" /> Loading…
+      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden max-h-[80vh]">
+        <DialogTitle className="sr-only">Price History</DialogTitle>
+        {/* Amber header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-600 rounded-t-lg shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <History className="h-5 w-5 text-white" />
           </div>
-        ) : history.length === 0 ? (
-          <p className="py-8 text-center text-gray-400 text-sm">No price history yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {history.map((h, idx) => (
-              <div key={h.id} className={`p-3 rounded-lg border ${idx === 0 ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-white"}`}>
-                <div className="flex items-center justify-between">
-                  <span className={`text-lg font-bold tabular-nums ${idx === 0 ? "text-amber-700" : "text-gray-700"}`}>
-                    {fmtShort(h.price_per_unit)}/{unitAbbr}
-                  </span>
-                  {idx === 0 && (
-                    <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
-                      Current
+          <div>
+            <h2 className="text-base font-bold text-white">Price History</h2>
+            <p className="text-xs text-amber-100 mt-0.5 truncate max-w-[240px]">{productName}</p>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5">
+          {loading ? (
+            <div className="py-8 text-center text-gray-400 flex items-center justify-center gap-2">
+              <Spinner className="text-amber-500" /> Loading…
+            </div>
+          ) : history.length === 0 ? (
+            <p className="py-8 text-center text-gray-400 text-sm">No price history yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {history.map((h, idx) => (
+                <div key={h.id} className={`p-3 rounded-lg border-2 ${idx === 0 ? "border-amber-400 bg-amber-50" : "border-gray-200 bg-white"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xl font-bold tabular-nums ${idx === 0 ? "text-amber-700" : "text-gray-700"}`}>
+                      {fmtShort(h.price_per_unit)}<span className="text-sm font-normal text-gray-500">/{unitAbbr}</span>
                     </span>
+                    {idx === 0 && (
+                      <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {fmtDate(h.effective_from)} · by {h.changed_by_name}
+                  </p>
+                  {h.reason && (
+                    <p className="text-xs text-gray-600 mt-1 italic bg-gray-50 border border-gray-100 rounded px-2 py-1">"{h.reason}"</p>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {fmtDate(h.effective_from)} · by {h.changed_by_name}
-                </p>
-                {h.reason && (
-                  <p className="text-xs text-gray-600 mt-1 italic">"{h.reason}"</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
 
-        <DialogFooter>
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -762,170 +807,89 @@ function MarketBasedWithTabs({
 
       {/* Transaction Detail Modal */}
       <Dialog open={!!selectedPurchase} onOpenChange={(o) => { if (!o) setSelectedPurchase(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-blue-600" />
-              Transaction Details
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
+          <DialogTitle className="sr-only">Transaction Details</DialogTitle>
+          {/* Slate header */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <History className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Transaction Details</h2>
+              <p className="text-xs text-slate-300 mt-0.5 truncate max-w-[300px]">{selectedPurchase?.product_name ?? ""}</p>
+            </div>
+          </div>
 
           {selectedPurchase && (
-            <div className="space-y-4">
-              {/* Product Information */}
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="font-semibold text-gray-900 mb-2">Product Information</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Product Name</p>
-                    <p className="font-medium text-gray-900">{selectedPurchase.product_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Barcode</p>
-                    <p className="font-mono text-gray-900">{selectedPurchase.barcode}</p>
-                  </div>
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+              {/* Product + Quantity */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Product</p>
+                  <p className="font-semibold text-gray-900">{selectedPurchase.product_name}</p>
+                  <p className="font-mono text-xs text-gray-500">{selectedPurchase.barcode}</p>
                 </div>
-              </div>
-
-              {/* Quantity & Pricing */}
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <h3 className="font-semibold text-gray-900 mb-2">Quantity & Pricing</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Quantity Received</p>
-                    <p className="font-bold text-gray-900 tabular-nums">
-                      {Number(selectedPurchase.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Deducted Quantity</p>
-                    <p className="font-bold text-red-600 tabular-nums">
-                      {Number(selectedPurchase.deducted_quantity) > 0
-                        ? `−${Number(selectedPurchase.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} ${selectedPurchase.unit_name}`
-                        : "—"
-                      }
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Payable Quantity</p>
-                    <p className="font-bold text-emerald-700 tabular-nums">
-                      {Number(selectedPurchase.payable_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Reference Price</p>
-                    <p className="font-medium text-gray-900 tabular-nums">{fmtShort(selectedPurchase.reference_price)}/{selectedPurchase.unit_name}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Financial Details */}
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h3 className="font-semibold text-gray-900 mb-2">Financial Details</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Gross Amount</p>
-                    <p className="font-medium text-gray-900 tabular-nums">{fmt(selectedPurchase.gross_amount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Deduction Amount</p>
-                    <p className="font-medium text-red-600 tabular-nums">
-                      {Number(selectedPurchase.deduction_amount) > 0
-                        ? `−${fmt(selectedPurchase.deduction_amount)}`
-                        : "—"
-                      }
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Final Amount</p>
-                    <p className="font-bold text-xl text-emerald-700 tabular-nums">{fmt(selectedPurchase.final_amount)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Information */}
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <h3 className="font-semibold text-gray-900 mb-2">Status Information</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Approval Status</p>
-                    {selectedPurchase.approval_status ? (
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        selectedPurchase.approval_status === "APPROVED" ? "bg-green-100 text-green-700" :
-                        selectedPurchase.approval_status === "REJECTED" ? "bg-red-100 text-red-700" :
-                        "bg-yellow-100 text-yellow-700"
-                      }`}>
-                        {selectedPurchase.approval_status}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Quantity Breakdown</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Received</span><span className="font-semibold">{Number(selectedPurchase.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}</span></div>
+                    {Number(selectedPurchase.deducted_quantity) > 0 && (
+                      <div className="flex justify-between"><span className="text-gray-500">Deducted</span><span className="font-semibold text-red-600">−{Number(selectedPurchase.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })}</span></div>
                     )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Payment Status</p>
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      selectedPurchase.payment_status === "PAID" ? "bg-green-100 text-green-700" :
-                      selectedPurchase.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" :
-                      "bg-red-100 text-red-700"
-                    }`}>
-                      {selectedPurchase.payment_status}
-                    </span>
+                    <div className="flex justify-between border-t border-amber-200 pt-1"><span className="font-semibold text-gray-700">Payable</span><span className="font-bold text-emerald-700">{Number(selectedPurchase.payable_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {selectedPurchase.unit_name}</span></div>
                   </div>
                 </div>
               </div>
 
-              {/* Additional Information */}
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <h3 className="font-semibold text-gray-900 mb-2">Additional Information</h3>
+              {/* Financials */}
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-3">Financial Details</p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Seller</p>
-                    <p className="font-medium text-gray-900">{selectedPurchase.seller || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Transaction Date</p>
-                    <p className="font-medium text-gray-900">{fmtDateOnly(selectedPurchase.transaction_date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Recorded By</p>
-                    <p className="font-medium text-gray-900">{selectedPurchase.recorded_by_name || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Prepared By</p>
-                    <p className="font-medium text-gray-900">{selectedPurchase.prepared_by_name || "—"}</p>
-                  </div>
-                  {selectedPurchase.approved_by_name && (
-                    <div>
-                      <p className="text-xs text-gray-500">Approved By</p>
-                      <p className="font-medium text-gray-900">{selectedPurchase.approved_by_name}</p>
-                    </div>
+                  <div className="flex justify-between"><span className="text-gray-500">Ref. Price</span><span className="font-medium">{fmtShort(selectedPurchase.reference_price)}/{selectedPurchase.unit_name}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Gross Amount</span><span className="font-medium">{fmt(selectedPurchase.gross_amount)}</span></div>
+                  {Number(selectedPurchase.deduction_amount) > 0 && (
+                    <div className="flex justify-between"><span className="text-gray-500">Deduction</span><span className="font-medium text-red-600">−{fmt(selectedPurchase.deduction_amount)}</span></div>
                   )}
-                  {selectedPurchase.approved_at && (
-                    <div>
-                      <p className="text-xs text-gray-500">Approved At</p>
-                      <p className="font-medium text-gray-900">{fmtDate(selectedPurchase.approved_at)}</p>
-                    </div>
-                  )}
+                  <div className="col-span-2 flex justify-between pt-1 border-t border-emerald-200">
+                    <span className="font-bold text-gray-700">Final Amount</span>
+                    <span className="font-bold text-xl text-emerald-700 tabular-nums">{fmt(selectedPurchase.final_amount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status + Meta */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status & Info</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><span className="text-gray-500 text-xs block mb-0.5">Approval</span>
+                    {selectedPurchase.approval_status ? (
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${selectedPurchase.approval_status === "APPROVED" ? "bg-green-100 text-green-700" : selectedPurchase.approval_status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>{selectedPurchase.approval_status}</span>
+                    ) : "—"}
+                  </div>
+                  <div><span className="text-gray-500 text-xs block mb-0.5">Payment</span>
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${selectedPurchase.payment_status === "PAID" ? "bg-green-100 text-green-700" : selectedPurchase.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>{selectedPurchase.payment_status}</span>
+                  </div>
+                  <div><span className="text-gray-500 text-xs block mb-0.5">Seller</span><span className="font-medium">{selectedPurchase.seller || "—"}</span></div>
+                  <div><span className="text-gray-500 text-xs block mb-0.5">Date</span><span className="font-medium">{fmtDateOnly(selectedPurchase.transaction_date)}</span></div>
+                  <div><span className="text-gray-500 text-xs block mb-0.5">Submitted By</span><span className="font-medium">{selectedPurchase.prepared_by_name || "—"}</span></div>
+                  {selectedPurchase.approved_by_name && <div><span className="text-gray-500 text-xs block mb-0.5">Approved By</span><span className="font-medium">{selectedPurchase.approved_by_name}</span></div>}
                   {selectedPurchase.rejection_reason && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-gray-500">Rejection Reason</p>
-                      <p className="font-medium text-red-600">{selectedPurchase.rejection_reason}</p>
+                    <div className="col-span-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                      <span className="text-gray-500 text-xs block mb-0.5">Rejection Reason</span>
+                      <span className="font-medium text-red-700">{selectedPurchase.rejection_reason}</span>
                     </div>
                   )}
                   {selectedPurchase.remarks && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-gray-500">Remarks</p>
-                      <p className="font-medium text-gray-900">{selectedPurchase.remarks}</p>
-                    </div>
+                    <div className="col-span-2"><span className="text-gray-500 text-xs block mb-0.5">Remarks</span><span className="font-medium text-gray-900">{selectedPurchase.remarks}</span></div>
                   )}
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
             <Button variant="outline" onClick={() => setSelectedPurchase(null)}>Close</Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -12,13 +12,15 @@ interface PaymentPanelProps {
   cartLength: number;
   customerName: string;
   isProcessing: boolean;
+  /** When true the server is unreachable — payment button is disabled. */
+  isOffline: boolean;
   onProcessPayment: () => void;
   onHold: () => void;
   onHoldOrders: () => void;
   onReturn: () => void;
+  onPendingReturns: () => void;
   onVoid: () => void;
   onVoidRequests: () => void;
-  unseenVoidDecisions: number;
   pendingReturnsCount: number;
   hasApprovedReturns: boolean;
   pendingVoidRequestsCount: number;
@@ -28,8 +30,9 @@ interface PaymentPanelProps {
 export default function PaymentPanel({
   subtotalCents, taxCents, totalCents, taxRate,
   cashTendered, setCashTendered,
-  cartLength, customerName, isProcessing,
-  onProcessPayment, onHold, onHoldOrders, onReturn, onVoid, onVoidRequests, unseenVoidDecisions, pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
+  cartLength, customerName, isProcessing, isOffline,
+  onProcessPayment, onHold, onHoldOrders, onReturn, onPendingReturns, onVoid, onVoidRequests,
+  pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
 }: PaymentPanelProps) {
   const cashCents   = parseCashInput(cashTendered);
   const changeCents = cashCents >= totalCents ? cashCents - totalCents : null;
@@ -107,11 +110,19 @@ export default function PaymentPanel({
       <div className="flex-1 flex flex-col justify-end gap-2">
         <Button
           className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
-          disabled={cartLength === 0 || cashCents < totalCents || !customerName.trim() || isProcessing}
+          disabled={cartLength === 0 || cashCents < totalCents || !customerName.trim() || isProcessing || isOffline}
           onClick={onProcessPayment}
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center">₱</span>}
-          {isProcessing ? "Processing..." : !customerName.trim() ? "Enter Customer Name" : cashCents > 0 && cashCents < totalCents ? "Insufficient Cash" : "Process Payment"}
+          {isProcessing
+            ? "Processing..."
+            : isOffline
+            ? "Server Unreachable"
+            : !customerName.trim()
+            ? "Enter Customer Name"
+            : cashCents > 0 && cashCents < totalCents
+            ? "Insufficient Cash"
+            : "Process Payment"}
         </Button>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
@@ -137,12 +148,14 @@ export default function PaymentPanel({
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
+            {/* BUG-08 FIX: Return button opens pending-returns panel when approved returns exist,
+                otherwise opens the new-return submission panel. */}
             <Button
               variant="outline"
               className="relative h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
-              onClick={onReturn}
+              onClick={hasApprovedReturns ? onPendingReturns : onReturn}
             >
-              <RotateCcw className="h-4 w-4" /> Return
+              <RotateCcw className="h-4 w-4" /> {hasApprovedReturns ? "Process Return" : "Return"}
               {pendingReturnsCount > 0 && (
                 <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs font-bold ${hasApprovedReturns ? "bg-green-500" : "bg-purple-500"}`}>
                   {pendingReturnsCount}

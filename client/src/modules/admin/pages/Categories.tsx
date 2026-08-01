@@ -1,15 +1,11 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, FolderOpen, X, AlertCircle, RefreshCw, Tag, Package, Check, X as XIcon } from "lucide-react";
+import { Plus, Edit2, Trash2, FolderOpen, X, AlertCircle, RefreshCw, Tag, Package, Check, X as XIcon, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
-} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -80,51 +76,67 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
     }
   };
 
+  const isAdd = mode === "add";
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Add New Category" : "Edit Category"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-700">{error}</p>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{isAdd ? "Add New Category" : "Edit Category"}</DialogTitle>
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <FolderOpen className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">{isAdd ? "Add Category" : "Edit Category"}</h2>
+            <p className={`text-xs mt-0.5 ${isAdd ? "text-blue-100" : "text-gray-300"}`}>
+              {isAdd ? "Define a new product category" : "Update category information"}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-5 space-y-4">
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+            <div>
+              <Label className="mb-1.5 block font-semibold">
+                Category Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Hand Tools"
+                disabled={isLoading}
+                autoFocus
+              />
             </div>
-          )}
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Category Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Hand Tools"
-              disabled={isLoading}
-              autoFocus
-            />
+            <div>
+              <Label className="mb-1.5 block font-semibold">
+                Description <span className="text-gray-400 font-normal">(optional)</span>
+              </Label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                disabled={isLoading}
+                placeholder="Brief description of this category…"
+                className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              />
+            </div>
           </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Description <span className="text-gray-400 font-normal">(optional)</span>
-            </Label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              disabled={isLoading}
-              placeholder="Brief description of this category…"
-              className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            />
-          </div>
-          <DialogFooter>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <Spinner className="mr-2 text-white" />}
-              {isLoading ? "Saving…" : mode === "add" ? "Add Category" : "Save Changes"}
+              {isLoading ? "Saving…" : isAdd ? "Add Category" : "Save Changes"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -191,119 +203,158 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
     }
   };
 
+  const isAdd = mode === "add";
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Add New Unit" : "Edit Unit"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-700">{error}</p>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{isAdd ? "Add New Unit" : "Edit Unit"}</DialogTitle>
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Ruler className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">{isAdd ? "Add Unit" : "Edit Unit"}</h2>
+            <p className={`text-xs mt-0.5 ${isAdd ? "text-blue-100" : "text-gray-300"}`}>
+              {isAdd ? "Define a new unit of measurement" : "Update unit details"}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-5 space-y-4">
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Basic Info */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Basic Info</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Unit Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={unitName}
+                    onChange={(e) => setUnitName(e.target.value)}
+                    placeholder="e.g. Kilogram"
+                    disabled={isLoading}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Abbreviation <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={abbreviation}
+                    onChange={(e) => setAbbreviation(e.target.value)}
+                    placeholder="e.g. kg"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
             </div>
-          )}
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Unit Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={unitName}
-              onChange={(e) => setUnitName(e.target.value)}
-              placeholder="e.g. Kilogram"
-              disabled={isLoading}
-              autoFocus
-            />
+
+            {/* Configuration */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Configuration</p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Unit Type <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={unitType} onValueChange={(value: any) => setUnitType(value)} disabled={isLoading || isLocked}>
+                    <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
+                      <SelectValue placeholder="Select unit type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Count">Count</SelectItem>
+                      <SelectItem value="Weight">Weight</SelectItem>
+                      <SelectItem value="Volume">Volume</SelectItem>
+                      <SelectItem value="Length">Length</SelectItem>
+                      <SelectItem value="Area">Area</SelectItem>
+                      <SelectItem value="Packaging">Packaging</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isLocked && (
+                    <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg mt-2">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700">Unit Type cannot be changed because this unit is assigned to products.</p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Decimal Support <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={allowDecimal ? "1" : "0"} onValueChange={(value: "0" | "1") => setAllowDecimal(value === "1")} disabled={isLoading || isLocked}>
+                    <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
+                      <SelectValue placeholder="Select option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Whole Numbers Only</SelectItem>
+                      <SelectItem value="1">Allow Decimal Quantities</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isLocked && (
+                    <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg mt-2">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700">Decimal Support cannot be changed because this unit is assigned to products.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Details</p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Status <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={status} onValueChange={(value: "Active" | "Inactive") => setStatus(value)} disabled={isLoading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-1.5 block font-semibold">
+                    Description <span className="text-gray-400 font-normal">(optional)</span>
+                  </Label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                    disabled={isLoading}
+                    placeholder="Brief description of this unit…"
+                    className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Abbreviation <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={abbreviation}
-              onChange={(e) => setAbbreviation(e.target.value)}
-              placeholder="e.g. kg"
-              disabled={isLoading}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Unit Type <span className="text-red-500">*</span>
-            </Label>
-            <Select value={unitType} onValueChange={(value: any) => setUnitType(value)} disabled={isLoading || isLocked}>
-              <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
-                <SelectValue placeholder="Select unit type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Count">Count</SelectItem>
-                <SelectItem value="Weight">Weight</SelectItem>
-                <SelectItem value="Volume">Volume</SelectItem>
-                <SelectItem value="Length">Length</SelectItem>
-                <SelectItem value="Area">Area</SelectItem>
-                <SelectItem value="Packaging">Packaging</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            {isLocked && (
-              <p className="text-xs text-amber-600 mt-1">
-                Unit Type cannot be changed because this unit is assigned to products.
-              </p>
-            )}
-          </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Decimal Support <span className="text-red-500">*</span>
-            </Label>
-            <Select value={allowDecimal ? "1" : "0"} onValueChange={(value: "0" | "1") => setAllowDecimal(value === "1")} disabled={isLoading || isLocked}>
-              <SelectTrigger className={isLocked ? "bg-gray-50" : ""}>
-                <SelectValue placeholder="Select option" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Whole Numbers Only</SelectItem>
-                <SelectItem value="1">Allow Decimal Quantities</SelectItem>
-              </SelectContent>
-            </Select>
-            {isLocked && (
-              <p className="text-xs text-amber-600 mt-1">
-                Decimal Support cannot be changed because this unit is assigned to products.
-              </p>
-            )}
-          </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Status <span className="text-red-500">*</span>
-            </Label>
-            <Select value={status} onValueChange={(value: "Active" | "Inactive") => setStatus(value)} disabled={isLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Description <span className="text-gray-400 font-normal">(optional)</span>
-            </Label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              disabled={isLoading}
-              placeholder="Brief description of this unit…"
-              className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            />
-          </div>
-          <DialogFooter>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <Spinner className="mr-2 text-white" />}
-              {isLoading ? "Saving…" : mode === "add" ? "Add Unit" : "Save Changes"}
+              {isLoading ? "Saving…" : isAdd ? "Add Unit" : "Save Changes"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -339,35 +390,49 @@ function DeleteDialog({ category, onClose, onDeleted }: DeleteDialogProps) {
   };
 
   return (
-    <AlertDialog open={!!category} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Category?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete{" "}
-            <span className="font-semibold text-gray-900">{category?.category_name}</span>.
-            This cannot be undone. Categories in use by active products cannot be deleted.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+    <Dialog open={!!category} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Delete Category</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5 text-white" />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+          <div>
+            <h2 className="text-base font-bold text-white">Delete Category</h2>
+            <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Category name in gray card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm font-semibold text-gray-900">{category?.category_name}</p>
+          </div>
+          <p className="text-sm text-gray-700">
+            This will permanently delete this category. Categories in use by active products cannot be deleted.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {isLoading && <Spinner className="mr-2 text-white" />}
+            {isLoading && <Spinner className="text-white" />}
             {isLoading ? "Deleting…" : "Delete"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -401,7 +466,6 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
     } catch (err) {
       const errorMsg = extractError(err);
       setError(errorMsg);
-      // Check if error message suggests marking as inactive
       if (errorMsg.includes("mark it as Inactive") || errorMsg.includes("assigned to")) {
         setCanMarkInactive(true);
       }
@@ -432,46 +496,61 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
   };
 
   return (
-    <AlertDialog open={!!unit} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Unit?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete{" "}
-            <span className="font-semibold text-gray-900">{unit?.unit_name}</span> ({unit?.abbreviation}).
-            This cannot be undone. Units in use by active products cannot be deleted.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+    <Dialog open={!!unit} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Delete Unit</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5 text-white" />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+          <div>
+            <h2 className="text-base font-bold text-white">Delete Unit</h2>
+            <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Unit info in gray card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm font-semibold text-gray-900">{unit?.unit_name}</p>
+            <p className="text-xs text-gray-500 mt-0.5 font-mono">{unit?.abbreviation}</p>
+          </div>
+          <p className="text-sm text-gray-700">
+            This will permanently delete this unit. Units in use by active products cannot be deleted.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
           {canMarkInactive ? (
             <Button
               onClick={handleMarkInactive}
               disabled={isLoading}
-              className="bg-amber-600 hover:bg-amber-700 text-white"
+              className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
             >
-              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading && <Spinner className="text-white" />}
               {isLoading ? "Marking Inactive…" : "Mark as Inactive"}
             </Button>
           ) : (
-            <AlertDialogAction
+            <Button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              className="bg-red-600 hover:bg-red-700 text-white gap-2"
             >
-              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading && <Spinner className="text-white" />}
               {isLoading ? "Deleting…" : "Delete"}
-            </AlertDialogAction>
+            </Button>
           )}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

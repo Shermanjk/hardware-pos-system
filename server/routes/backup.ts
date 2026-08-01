@@ -23,13 +23,16 @@ router.post("/create", async (req: Request, res: Response) => {
 
     if (result.success) {
       res.status(200).json({
+        success: true,
         message: "Backup created successfully",
         filename: result.filename,
         filePath: result.filePath,
         fileSize: result.fileSize,
+        stats: result.stats,
       });
     } else {
       res.status(500).json({
+        success: false,
         message: "Failed to create backup",
         error: result.error,
       });

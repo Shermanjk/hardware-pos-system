@@ -107,4 +107,43 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/auth/refresh ───────────────────────────────────────────────────
+// Silently renew a valid, non-expired JWT. Called by the client ~10 min before
+// expiry so cashiers and admins never get force-logged-out mid-shift.
+//
+// The `authenticate` middleware already rejects expired tokens with 401, so no
+// additional expiry check is needed here.
+import { authenticate } from "../middleware/authenticate.js";
+
+router.post("/refresh", authenticate, async (req: Request, res: Response) => {
+  const user = req.user!;
+
+  // mustChangePassword tokens are restricted 15-min tokens used only during
+  // first-login password setup. They must not be refreshed into normal tokens.
+  if ((user as any).mustChangePassword) {
+    res.status(403).json({ message: "Password change required before token refresh." });
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    res.status(500).json({ message: "Server configuration error." });
+    return;
+  }
+
+  const newToken = jwt.sign(
+    {
+      id:          user.id,
+      full_name:   user.full_name,
+      username:    user.username,
+      role:        user.role,
+      employee_id: user.employee_id ?? null,
+    },
+    secret,
+    { expiresIn: "12h" }
+  );
+
+  res.status(200).json({ token: newToken });
+});
+
 export default router;

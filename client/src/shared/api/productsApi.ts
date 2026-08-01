@@ -1,5 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,8 +84,8 @@ export interface CreateProductPayload {
   category_id: number;
   supplier_id?: number | null;
   unit_id: number;
-  cost_price?: number;       // not required for MARKET_BASED
-  selling_price?: number;    // not required for MARKET_BASED
+  cost_price?: number;
+  selling_price?: number;
   reorder_level?: number;
   is_returnable?: boolean;
   status?: "Active" | "Inactive";
@@ -104,13 +103,6 @@ export interface ProductFilters {
   status?: StockStatus | "";
 }
 
-// ─── Axios auth headers ───────────────────────────────────────────────────────
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 export async function getProducts(filters: ProductFilters = {}): Promise<ProductRecord[]> {
@@ -120,119 +112,115 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Product
   if (filters.supplier_id) params.supplier_id = String(filters.supplier_id);
   if (filters.status)      params.status      = filters.status;
 
-  const res = await axios.get<ProductRecord[]>("/api/products", {
-    headers: authHeaders(),
-    params,
-  });
+  const res = await httpClient.get<ProductRecord[]>("/api/products", { params });
   return res.data;
 }
 
 export async function getProduct(id: number): Promise<ProductRecord> {
-  const res = await axios.get<ProductRecord>(`/api/products/${id}`, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<ProductRecord>(`/api/products/${id}`);
   return res.data;
 }
 
 export async function getNextBarcode(): Promise<string> {
-  const res = await axios.get<{ barcode: string }>("/api/products/next-barcode", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<{ barcode: string }>("/api/products/next-barcode");
   return res.data.barcode;
 }
 
 export async function createProduct(payload: CreateProductPayload): Promise<ProductRecord> {
-  const res = await axios.post<ProductRecord>("/api/products", payload, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.post<ProductRecord>("/api/products", payload);
   return res.data;
 }
 
 export async function updateProduct(id: number, payload: UpdateProductPayload): Promise<ProductRecord> {
-  const res = await axios.put<ProductRecord>(`/api/products/${id}`, payload, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.put<ProductRecord>(`/api/products/${id}`, payload);
   return res.data;
 }
 
 export async function deleteProduct(id: number): Promise<{ message: string; soft: boolean }> {
-  const res = await axios.delete<{ message: string; soft: boolean }>(`/api/products/${id}`, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.delete<{ message: string; soft: boolean }>(`/api/products/${id}`);
   return res.data;
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getCategories(): Promise<Category[]> {
-  const res = await axios.get<Category[]>("/api/categories", { headers: authHeaders() });
+  const res = await httpClient.get<Category[]>("/api/categories");
   return res.data;
 }
 
-export async function createCategory(payload: { category_name: string; description?: string }): Promise<Category> {
-  const res = await axios.post<Category>("/api/categories", payload, { headers: authHeaders() });
+export async function createCategory(payload: {
+  category_name: string;
+  description?: string;
+}): Promise<Category> {
+  const res = await httpClient.post<Category>("/api/categories", payload);
   return res.data;
 }
 
-export async function updateCategory(id: number, payload: { category_name: string; description?: string }): Promise<Category> {
-  const res = await axios.put<Category>(`/api/categories/${id}`, payload, { headers: authHeaders() });
+export async function updateCategory(
+  id: number,
+  payload: { category_name: string; description?: string }
+): Promise<Category> {
+  const res = await httpClient.put<Category>(`/api/categories/${id}`, payload);
   return res.data;
 }
 
 export async function deleteCategory(id: number): Promise<void> {
-  await axios.delete(`/api/categories/${id}`, { headers: authHeaders() });
+  await httpClient.delete(`/api/categories/${id}`);
 }
 
 // ─── Suppliers ────────────────────────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {
-  const res = await axios.get<Supplier[]>("/api/suppliers", { headers: authHeaders() });
+  const res = await httpClient.get<Supplier[]>("/api/suppliers");
   return res.data;
 }
 
 // ─── Units ────────────────────────────────────────────────────────────────────
 
 export async function getUnits(): Promise<Unit[]> {
-  const res = await axios.get<Unit[]>("/api/units", { headers: authHeaders() });
+  const res = await httpClient.get<Unit[]>("/api/units");
   return res.data;
 }
 
-export async function createUnit(payload: { 
-  unit_name: string; 
-  abbreviation: string; 
+export async function createUnit(payload: {
+  unit_name: string;
+  abbreviation: string;
   unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
   allow_decimal: boolean;
   description?: string | null;
   status?: "Active" | "Inactive";
 }): Promise<Unit> {
-  const res = await axios.post<Unit>("/api/units", payload, { headers: authHeaders() });
+  const res = await httpClient.post<Unit>("/api/units", payload);
   return res.data;
 }
 
-export async function updateUnit(id: number, payload: { 
-  unit_name: string; 
-  abbreviation: string; 
-  unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
-  allow_decimal: boolean;
-  description?: string | null;
-  status?: "Active" | "Inactive";
-}): Promise<Unit> {
-  const res = await axios.put<Unit>(`/api/units/${id}`, payload, { headers: authHeaders() });
+export async function updateUnit(
+  id: number,
+  payload: {
+    unit_name: string;
+    abbreviation: string;
+    unit_type: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
+    allow_decimal: boolean;
+    description?: string | null;
+    status?: "Active" | "Inactive";
+  }
+): Promise<Unit> {
+  const res = await httpClient.put<Unit>(`/api/units/${id}`, payload);
   return res.data;
 }
 
 export async function deleteUnit(id: number): Promise<void> {
-  await axios.delete(`/api/units/${id}`, { headers: authHeaders() });
+  await httpClient.delete(`/api/units/${id}`);
 }
 
-// ─── Cashier product lookup — search by barcode or name ──────────────────────
+// ─── Cashier product lookup ───────────────────────────────────────────────────
 
 export interface CashierProduct {
   id: number;
   barcode: string;
   product_name: string;
   selling_price: number;
-  quantity: number;       // current stock
+  quantity: number;
   unit: string;
   unit_abbreviation: string;
   unit_type?: "Count" | "Weight" | "Volume" | "Length" | "Area" | "Packaging" | "Other";
@@ -245,8 +233,7 @@ export interface CashierProduct {
 }
 
 export async function lookupProduct(query: string): Promise<CashierProduct[]> {
-  const res = await axios.get<CashierProduct[]>("/api/products/lookup", {
-    headers: authHeaders(),
+  const res = await httpClient.get<CashierProduct[]>("/api/products/lookup", {
     params: { q: query },
   });
   return res.data;
@@ -264,15 +251,18 @@ export interface CreateSupplierPayload {
 }
 
 export async function createSupplier(payload: CreateSupplierPayload): Promise<Supplier> {
-  const res = await axios.post<Supplier>("/api/suppliers", payload, { headers: authHeaders() });
+  const res = await httpClient.post<Supplier>("/api/suppliers", payload);
   return res.data;
 }
 
-export async function updateSupplier(id: number, payload: CreateSupplierPayload): Promise<Supplier> {
-  const res = await axios.put<Supplier>(`/api/suppliers/${id}`, payload, { headers: authHeaders() });
+export async function updateSupplier(
+  id: number,
+  payload: CreateSupplierPayload
+): Promise<Supplier> {
+  const res = await httpClient.put<Supplier>(`/api/suppliers/${id}`, payload);
   return res.data;
 }
 
 export async function deleteSupplier(id: number): Promise<void> {
-  await axios.delete(`/api/suppliers/${id}`, { headers: authHeaders() });
+  await httpClient.delete(`/api/suppliers/${id}`);
 }

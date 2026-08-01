@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { pool } from "../db";
 import { authenticate } from "../middleware/authenticate";
 import { logAuditEvent } from "../utils/auditLogger";
+import { sendVoidDecision } from "../ws.js";
 import { z } from "zod";
 
 const router = Router();
@@ -453,33 +454,40 @@ router.post("/stock-count-standard", async (req: Request, res: Response) => {
     return;
   }
 
+  const conn = await pool.getConnection();
   try {
     const data = createStockCountRequestSchema.parse(req.body);
 
-    // Generate reference number
-    const [seqResult] = await pool.execute<any[]>(
-      "SELECT current_number FROM invoice_sequences WHERE document_type = 'STOCK COUNT ADJUSTMENT REQUEST'"
+    await conn.beginTransaction();
+
+    // BUG-09 FIX: Use FOR UPDATE to prevent race condition on sequence number
+    const [seqResult] = await conn.execute<any[]>(
+      "SELECT id, current_number FROM invoice_sequences WHERE document_type = 'STOCK COUNT ADJUSTMENT REQUEST' LIMIT 1 FOR UPDATE"
     );
     const seq = seqResult[0];
     const nextNum = (seq?.current_number || 0) + 1;
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const reference = `SCAR-${dateStr}-${String(nextNum).padStart(6, '0')}`;
 
+    // Update sequence first (inside transaction)
+    if (seq) {
+      await conn.execute(
+        "UPDATE invoice_sequences SET current_number = ? WHERE id = ?",
+        [nextNum, seq.id]
+      );
+    }
+
     // Insert request
-    await pool.execute(
+    await conn.execute(
       `INSERT INTO stock_count_adjustment_requests 
        (product_id, system_quantity, physical_quantity, reason, remarks, prepared_by, reference)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [data.product_id, data.system_quantity, data.physical_quantity, data.reason, data.remarks || null, userId, reference]
     );
 
-    // Update sequence
-    await pool.execute(
-      "UPDATE invoice_sequences SET current_number = ? WHERE document_type = 'STOCK COUNT ADJUSTMENT REQUEST'",
-      [nextNum]
-    );
+    await conn.commit();
 
-    // Log audit
+    // Log audit outside transaction
     await logAuditEvent({
       action: "STOCK_COUNT_ADJUSTMENT_REQUEST_CREATED",
       performedById: userId,
@@ -491,8 +499,11 @@ router.post("/stock-count-standard", async (req: Request, res: Response) => {
 
     res.status(201).json({ reference });
   } catch (err) {
+    await conn.rollback();
     console.error("[requests/POST /stock-count-standard]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
+  } finally {
+    conn.release();
   }
 });
 
@@ -512,93 +523,227 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
     }
 
     if (type === "stock-count-standard") {
-      // Approve standard stock count request
-      const [rows] = await pool.execute<any[]>(
-        "SELECT * FROM stock_count_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL'",
-        [requestId]
-      );
-      if (rows.length === 0) {
-        res.status(404).json({ message: "Request not found or already processed." });
-        return;
+      // BUG-01 FIX: Actually apply the physical_quantity to the product's stock
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [rows] = await conn.execute<any[]>(
+          "SELECT * FROM stock_count_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL' FOR UPDATE",
+          [requestId]
+        );
+        if (rows.length === 0) {
+          await conn.rollback();
+          res.status(404).json({ message: "Request not found or already processed." });
+          return;
+        }
+
+        const request = rows[0];
+
+        // Fetch current product quantity for log
+        const [productRows] = await conn.execute<any[]>(
+          "SELECT id, quantity FROM products WHERE id = ? FOR UPDATE",
+          [request.product_id]
+        );
+        const currentQty = Number(productRows[0]?.quantity ?? 0);
+        const newQty = Number(request.physical_quantity);
+        const quantityChange = newQty - currentQty;
+
+        // Actually update product quantity to physical_quantity
+        await conn.execute(
+          "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
+          [newQty, request.product_id]
+        );
+
+        // Create inventory log with correct columns
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
+           VALUES (?, 'Adjustment', 'Stock Count Adjustment Approved', ?, ?, ?, ?, ?)`,
+          [request.product_id, quantityChange, currentQty, newQty, request.reference, adminId]
+        );
+
+        // Update request status
+        await conn.execute(
+          "UPDATE stock_count_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
+          [adminId, requestId]
+        );
+
+        await conn.commit();
+
+        await logAuditEvent({
+          action: "STOCK_COUNT_ADJUSTMENT_REQUEST_APPROVED",
+          performedById: adminId,
+          performedByUsername: adminUsername || "Unknown",
+          entityType: "stock_count_adjustment_request",
+          entityId: requestId,
+          metadata: { reference: request.reference, product_id: request.product_id },
+          previousValues: { quantity: currentQty },
+          newValues: { quantity: newQty },
+        });
+
+        res.status(200).json({ message: "Request approved." });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
       }
-
-      const request = rows[0];
-
-      // Update inventory
-      await pool.execute(
-        "UPDATE products SET quantity = quantity WHERE id = ?",
-        [request.product_id]
-      );
-
-      // Create inventory log
-      await pool.execute(
-        `INSERT INTO inventory_logs (product_id, quantity, transaction_type, action, reference, user_id)
-         VALUES (?, ?, 'Adjustment', 'Stock Count Adjustment Approved', ?, ?)`,
-        [request.product_id, request.physical_quantity, request.reference, adminId]
-      );
-
-      // Update request status
-      await pool.execute(
-        "UPDATE stock_count_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
-        [adminId, requestId]
-      );
-
-      // Log audit
-      await logAuditEvent({
-        action: "STOCK_COUNT_ADJUSTMENT_REQUEST_APPROVED",
-        performedById: adminId,
-        performedByUsername: adminUsername || "Unknown",
-        entityType: "stock_count_adjustment_request",
-        entityId: requestId,
-        metadata: { reference: request.reference, product_id: request.product_id },
-      });
-
-      res.status(200).json({ message: "Request approved." });
     } else if (type === "stock-count-market") {
-      // Approve market-based stock count request
-      const [rows] = await pool.execute<any[]>(
-        "SELECT * FROM market_based_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL'",
-        [requestId]
-      );
-      if (rows.length === 0) {
-        res.status(404).json({ message: "Request not found or already processed." });
-        return;
+      // BUG-01 FIX: Actually apply the physical_quantity to the product's stock
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [rows] = await conn.execute<any[]>(
+          "SELECT * FROM market_based_adjustment_requests WHERE id = ? AND status = 'PENDING_APPROVAL' FOR UPDATE",
+          [requestId]
+        );
+        if (rows.length === 0) {
+          await conn.rollback();
+          res.status(404).json({ message: "Request not found or already processed." });
+          return;
+        }
+
+        const request = rows[0];
+
+        // Fetch current product quantity for log
+        const [productRows] = await conn.execute<any[]>(
+          "SELECT id, quantity FROM products WHERE id = ? FOR UPDATE",
+          [request.product_id]
+        );
+        const currentQty = Number(productRows[0]?.quantity ?? 0);
+        const newQty = Number(request.physical_quantity);
+        const quantityChange = newQty - currentQty;
+
+        // Actually update product quantity to physical_quantity
+        await conn.execute(
+          "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
+          [newQty, request.product_id]
+        );
+
+        // Create inventory log with correct columns
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
+           VALUES (?, 'Adjustment', 'Market-Based Adjustment Approved', ?, ?, ?, ?, ?)`,
+          [request.product_id, quantityChange, currentQty, newQty, request.reference, adminId]
+        );
+
+        // Update request status
+        await conn.execute(
+          "UPDATE market_based_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
+          [adminId, requestId]
+        );
+
+        await conn.commit();
+
+        await logAuditEvent({
+          action: "MARKET_BASED_ADJUSTMENT_REQUEST_APPROVED",
+          performedById: adminId,
+          performedByUsername: adminUsername || "Unknown",
+          entityType: "market_based_adjustment_request",
+          entityId: requestId,
+          metadata: { reference: request.reference, product_id: request.product_id },
+          previousValues: { quantity: currentQty },
+          newValues: { quantity: newQty },
+        });
+
+        res.status(200).json({ message: "Request approved." });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
       }
-
-      const request = rows[0];
-
-      // Update inventory
-      await pool.execute(
-        "UPDATE products SET quantity = quantity WHERE id = ?",
-        [request.product_id]
-      );
-
-      // Create inventory log
-      await pool.execute(
-        `INSERT INTO inventory_logs (product_id, quantity, transaction_type, action, reference, user_id)
-         VALUES (?, ?, 'Adjustment', 'Market-Based Adjustment Approved', ?, ?)`,
-        [request.product_id, request.physical_quantity, request.reference, adminId]
-      );
-
-      // Update request status
-      await pool.execute(
-        "UPDATE market_based_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?",
-        [adminId, requestId]
-      );
-
-      // Log audit
-      await logAuditEvent({
-        action: "MARKET_BASED_ADJUSTMENT_REQUEST_APPROVED",
-        performedById: adminId,
-        performedByUsername: adminUsername || "Unknown",
-        entityType: "market_based_adjustment_request",
-        entityId: requestId,
-        metadata: { reference: request.reference, product_id: request.product_id },
-      });
-
-      res.status(200).json({ message: "Request approved." });
     } else if (type === "void") {
-      res.status(501).json({ message: "Void approval not yet implemented in unified endpoint." });
+      // BUG-03 FIX: Implement void approval (was returning 501)
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [voidRows] = await conn.execute<any[]>(
+          `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number
+           FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
+           WHERE sv.id = ? FOR UPDATE`,
+          [requestId]
+        );
+        const voidRow = voidRows[0];
+        if (!voidRow) {
+          await conn.rollback();
+          res.status(404).json({ message: "Void request not found." });
+          return;
+        }
+        if (voidRow.status !== "pending") {
+          await conn.rollback();
+          res.status(422).json({ message: "Only pending void requests can be approved." });
+          return;
+        }
+
+        // Restore inventory for each sold item
+        const [saleItems] = await conn.execute<any[]>(
+          "SELECT product_id, quantity FROM sale_items WHERE sale_id = ?",
+          [voidRow.sale_id]
+        );
+        for (const item of saleItems) {
+          await conn.execute(
+            "UPDATE products SET quantity = quantity + ? WHERE id = ?",
+            [item.quantity, item.product_id]
+          );
+          await conn.execute(
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Void', 'void_restore', ?, ?, ?)`,
+            [item.product_id, item.quantity, voidRow.invoice_number, adminId]
+          );
+        }
+
+        await conn.execute(
+          "UPDATE sale_voids SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?",
+          [adminId, requestId]
+        );
+        await conn.execute(
+          "UPDATE sales SET void_status = 'voided' WHERE id = ?",
+          [voidRow.sale_id]
+        );
+
+        await conn.commit();
+
+        await logAuditEvent({
+          action: "SALE_VOIDED",
+          performedById: adminId,
+          performedByUsername: adminUsername || "Unknown",
+          entityType: "sales",
+          entityId: voidRow.sale_id,
+          reason: voidRow.reason,
+          newValues: { invoice_number: voidRow.invoice_number, void_request_id: requestId },
+        });
+
+        // Notify the cashier via WebSocket
+        const [cashierRow] = await pool.execute<any[]>(
+          "SELECT s.cashier_id, s.total_amount FROM sales s WHERE s.id = ?",
+          [voidRow.sale_id]
+        );
+        if ((cashierRow as any[])[0]) {
+          const { cashier_id, total_amount } = (cashierRow as any[])[0];
+          sendVoidDecision({
+            type: "void_decision",
+            void_id: requestId,
+            sale_id: voidRow.sale_id,
+            invoice_number: voidRow.invoice_number,
+            total_amount: Number(total_amount),
+            decision: "approved",
+            admin_name: adminUsername || "Admin",
+            rejection_reason: null,
+            cashier_user_id: cashier_id,
+          });
+        }
+
+        // Dispatch refresh event for sidebar counts
+        res.status(200).json({ message: "Sale voided successfully." });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
     } else if (type === "return") {
       await pool.execute(
         "UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?",
@@ -677,7 +822,77 @@ router.post("/:type/:id/reject", async (req: Request, res: Response) => {
 
       res.status(200).json({ message: "Request rejected." });
     } else if (type === "void") {
-      res.status(501).json({ message: "Void rejection not yet implemented in unified endpoint." });
+      // BUG-03 FIX: Implement void rejection (was returning 501)
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [voidRows] = await conn.execute<any[]>(
+          `SELECT sv.id, sv.sale_id, sv.status, s.invoice_number
+           FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
+           WHERE sv.id = ? FOR UPDATE`,
+          [requestId]
+        );
+        const voidRow = voidRows[0];
+        if (!voidRow) {
+          await conn.rollback();
+          res.status(404).json({ message: "Void request not found." });
+          return;
+        }
+        if (voidRow.status !== "pending") {
+          await conn.rollback();
+          res.status(422).json({ message: "Only pending void requests can be rejected." });
+          return;
+        }
+
+        await conn.execute(
+          "UPDATE sale_voids SET status = 'rejected', approved_by = ?, resolved_at = NOW(), rejection_reason = ? WHERE id = ?",
+          [adminId, rejection_reason, requestId]
+        );
+        await conn.execute(
+          "UPDATE sales SET void_status = 'active' WHERE id = ?",
+          [voidRow.sale_id]
+        );
+
+        await conn.commit();
+
+        await logAuditEvent({
+          action: "SALE_CANCELLATION_REJECTED",
+          performedById: adminId,
+          performedByUsername: adminUsername || "Unknown",
+          entityType: "sales",
+          entityId: voidRow.sale_id,
+          reason: rejection_reason,
+          newValues: { invoice_number: voidRow.invoice_number, void_request_id: requestId },
+        });
+
+        // Notify the cashier via WebSocket
+        const [cashierRow] = await pool.execute<any[]>(
+          "SELECT s.cashier_id, s.total_amount FROM sales s WHERE s.id = ?",
+          [voidRow.sale_id]
+        );
+        if ((cashierRow as any[])[0]) {
+          const { cashier_id, total_amount } = (cashierRow as any[])[0];
+          sendVoidDecision({
+            type: "void_decision",
+            void_id: requestId,
+            sale_id: voidRow.sale_id,
+            invoice_number: voidRow.invoice_number,
+            total_amount: Number(total_amount),
+            decision: "rejected",
+            admin_name: adminUsername || "Admin",
+            rejection_reason: rejection_reason ?? null,
+            cashier_user_id: cashier_id,
+          });
+        }
+
+        res.status(200).json({ message: "Void request rejected." });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
     } else if (type === "return") {
       await pool.execute(
         "UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ? WHERE id = ?",

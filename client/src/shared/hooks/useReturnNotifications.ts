@@ -48,6 +48,98 @@ export interface VoidDecisionNotification {
   cashier_user_id: number;
 }
 
+// ─── Shared reconnecting WebSocket factory ────────────────────────────────────
+//
+// Creates a WebSocket that automatically reconnects after disconnection using
+// exponential back-off (1s, 2s, 4s … capped at 30s).  The returned cleanup
+// function must be called on component unmount to stop all reconnect attempts.
+//
+// This is the production-readiness fix for FAIL: WebSocket no reconnection.
+// Without this, a 2-second network blip during a business day would silently
+// kill all real-time notifications for the rest of the shift.
+
+interface ReconnectingWSOptions {
+  onMessage: (event: MessageEvent) => void;
+  /** Called when a brand-new connection is opened (not on every reconnect). */
+  onOpen?: () => void;
+}
+
+function createReconnectingWS(options: ReconnectingWSOptions): () => void {
+  let ws: WebSocket | null = null;
+  let retryDelay = 1000;           // start at 1 s
+  const MAX_DELAY = 30_000;        // cap at 30 s
+  let destroyed = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function connect() {
+    if (destroyed) return;
+
+    const token = loadToken();
+    if (!token) return; // not authenticated — don't reconnect
+
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${protocol}://${window.location.host}/ws?token=${token}`);
+
+    ws.onopen = () => {
+      retryDelay = 1000; // reset back-off on successful connection
+      options.onOpen?.();
+    };
+
+    ws.onmessage = options.onMessage;
+
+    ws.onclose = (event) => {
+      if (destroyed) return;
+      // 1008 = Policy Violation (unauthorized / forbidden) — do NOT retry
+      if (event.code === 1008) return;
+
+      // Schedule reconnect with exponential back-off
+      retryTimer = setTimeout(() => {
+        retryDelay = Math.min(retryDelay * 2, MAX_DELAY);
+        connect();
+      }, retryDelay);
+    };
+
+    ws.onerror = () => {
+      // onerror is always followed by onclose — reconnect logic lives there
+    };
+  }
+
+  connect();
+
+  // Reconnect when the tab regains focus or the browser comes back online.
+  // This handles the case where the device slept, the network dropped, or the
+  // user switched away from the tab for an extended period.
+  function handleVisibilityChange() {
+    if (document.visibilityState === "visible") {
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        if (retryTimer) clearTimeout(retryTimer);
+        retryDelay = 1000;
+        connect();
+      }
+    }
+  }
+
+  function handleOnline() {
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryDelay = 1000;
+      connect();
+    }
+  }
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("online", handleOnline);
+
+  // Cleanup — called on component unmount
+  return () => {
+    destroyed = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("online", handleOnline);
+    ws?.close(1000, "Component unmounted");
+  };
+}
+
 // ─── Admin hook: receives new void requests from cashiers ──────────────────────
 
 export function useVoidRequestNotifications() {
@@ -56,25 +148,20 @@ export function useVoidRequestNotifications() {
   const clearAll = useCallback(() => setNotifications([]), []);
 
   useEffect(() => {
-    const token = loadToken();
-    if (!token) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws?token=${token}`);
-
-    ws.onmessage = (event) => {
-      try {
-        const data: VoidRequestNotification = JSON.parse(event.data);
-        if (data.type !== "void_request") return;
-        setNotifications((prev) => [data, ...prev]);
-        toast.error(`Void Request — ${data.invoice_number}`, {
-          description: `${data.cashier_name} · ${data.customer_name} · ₱${Number(data.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`,
-          duration: 8000,
-        });
-      } catch { /* ignore malformed */ }
-    };
-
-    return () => ws.close();
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data: VoidRequestNotification = JSON.parse(event.data);
+          if (data.type !== "void_request") return;
+          setNotifications((prev) => [data, ...prev]);
+          toast.error(`Void Request — ${data.invoice_number}`, {
+            description: `${data.cashier_name} · ${data.customer_name} · ₱${Number(data.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`,
+            duration: 8000,
+          });
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
   }, []);
 
   return { notifications, unreadCount: notifications.length, clearAll };
@@ -84,31 +171,24 @@ export function useVoidRequestNotifications() {
 
 export function useReturnNotifications() {
   const [notifications, setNotifications] = useState<ReturnNotification[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
 
   const clearAll = useCallback(() => setNotifications([]), []);
 
   useEffect(() => {
-    const token = loadToken();
-    if (!token) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws?token=${token}`);
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
-      try {
-        const data: ReturnNotification = JSON.parse(event.data);
-        if (data.type !== "return_request") return;
-        setNotifications((prev) => [data, ...prev]);
-        toast.warning(`Return Request — ${data.return_number}`, {
-          description: `${data.cashier_name} · Invoice ${data.invoice_number}`,
-          duration: 6000,
-        });
-      } catch { /* ignore malformed */ }
-    };
-
-    return () => { ws.close(); wsRef.current = null; };
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data: ReturnNotification = JSON.parse(event.data);
+          if (data.type !== "return_request") return;
+          setNotifications((prev) => [data, ...prev]);
+          toast.warning(`Return Request — ${data.return_number}`, {
+            description: `${data.cashier_name} · Invoice ${data.invoice_number}`,
+            duration: 6000,
+          });
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
   }, []);
 
   return { notifications, unreadCount: notifications.length, clearAll };
@@ -123,21 +203,16 @@ export function useReturnDecisions(
   onDecisionRef.current = onDecision;
 
   useEffect(() => {
-    const token = loadToken();
-    if (!token) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws?token=${token}`);
-
-    ws.onmessage = (event) => {
-      try {
-        const data: ReturnDecisionNotification = JSON.parse(event.data);
-        if (data.type !== "return_decision") return;
-        onDecisionRef.current(data);
-      } catch { /* ignore malformed */ }
-    };
-
-    return () => ws.close();
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data: ReturnDecisionNotification = JSON.parse(event.data);
+          if (data.type !== "return_decision") return;
+          onDecisionRef.current(data);
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
   }, []); // stable — onDecision changes are handled via ref
 }
 
@@ -150,20 +225,15 @@ export function useVoidDecisions(
   onDecisionRef.current = onDecision;
 
   useEffect(() => {
-    const token = loadToken();
-    if (!token) return;
-
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws?token=${token}`);
-
-    ws.onmessage = (event) => {
-      try {
-        const data: VoidDecisionNotification = JSON.parse(event.data);
-        if (data.type !== "void_decision") return;
-        onDecisionRef.current(data);
-      } catch { /* ignore malformed */ }
-    };
-
-    return () => ws.close();
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data: VoidDecisionNotification = JSON.parse(event.data);
+          if (data.type !== "void_decision") return;
+          onDecisionRef.current(data);
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
   }, []);
 }

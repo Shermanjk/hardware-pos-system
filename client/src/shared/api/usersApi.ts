@@ -1,5 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
+import httpClient from "@/shared/api/httpClient";
 import type { AuthUser } from "@/shared/utils/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,58 +46,33 @@ export interface ChangePasswordResponse {
   user: AuthUser;
 }
 
-// ─── Axios instance with auth header ─────────────────────────────────────────
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function getUsers(): Promise<UserRecord[]> {
-  const response = await axios.get<UserRecord[]>("/api/users", {
-    headers: authHeaders(),
-  });
+  const response = await httpClient.get<UserRecord[]>("/api/users");
   return response.data;
 }
 
-export async function createUser(
-  payload: CreateUserPayload
-): Promise<CreateUserResponse> {
-  const response = await axios.post<CreateUserResponse>("/api/users", payload, {
-    headers: authHeaders(),
-  });
+export async function createUser(payload: CreateUserPayload): Promise<CreateUserResponse> {
+  const response = await httpClient.post<CreateUserResponse>("/api/users", payload);
   return response.data;
 }
 
-export async function updateUser(
-  id: number,
-  payload: UpdateUserPayload
-): Promise<UserRecord> {
-  const response = await axios.put<UserRecord>(`/api/users/${id}`, payload, {
-    headers: authHeaders(),
-  });
+export async function updateUser(id: number, payload: UpdateUserPayload): Promise<UserRecord> {
+  const response = await httpClient.put<UserRecord>(`/api/users/${id}`, payload);
   return response.data;
 }
 
-export async function resetPassword(
-  id: number
-): Promise<{ tempPassword: string }> {
-  const response = await axios.post<{ tempPassword: string }>(
+export async function resetPassword(id: number): Promise<{ tempPassword: string }> {
+  const response = await httpClient.post<{ tempPassword: string }>(
     `/api/users/${id}/reset-password`,
-    {},
-    { headers: authHeaders() }
+    {}
   );
   return response.data;
 }
 
 export async function deactivateUser(id: number): Promise<UserRecord> {
-  const response = await axios.post<UserRecord>(
-    `/api/users/${id}/deactivate`,
-    {},
-    { headers: authHeaders() }
-  );
+  const response = await httpClient.post<UserRecord>(`/api/users/${id}/deactivate`, {});
   return response.data;
 }
 
@@ -106,10 +80,9 @@ export async function changePassword(
   id: number,
   payload: ChangePasswordPayload
 ): Promise<ChangePasswordResponse> {
-  const response = await axios.post<ChangePasswordResponse>(
+  const response = await httpClient.post<ChangePasswordResponse>(
     `/api/users/${id}/change-password`,
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return response.data;
 }

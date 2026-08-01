@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 export interface PendingCounts {
   pending_commodity_approvals: number;
@@ -14,8 +8,6 @@ export interface PendingCounts {
 }
 
 export async function getPendingCounts(): Promise<PendingCounts> {
-  const res = await axios.get<PendingCounts>("/api/dashboard/pending-counts", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<PendingCounts>("/api/dashboard/pending-counts");
   return res.data;
 }

@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,26 +78,24 @@ export interface SaleItemSnapshot {
 }
 
 export interface CreateSaleResult {
-  invoice_number: string;
-  id:             number;
-  subtotal:       number;
-  vat_amount:     number;
-  total_amount:   number;
-  change_amount:  number;
-  payment_status: "pending" | "completed" | "failed";
+  invoice_number:  string;
+  id:              number;
+  subtotal:        number;
+  vat_amount:      number;
+  total_amount:    number;
+  change_amount:   number;
+  payment_status:  "pending" | "completed" | "failed";
   receipt_printed: boolean;
-  items:          SaleItemSnapshot[];
-  _idempotent?:   boolean;  // true if this was a duplicate request
+  items:           SaleItemSnapshot[];
+  _idempotent?:    boolean;
 }
 
 export interface RecoveryStatus {
-  pending_payment: SaleSummary[];
-  completed_unprinted: SaleSummary[];
+  pending_payment:      SaleSummary[];
+  completed_unprinted:  SaleSummary[];
 }
 
 // ─── ID generation ────────────────────────────────────────────────────────────
-// Generate a unique client transaction ID for idempotency.
-// This prevents duplicate sales when retrying after network failure or crash.
 export function generateClientTransactionId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 10);
@@ -116,33 +108,25 @@ export async function requestVoidSale(
   saleId: number,
   reason: string
 ): Promise<{ message: string; void_id: number }> {
-  const response = await axios.post<{ message: string; void_id: number }>(
+  const response = await httpClient.post<{ message: string; void_id: number }>(
     `/api/sales/${saleId}/void-request`,
-    { reason },
-    { headers: authHeaders() }
+    { reason }
   );
   return response.data;
 }
 
 export async function createSale(payload: CreateSalePayload): Promise<CreateSaleResult> {
-  const response = await axios.post<CreateSaleResult>("/api/sales", payload, {
-    headers: authHeaders(),
-  });
+  const response = await httpClient.post<CreateSaleResult>("/api/sales", payload);
   return response.data;
 }
 
 export async function markReceiptPrinted(saleId: number): Promise<void> {
-  await axios.patch(
-    `/api/sales/${saleId}/mark-receipt-printed`,
-    {},
-    { headers: authHeaders() }
-  );
+  await httpClient.patch(`/api/sales/${saleId}/mark-receipt-printed`, {});
 }
 
 export async function getSaleByInvoice(invoiceNumber: string): Promise<Sale> {
-  const response = await axios.get<Sale>(
-    `/api/sales/${encodeURIComponent(invoiceNumber)}`,
-    { headers: authHeaders() }
+  const response = await httpClient.get<Sale>(
+    `/api/sales/${encodeURIComponent(invoiceNumber)}`
   );
   return response.data;
 }
@@ -153,25 +137,21 @@ export async function searchSales(params: {
   date_from?: string;
   date_to?: string;
 }): Promise<SaleSummary[]> {
-  const response = await axios.get<SaleSummary[]>("/api/sales", {
-    headers: authHeaders(),
-    params,
-  });
+  const response = await httpClient.get<SaleSummary[]>("/api/sales", { params });
   return response.data;
 }
 
 export async function getRecoveryStatus(): Promise<RecoveryStatus> {
-  const response = await axios.get<RecoveryStatus>("/api/sales/recovery/pending", {
-    headers: authHeaders(),
-  });
+  const response = await httpClient.get<RecoveryStatus>("/api/sales/recovery/pending");
   return response.data;
 }
 
-export async function fixPaymentStatus(saleId: number): Promise<{ message: string; invoice_number: string }> {
-  const response = await axios.patch<{ message: string; invoice_number: string }>(
+export async function fixPaymentStatus(
+  saleId: number
+): Promise<{ message: string; invoice_number: string }> {
+  const response = await httpClient.patch<{ message: string; invoice_number: string }>(
     `/api/sales/recovery/${saleId}/fix-payment-status`,
-    {},
-    { headers: authHeaders() }
+    {}
   );
   return response.data;
 }

@@ -24,6 +24,14 @@ function decodeJwt(token: string): (AuthUser & { exp?: number }) | null {
   }
 }
 
+// ─── Extract expiry timestamp in ms from a JWT ───────────────────────────────
+// Returns null if the token has no exp claim or cannot be decoded.
+export function decodeTokenExpiry(token: string): number | null {
+  const decoded = decodeJwt(token);
+  if (!decoded?.exp) return null;
+  return decoded.exp * 1000; // convert seconds → ms
+}
+
 // ─── Extract user from token (returns null if expired) ───────────────────────
 export function getUserFromToken(token: string | null): AuthUser | null {
   if (!token) return null;

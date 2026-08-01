@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, X, RefreshCw, AlertCircle, Package, FileText, Ban, RotateCcw } from "lucide-react";
+import { Search, X, RefreshCw, AlertCircle, Package, Ban, RotateCcw, XCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getPendingRequests, getRequestHistory, approveRequest, rejectRequest, type UnifiedRequest } from "@/shared/api/requestsApi";
 import { toast } from "sonner";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,23 +58,40 @@ function RejectDialog({ open, onConfirm, onCancel, loading }: RejectDialogProps)
   useEffect(() => { if (!open) setReason(""); }, [open]);
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Reject Request</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <Label className="font-semibold">Reason for rejection</Label>
-          <Input
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Reject Request</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <XCircle className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Reject Request</h2>
+            <p className="text-xs text-red-100 mt-0.5">Provide a reason for rejecting this request</p>
+          </div>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <Label className="font-semibold">Rejection Reason <span className="text-red-500">*</span></Label>
+          <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Enter reason…"
+            placeholder="Enter reason for rejection…"
+            rows={3}
             disabled={loading}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400 disabled:opacity-50"
           />
         </div>
-        <DialogFooter className="mt-4">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel} disabled={loading}>Cancel</Button>
-          <Button variant="destructive" disabled={loading || !reason.trim()} onClick={() => onConfirm(reason.trim())}>
+          <Button
+            disabled={loading || !reason.trim()}
+            onClick={() => onConfirm(reason.trim())}
+            className="bg-red-600 hover:bg-red-700 text-white gap-2"
+          >
+            {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
             {loading ? "Rejecting…" : "Reject"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -101,92 +118,132 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
     "RETURN": "return",
   };
 
+  // Dynamic header config per type
+  const headerConfig = req.type.startsWith("STOCK_COUNT")
+    ? { bg: "bg-slate-700", icon: <Package className="h-5 w-5 text-white" />, title: req.type === "STOCK_COUNT_MARKET" ? "Market-Based Stock Count" : "Stock Count Request" }
+    : req.type === "VOID"
+    ? { bg: "bg-slate-700", icon: <Ban className="h-5 w-5 text-white" />, title: "Void Request" }
+    : { bg: "bg-slate-700", icon: <RotateCcw className="h-5 w-5 text-white" />, title: "Return Request" };
+
   return (
     <Dialog open={!!req} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Request Details</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          {/* Header info */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div><span className="text-gray-500">Type:</span> <TypeBadge type={req.type} /></div>
-            <div><span className="text-gray-500">Reference:</span> <span className="font-mono font-semibold">{req.reference}</span></div>
-            <div><span className="text-gray-500">Requested By:</span> {req.requested_by_name}</div>
-            <div><span className="text-gray-500">Date:</span> {fmtDate(req.created_at || req.prepared_at)}</div>
-            <div><span className="text-gray-500">Status:</span> <StatusBadge status={req.status} /></div>
+      <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
+        <DialogTitle className="sr-only">{headerConfig.title}</DialogTitle>
+        {/* Slate header */}
+        <div className={`flex items-center gap-3 px-6 py-4 ${headerConfig.bg} rounded-t-lg shrink-0`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            {headerConfig.icon}
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">{headerConfig.title}</h2>
+            <p className="text-xs text-slate-300 mt-0.5 font-mono">{req.reference}</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+          {/* Request Info */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Request Info</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center gap-1.5"><span className="text-gray-500">Type:</span> <TypeBadge type={req.type} /></div>
+              <div><span className="text-gray-500">Reference:</span> <span className="font-mono font-semibold text-gray-800 ml-1">{req.reference}</span></div>
+              <div><span className="text-gray-500">Requested By:</span> <span className="font-medium text-gray-800 ml-1">{req.requested_by_name}</span></div>
+              <div><span className="text-gray-500">Date:</span> <span className="text-gray-800 ml-1">{fmtDate(req.created_at || req.prepared_at)}</span></div>
+              <div className="flex items-center gap-1.5"><span className="text-gray-500">Status:</span> <span className="ml-1"><StatusBadge status={req.status} /></span></div>
+            </div>
           </div>
 
           {/* Reason */}
           <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Reason</span>
-            <p className="mt-1 text-gray-800">{req.reason}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Reason</p>
+            <p className="text-gray-800">{req.reason}</p>
           </div>
 
           {/* Remarks */}
           {req.remarks && (
             <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Remarks</span>
-              <p className="mt-1 text-gray-800">{req.remarks}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Remarks</p>
+              <p className="text-gray-800">{req.remarks}</p>
             </div>
           )}
 
           {/* Type-specific details */}
           {req.type.startsWith("STOCK_COUNT") && (
-            <div className="p-3 bg-blue-50 rounded-lg text-sm border border-blue-200">
-              <div className="grid grid-cols-3 gap-4">
-                <div><span className="text-gray-500">Product:</span> <span className="font-medium">{req.product_name}</span></div>
-                <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold">{(() => {
+            <div className="p-4 bg-blue-50 rounded-lg text-sm border border-blue-200">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-3">Inventory Details</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div><span className="text-gray-500">Product:</span> <span className="font-semibold text-gray-900 ml-1">{req.product_name}</span></div>
+                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono text-gray-700 ml-1">{req.barcode}</span></div>
+                <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold text-gray-900 ml-1">{(() => {
                   const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
                   return allowDecimal ? req.system_quantity?.toFixed(3) : req.system_quantity;
                 })()}</span></div>
-                <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold">{(() => {
+                <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold text-gray-900 ml-1">{(() => {
                   const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
                   return allowDecimal ? req.physical_quantity?.toFixed(3) : req.physical_quantity;
                 })()}</span></div>
-                <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{(() => {
+                <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ml-1 ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{(() => {
                   const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
                   const displayDiff = allowDecimal ? req.difference?.toFixed(3) : Math.round(req.difference || 0);
-                  return displayDiff;
+                  return `${Number(displayDiff) > 0 ? "+" : ""}${displayDiff}`;
                 })()}</span></div>
               </div>
             </div>
           )}
 
           {req.type === "VOID" && (
-            <div className="p-3 bg-red-50 rounded-lg text-sm border border-red-200">
-              <div className="grid grid-cols-2 gap-4">
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
-                <div><span className="text-gray-500">Amount:</span> <span className="font-bold">{fmtPeso(req.amount || 0)}</span></div>
-                <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name || 'N/A'}</span></div>
+            <div className="p-4 bg-red-50 rounded-lg text-sm border border-red-200">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-700 mb-3">Transaction Details</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number}</span></div>
+                <div><span className="text-gray-500">Amount:</span> <span className="font-bold text-gray-900 ml-1">{fmtPeso(req.amount || 0)}</span></div>
+                <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span></div>
               </div>
             </div>
           )}
 
           {req.type === "RETURN" && (
-            <div className="p-3 bg-green-50 rounded-lg text-sm border border-green-200">
-              <div className="grid grid-cols-2 gap-4">
-                <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold">{req.return_number}</span></div>
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
-                <div><span className="text-gray-500">Product:</span> <span className="font-medium">{req.product_name}</span></div>
-                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono">{req.barcode}</span></div>
-                <div><span className="text-gray-500">Quantity Returned:</span> <span className="font-semibold">{req.physical_quantity}</span></div>
-                <div><span className="text-gray-500">Unit Price:</span> <span className="font-semibold">{fmtPeso(req.unit_price || 0)}</span></div>
-                <div><span className="text-gray-500">Refund Amount:</span> <span className="font-bold">{fmtPeso(req.amount || 0)}</span></div>
-                <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name || 'N/A'}</span></div>
+            <div className="p-4 bg-green-50 rounded-lg text-sm border border-green-200">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-700 mb-3">Return Details</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.return_number}</span></div>
+                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number}</span></div>
+                <div><span className="text-gray-500">Product:</span> <span className="font-medium text-gray-800 ml-1">{req.product_name}</span></div>
+                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono text-gray-700 ml-1">{req.barcode}</span></div>
+                <div><span className="text-gray-500">Qty Returned:</span> <span className="font-semibold text-gray-900 ml-1">{req.physical_quantity}</span></div>
+                <div><span className="text-gray-500">Unit Price:</span> <span className="font-semibold text-gray-900 ml-1">{fmtPeso(req.unit_price || 0)}</span></div>
+                <div><span className="text-gray-500">Refund Amount:</span> <span className="font-bold text-emerald-700 ml-1">{fmtPeso(req.amount || 0)}</span></div>
+                <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span></div>
               </div>
             </div>
           )}
         </div>
-        <DialogFooter className="gap-2 flex-wrap">
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2 shrink-0">
+          <Button variant="outline" onClick={onClose}>Close</Button>
           {isPending && (
-            <>
-              <Button variant="outline" className="text-red-600 border-red-300" onClick={() => onReject(typeMap[req.type], req.id)} disabled={actionLoading}>Reject</Button>
-              <Button className="bg-green-600 hover:bg-green-700" onClick={() => onApprove(typeMap[req.type], req.id)} disabled={actionLoading}>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                onClick={() => onReject(typeMap[req.type], req.id)}
+                disabled={actionLoading}
+              >
+                <XCircle className="h-4 w-4 mr-1.5" /> Reject
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                onClick={() => onApprove(typeMap[req.type], req.id)}
+                disabled={actionLoading}
+              >
+                {actionLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+                <CheckCircle2 className="h-4 w-4" />
                 {actionLoading ? "Processing…" : "Approve"}
               </Button>
-            </>
+            </div>
           )}
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -210,8 +267,9 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
       if (mainTab === "Pending Requests") {
         data = await getPendingRequests();
       } else {
-        const typeFilter = subTab === "All" ? undefined : 
-          subTab === "Stock Count" ? undefined :
+        // BUG-10 FIX: "Stock Count" sub-tab must map to "STOCK_COUNT_STANDARD", not undefined
+        const typeFilter = subTab === "All" ? undefined :
+          subTab === "Stock Count" ? "STOCK_COUNT_STANDARD" :
           subTab === "Market-Based" ? "STOCK_COUNT_MARKET" :
           subTab === "Void" ? "VOID" : "RETURN";
         data = await getRequestHistory({

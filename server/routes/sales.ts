@@ -154,7 +154,7 @@ router.post(
 
       // ── 1. Fetch DB product data + check stock (row-level lock) ───────────────
       const productData: Record<number, {
-        name: string; tax_type: string; selling_price: number;
+        name: string; tax_type: string; selling_price: number; quantity: number;
       }> = {};
       for (const item of items) {
         const [rows] = await conn.execute<any[]>(
@@ -173,6 +173,7 @@ router.post(
           name:          product.name,
           tax_type:      product.tax_type ?? "VATABLE",
           selling_price: Number(product.selling_price),
+          quantity:      Number(product.quantity),
         };
       }
 
@@ -244,6 +245,8 @@ router.post(
       const sale_id: number = saleResult.insertId;
 
       // ── 6. Insert sale items using backend-calculated values ──────────────────
+      // Track running quantity per product (in case same product appears multiple times)
+      const runningQty: Record<number, number> = {};
       for (const ci of calcItems) {
         await conn.execute(
           `INSERT INTO sale_items
@@ -260,11 +263,17 @@ router.post(
           [ci.quantity, ci.product_id]
         );
 
-        // Inventory log
+        // BUG-04 FIX: Include quantity (before) and remaining_stock (after) in inventory log
+        const beforeQty = runningQty[ci.product_id] !== undefined
+          ? runningQty[ci.product_id]
+          : productData[ci.product_id].quantity;
+        const afterQty = beforeQty - ci.quantity;
+        runningQty[ci.product_id] = afterQty;
+
         await conn.execute(
-          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
-           VALUES (?, 'Sale', 'sale', ?, ?, ?)`,
-          [ci.product_id, -ci.quantity, invoice_number, req.user!.id]
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
+           VALUES (?, 'Sale', 'sale', ?, ?, ?, ?, ?)`,
+          [ci.product_id, -ci.quantity, beforeQty, afterQty, invoice_number, req.user!.id]
         );
       }
 
@@ -587,38 +596,6 @@ router.post(
   }
 );
 
-// ─── GET /my-void-requests — Cashier: load their pending void requests ───────────
-router.get(
-  "/my-void-requests",
-  authenticate,
-  requireRole("Cashier", "Admin"),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const [rows] = await pool.execute<any[]>(
-        `SELECT
-           sv.id,
-           sv.sale_id,
-           s.invoice_number,
-           s.customer_name,
-           s.total_amount,
-           sv.status,
-           sv.reason,
-           sv.created_at
-         FROM sale_voids sv
-         JOIN sales s ON s.id = sv.sale_id
-         WHERE sv.requested_by = ?
-           AND sv.status = 'pending'
-         ORDER BY sv.created_at DESC`,
-        [req.user!.id]
-      );
-      res.status(200).json(rows);
-    } catch (err) {
-      console.error("[GET /api/sales/my-void-requests] Error:", err);
-      res.status(500).json({ message: "An unexpected error occurred." });
-    }
-  }
-);
-
 // ─── PATCH /:id/void-approve — Admin approves void ───────────────────────────
 router.patch(
   "/:id/void-approve",
@@ -864,22 +841,6 @@ router.get(
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const returnableFilter = `
-        AND s.id IN (
-          SELECT DISTINCT si.sale_id
-          FROM sale_items si
-          JOIN products p ON p.id = si.product_id
-          WHERE p.is_returnable = 1
-            AND si.quantity > COALESCE((
-              SELECT COALESCE(SUM(ri.quantity_returned), 0)
-              FROM return_items ri
-              JOIN returns r ON ri.return_id = r.id
-              WHERE ri.sale_item_id = si.id
-                AND r.status IN ('pending', 'waiting_for_cashier', 'completed')
-            ), 0)
-        )
-      `;
-      const finalWhere = where ? `${where} ${returnableFilter}` : `WHERE 1=1 ${returnableFilter}`;
 
       const [rows] = await pool.execute<any[]>(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
@@ -888,7 +849,7 @@ router.get(
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
-         ${finalWhere}
+         ${where}
          ORDER BY s.created_at DESC
          LIMIT 200`,
         params

@@ -1,25 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, FolderOpen, Boxes, Truck,
   TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, RotateCcw, Ban, ChevronDown, BellRing, Download, Upload,
+  ChevronLeft, ChevronRight, ChevronDown, BellRing,
 } from "lucide-react";
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
+import httpClient from "@/shared/api/httpClient";
+import { useAdminNotificationPoll } from "@/shared/hooks/useAdminNotificationPoll";
 
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
 }
 
-// Navigation group type
 type NavItem = {
   icon?: React.ComponentType<{ className?: string }>;
   label: string;
   href: string;
   hasAlertBadge?: boolean;
-  isAlertRoute?: boolean;
 };
 
 type NavGroup = {
@@ -28,131 +26,103 @@ type NavGroup = {
   icon?: React.ComponentType<{ className?: string }>;
 };
 
-// Define navigation structure
 const navStructure: (NavItem | NavGroup)[] = [
-  // Dashboard - standalone
-  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-
-  // Sales - standalone
-  { icon: TrendingUp, label: "Sales", href: "/sales" },
-
-  // Operations group
+  { icon: LayoutDashboard, label: "Dashboard",  href: "/" },
+  { icon: TrendingUp,      label: "Sales",       href: "/sales" },
   {
     label: "Operations",
     icon: Boxes,
     items: [
-      { icon: Package, label: "Products", href: "/products" },
-      { icon: Boxes, label: "Inventory", href: "/inventory", hasAlertBadge: true },
-      { icon: Truck, label: "Suppliers", href: "/suppliers" },
-      { icon: TrendingUp, label: "Commodity Purchases", href: "/commodity-prices", hasAlertBadge: true },
-      { icon: Truck, label: "External Processing", href: "/external-processing" },
-      { icon: BellRing, label: "Requests", href: "/requests", hasAlertBadge: true },
+      { icon: Package,    label: "Products",             href: "/products" },
+      { icon: Boxes,      label: "Inventory",            href: "/inventory",         hasAlertBadge: true },
+      { icon: Truck,      label: "Suppliers",            href: "/suppliers" },
+      { icon: TrendingUp, label: "Commodity Purchases",  href: "/commodity-prices",  hasAlertBadge: true },
+      { icon: Truck,      label: "External Processing",  href: "/external-processing" },
+      { icon: BellRing,   label: "Requests",             href: "/requests",           hasAlertBadge: true },
     ],
   } as NavGroup,
-
-  // Management group
   {
     label: "Management",
     icon: Users,
     items: [
       { icon: FolderOpen, label: "Categories", href: "/categories" },
-      { icon: Users, label: "Users", href: "/users" },
+      { icon: Users,      label: "Users",      href: "/users" },
     ],
   } as NavGroup,
-
-  // Reports - standalone
-  { icon: BarChart3, label: "Reports", href: "/reports" },
-
-  // Settings - standalone
-  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: BarChart3, label: "Reports",  href: "/reports" },
+  { icon: Settings,  label: "Settings", href: "/settings" },
 ];
 
-// ─── Hook: fetch low stock count every 2 minutes ─────────────────────────────
+// ─── Hook: low-stock count (inventory badge) ──────────────────────────────────
 
 function useLowStockCount() {
   const [count, setCount] = useState(0);
 
-  const fetch = async () => {
+  const fetch = useCallback(async () => {
     try {
-      const token = loadToken();
-      if (!token) return;
-      const res = await axios.get<{ out_of_stock: string; critical: string; low_stock: string }>(
-        "/api/inventory/summary",
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await httpClient.get<{
+        out_of_stock: string;
+        critical: string;
+        low_stock: string;
+      }>("/api/inventory/summary");
+      setCount(
+        Number(res.data.out_of_stock ?? 0) +
+        Number(res.data.critical     ?? 0) +
+        Number(res.data.low_stock    ?? 0)
       );
-      const total = Number(res.data.out_of_stock ?? 0) + Number(res.data.critical ?? 0) + Number(res.data.low_stock ?? 0);
-      setCount(total);
-    } catch {
-      // silently ignore — sidebar shouldn't crash on a failed poll
-    }
-  };
+    } catch { /* silently ignore */ }
+  }, []);
 
   useEffect(() => {
     fetch();
-    const id = setInterval(fetch, 2 * 60 * 1000); // re-check every 2 min
+    const id = setInterval(fetch, 2 * 60 * 1000); // refresh every 2 min
     return () => clearInterval(id);
-  }, []);
+  }, [fetch]);
 
   return count;
 }
 
-// ─── Hook: fetch pending counts every 2 minutes ───────────────────────────────
+// ─── Hook: pending requests + commodity counts ────────────────────────────────
 
-function usePendingCounts() {
+function usePendingCounts(triggerRefresh: () => void) {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingCommodity, setPendingCommodity] = useState(0);
 
-  const fetch = async () => {
+  const fetch = useCallback(async () => {
     try {
-      const token = loadToken();
-      if (!token) return;
-      
-      // Fetch unified requests KPI
-      const reqRes = await axios.get<{ pending_requests: number }>(
-        "/api/requests/kpi",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setPendingRequests(reqRes.data.pending_requests ?? 0);
-
-      // Fetch commodity purchase pending counts (separate from requests module)
-      const commodityRes = await axios.get<{ pending_commodity_approvals: number }>(
-        "/api/dashboard/pending-counts",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setPendingCommodity(commodityRes.data.pending_commodity_approvals ?? 0);
-    } catch (err) {
-      console.error("Failed to fetch pending counts:", err);
-      // silently ignore — sidebar shouldn't crash on a failed poll
-    }
-  };
+      const [reqRes, commodityRes] = await Promise.allSettled([
+        httpClient.get<{ pending_requests: number }>("/api/requests/kpi"),
+        httpClient.get<{ pending_commodity_approvals: number }>("/api/dashboard/pending-counts"),
+      ]);
+      if (reqRes.status === "fulfilled")
+        setPendingRequests(reqRes.value.data.pending_requests ?? 0);
+      if (commodityRes.status === "fulfilled")
+        setPendingCommodity(commodityRes.value.data.pending_commodity_approvals ?? 0);
+    } catch { /* silently ignore */ }
+  }, []);
 
   useEffect(() => {
     fetch();
-    const id = setInterval(fetch, 2 * 60 * 1000); // re-check every 2 min
+    const id = setInterval(fetch, 2 * 60 * 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [fetch]);
 
-  // Listen for custom event to refresh counts immediately
+  // Respond to the custom event fired by other components
   useEffect(() => {
-    const handleRefresh = () => {
-      fetch();
-    };
-    window.addEventListener('refresh-pending-counts', handleRefresh);
-    return () => window.removeEventListener('refresh-pending-counts', handleRefresh);
-  }, []);
+    const handleRefresh = () => { fetch(); triggerRefresh(); };
+    window.addEventListener("refresh-pending-counts", handleRefresh);
+    return () => window.removeEventListener("refresh-pending-counts", handleRefresh);
+  }, [fetch, triggerRefresh]);
 
-  return { pendingRequests, pendingCommodity, refreshPendingCounts: fetch };
+  return { pendingRequests, pendingCommodity };
 }
 
-// ─── Check if a route belongs to a group ─────────────────────────────────────
+// ─── Helper ───────────────────────────────────────────────────────────────────
 
 function getGroupForRoute(route: string): string | null {
   for (const item of navStructure) {
-    if ("items" in item) {
-      if (item.items.some((subItem) => subItem.href === route)) {
-        return item.label;
-      }
-    }
+    if ("items" in item && item.items.some((s) => s.href === route))
+      return item.label;
   }
   return null;
 }
@@ -160,33 +130,34 @@ function getGroupForRoute(route: string): string | null {
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
-  const [location]     = useLocation();
-  const alertCount     = useLowStockCount();
-  const hasAlerts      = alertCount > 0;
-  const { pendingRequests, pendingCommodity } = usePendingCounts();
-  
-  // Auto-expand group when route belongs to it
-  const activeGroup    = getGroupForRoute(location);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(() => {
-    // Initially expand the group containing current route only
-    if (activeGroup) return [activeGroup];
-    return []; // Default: all collapsed
-  });
+  const [location] = useLocation();
 
-  // Update expanded groups when location changes
+  // ── Notification data ─────────────────────────────────────────────────────
+  // pendingReturns / pendingVoids come from the 60-s HTTP poll with higher-wins
+  // merge. triggerRefresh is called on WS reconnect so missed notifications
+  // are recovered immediately rather than waiting up to 60 s.
+  const { pendingReturns, pendingVoids, triggerRefresh } = useAdminNotificationPoll();
+  const alertCount      = useLowStockCount();
+  const hasAlerts       = alertCount > 0;
+  const { pendingRequests, pendingCommodity } = usePendingCounts(triggerRefresh);
+
+  // Total pending for "Requests" badge: returns + voids + requests
+  const totalPendingRequests = pendingRequests + pendingReturns + pendingVoids;
+
+  // ── Group expand/collapse ─────────────────────────────────────────────────
+  const activeGroup = getGroupForRoute(location);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(() =>
+    activeGroup ? [activeGroup] : []
+  );
   useEffect(() => {
-    if (activeGroup && !expandedGroups.includes(activeGroup)) {
+    if (activeGroup && !expandedGroups.includes(activeGroup))
       setExpandedGroups((prev) => [...prev, activeGroup]);
-    }
-  }, [activeGroup, expandedGroups]);
+  }, [activeGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleGroup = (label: string) => {
+  const toggleGroup = (label: string) =>
     setExpandedGroups((prev) =>
       prev.includes(label) ? prev.filter((g) => g !== label) : [...prev, label]
     );
-  };
-
-  const isGroupExpanded = (label: string) => expandedGroups.includes(label);
 
   return (
     <aside
@@ -209,12 +180,12 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
-        {navStructure.map((item, idx) => {
-          // Standalone item
+        {navStructure.map((item) => {
+          // ── Standalone nav item ───────────────────────────────────────────
           if (!("items" in item)) {
             const Icon = item.icon!;
             const isActive = location === item.href;
-            const showAlertsOnItem = (item as NavItem).hasAlertBadge && hasAlerts;
+            const showAlert = (item as NavItem).hasAlertBadge && hasAlerts;
 
             return (
               <Link
@@ -222,74 +193,51 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                 href={item.href}
                 title={!isOpen ? item.label : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
-                  ${isActive
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
-                    : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                  }`}
+                  ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
               >
                 <span className="relative shrink-0">
                   <Icon className={`h-5 w-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-                  {/* Reorder alert indicator */}
-                  {showAlertsOnItem && (
+                  {showAlert && (
                     <>
                       <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-ping opacity-75" />
                       <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 ring-2 ring-[#0f172a]" />
                     </>
                   )}
                 </span>
-
-                {isOpen && (
-                  <span className="text-sm font-medium truncate flex-1">{item.label}</span>
-                )}
-
-                {isOpen && showAlertsOnItem && (
+                {isOpen && <span className="text-sm font-medium truncate flex-1">{item.label}</span>}
+                {isOpen && showAlert && (
                   <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
                     {alertCount > 99 ? "99+" : alertCount}
                   </span>
                 )}
-
-                {isActive && isOpen && !showAlertsOnItem && (
+                {isActive && isOpen && !showAlert && (
                   <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
                 )}
               </Link>
             );
           }
 
-          // Grouped items
-          const group = item as NavGroup;
-          const isExpanded = isGroupExpanded(group.label);
-          const isGroupActive = group.items.some((subItem) => location === subItem.href);
-          
-          // Check if group has any alerts based on specific item types
-          let groupHasAlerts = false;
-          if (group.items.some((subItem) => subItem.href === "/inventory")) {
-            groupHasAlerts = groupHasAlerts || hasAlerts;
-          }
-          if (group.items.some((subItem) => subItem.href === "/requests")) {
-            groupHasAlerts = groupHasAlerts || pendingRequests > 0;
-          }
-          if (group.items.some((subItem) => subItem.href === "/commodity-prices")) {
-            groupHasAlerts = groupHasAlerts || pendingCommodity > 0;
-          }
-          const showGroupAlert = groupHasAlerts && !isExpanded;
+          // ── Grouped nav items ─────────────────────────────────────────────
+          const group    = item as NavGroup;
+          const isExp    = expandedGroups.includes(group.label);
+          const isGrpAct = group.items.some((s) => location === s.href);
+
+          // Group-level alert dot (shown when collapsed)
+          const grpHasInventoryAlert  = group.items.some((s) => s.href === "/inventory") && hasAlerts;
+          const grpHasRequestAlert    = group.items.some((s) => s.href === "/requests") && totalPendingRequests > 0;
+          const grpHasCommodityAlert  = group.items.some((s) => s.href === "/commodity-prices") && pendingCommodity > 0;
+          const showGroupAlert = (grpHasInventoryAlert || grpHasRequestAlert || grpHasCommodityAlert) && !isExp;
 
           return (
             <div key={group.label}>
-              {/* Group header */}
               <button
                 onClick={() => toggleGroup(group.label)}
                 title={!isOpen ? group.label : undefined}
                 className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
-                  ${isGroupActive
-                    ? "bg-blue-600/20 text-blue-400"
-                    : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                  }`}
+                  ${isGrpAct ? "bg-blue-600/20 text-blue-400" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
               >
                 <span className="relative shrink-0">
-                  {group.icon && (
-                    <group.icon className="h-5 w-5 shrink-0" />
-                  )}
-                  {/* Alert indicator when group is collapsed */}
+                  {group.icon && <group.icon className="h-5 w-5 shrink-0" />}
                   {showGroupAlert && (
                     <>
                       <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 animate-ping opacity-75" />
@@ -300,38 +248,31 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                 {isOpen && (
                   <>
                     <span className="text-sm font-medium truncate flex-1 text-left">{group.label}</span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
-                        isExpanded ? "rotate-0" : "-rotate-90"
-                      }`}
-                    />
+                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExp ? "rotate-0" : "-rotate-90"}`} />
                   </>
                 )}
               </button>
 
-              {/* Group children */}
-              {isOpen && isExpanded && (
+              {isOpen && isExp && (
                 <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
                   {group.items.map((subItem) => {
                     const SubIcon = subItem.icon!;
                     const isActive = location === subItem.href;
-                    
-                    // Determine alert count based on item type
-                    let itemAlertCount = 0;
-                    let showItemAlert = false;
-                    let alertColor = "bg-red-500";
-                    
+
+                    // Per-item badge count
+                    let badgeCount  = 0;
+                    let showBadge   = false;
+                    let badgeColor  = "bg-red-500";
+
                     if (subItem.href === "/inventory") {
-                      itemAlertCount = alertCount;
-                      showItemAlert = hasAlerts;
+                      badgeCount = alertCount; showBadge = hasAlerts;
                     } else if (subItem.href === "/requests") {
-                      itemAlertCount = pendingRequests;
-                      showItemAlert = pendingRequests > 0;
-                      alertColor = "bg-blue-500";
+                      // Combine request + return + void counts on the Requests badge
+                      badgeCount = totalPendingRequests; showBadge = totalPendingRequests > 0;
+                      badgeColor = "bg-blue-500";
                     } else if (subItem.href === "/commodity-prices") {
-                      itemAlertCount = pendingCommodity;
-                      showItemAlert = pendingCommodity > 0;
-                      alertColor = "bg-orange-500";
+                      badgeCount = pendingCommodity; showBadge = pendingCommodity > 0;
+                      badgeColor = "bg-orange-500";
                     }
 
                     return (
@@ -339,29 +280,24 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                         key={subItem.href}
                         href={subItem.href}
                         className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all duration-150 group relative
-                          ${isActive
-                            ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
-                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                          }`}
+                          ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
                       >
                         <span className="relative shrink-0">
                           <SubIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-                          {/* Alert indicator for sub-items with badge */}
-                          {showItemAlert && (
+                          {showBadge && (
                             <>
-                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${alertColor} animate-ping opacity-75`} />
-                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${alertColor} ring-1 ring-[#0f172a]`} />
+                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} animate-ping opacity-75`} />
+                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} ring-1 ring-[#0f172a]`} />
                             </>
                           )}
                         </span>
                         <span className="text-sm font-medium truncate">{subItem.label}</span>
-                        {/* Badge count for sub-items */}
-                        {isOpen && showItemAlert && (
-                          <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full ${alertColor} text-white text-xs font-bold leading-none`}>
-                            {itemAlertCount > 99 ? "99+" : itemAlertCount}
+                        {showBadge && (
+                          <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full ${badgeColor} text-white text-xs font-bold leading-none`}>
+                            {badgeCount > 99 ? "99+" : badgeCount}
                           </span>
                         )}
-                        {isActive && (
+                        {isActive && !showBadge && (
                           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
                         )}
                       </Link>
@@ -374,17 +310,15 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      {/* Toggle button */}
+      {/* Toggle */}
       <div className="shrink-0 border-t border-white/10 p-2">
         <button
           onClick={onToggle}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-slate-400 hover:bg-white/[0.08] hover:text-white transition-colors text-xs font-medium"
         >
-          {isOpen ? (
-            <><ChevronLeft className="h-4 w-4" /><span>Collapse</span></>
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
+          {isOpen
+            ? <><ChevronLeft className="h-4 w-4" /><span>Collapse</span></>
+            : <ChevronRight className="h-4 w-4" />}
         </button>
       </div>
     </aside>

@@ -1,5 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,22 +20,14 @@ export interface AuditLogsResponse {
   pageSize: number;
 }
 
-// ─── Axios helper ─────────────────────────────────────────────────────────────
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function getAuditLogs(
   page = 1,
   pageSize = 20
 ): Promise<AuditLogsResponse> {
-  const response = await axios.get<AuditLogsResponse>("/api/audit-logs", {
+  const response = await httpClient.get<AuditLogsResponse>("/api/audit-logs", {
     params: { page, pageSize },
-    headers: authHeaders(),
   });
   return response.data;
 }

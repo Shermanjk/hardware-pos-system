@@ -3,8 +3,7 @@ import JsBarcode from "jsbarcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Barcode, Search, Edit2, Trash2, Eye, RefreshCw, AlertCircle, X, Package, ScanLine, Wand2, Printer } from "lucide-react";
 import {
@@ -187,29 +186,50 @@ function validateForm(form: ProductForm): Record<string, string> {
 function PrintLabelDialog({ product, onClose }: { product: ProductRecord | null; onClose: () => void }) {
   if (!product) return null;
   return (
-    <AlertDialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <Printer className="h-5 w-5 text-blue-600" /> Print Barcode Label
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-semibold text-gray-900">{product.product_name}</span> was saved successfully.
-            <br />
-            Barcode: <span className="font-mono font-bold text-gray-900">{product.barcode}</span>
-            {" "}({product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"})
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>Skip</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-blue-600 hover:bg-blue-700"
+    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Print Barcode Label</DialogTitle>
+        {/* Blue header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-blue-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Printer className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Print Barcode Label</h2>
+            <p className="text-xs text-blue-100 mt-0.5">Product saved successfully</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Product info card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="font-semibold text-gray-900 text-sm">{product.product_name}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="font-mono text-sm font-bold text-gray-800">{product.barcode}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                product.barcode_source === "store"
+                  ? "bg-purple-100 text-purple-700"
+                  : "bg-blue-100 text-blue-700"
+              }`}>
+                {product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"}
+              </span>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600">
+            Would you like to print a barcode label for this product now?
+          </p>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Skip</Button>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
             onClick={() => { printBarcode(product); onClose(); }}>
-            <Printer className="h-4 w-4 mr-2" /> Print Label
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            <Printer className="h-4 w-4" /> Print Label
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -314,26 +334,34 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col">
-        {/* ── Header ── */}
-        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-gray-900">
+      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
+
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${mode === "add" ? "bg-blue-600" : "bg-gray-700"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">
               {mode === "add" ? "Add New Product" : "Edit Product"}
-            </DialogTitle>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {mode === "add" ? "Fill in the details below to add a new product to your catalog." : "Update the product information below."}
+            </h2>
+            <p className={`text-xs mt-0.5 ${mode === "add" ? "text-blue-100" : "text-gray-300"}`}>
+              {mode === "add"
+                ? "Fill in the details below to add a new product to your catalog."
+                : "Update the product information below."}
             </p>
-          </DialogHeader>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
-          {errors.general && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-700">{errors.general}</p>
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
+            {errors.general && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700">{errors.general}</p>
+              </div>
+            )}
 
           {/* ════════════════════════════════════════════════════════════════
              SECTION 1 — Classification
@@ -360,7 +388,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                     <SelectTrigger className="w-full bg-white border-gray-300">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectItem value="FIXED_PRICE">Fixed Price — standard product</SelectItem>
                       <SelectItem value="MARKET_BASED">Market-Based — commodity (copra, charcoal…)</SelectItem>
                     </SelectContent>
@@ -382,7 +410,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                       <SelectTrigger className="w-full bg-white border-gray-300">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectItem value="RAW_MATERIAL_COMMODITY">Raw Material / Commodity</SelectItem>
                         <SelectItem value="BOTH">Both — retail & raw material</SelectItem>
                       </SelectContent>
@@ -404,7 +432,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                   <SelectTrigger className="w-full max-w-xs bg-white border-gray-300">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectItem value="VATABLE">VATABLE (12% VAT)</SelectItem>
                     <SelectItem value="VAT_EXEMPT">VAT Exempt</SelectItem>
                     <SelectItem value="ZERO_RATED">Zero-Rated</SelectItem>
@@ -515,7 +543,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                     <SelectTrigger className={`w-full bg-white ${errors.category_id ? "border-red-400" : "border-gray-300"}`}>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       {categories.map((c) => (
                         <SelectItem key={c.id} value={String(c.id)}>{c.category_name}</SelectItem>
                       ))}
@@ -528,7 +556,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                   <Select value={form.supplier_id ? String(form.supplier_id) : "none"}
                     onValueChange={(v) => set("supplier_id", v === "none" ? null : v)} disabled={isLoading}>
                     <SelectTrigger className="w-full bg-white border-gray-300"><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectItem value="none">— No supplier —</SelectItem>
                       {suppliers.map((s) => (
                         <SelectItem key={s.id} value={String(s.id)}>{s.supplier_name}</SelectItem>
@@ -545,7 +573,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                     <SelectTrigger className={`w-full bg-white ${errors.unit_id ? "border-red-400" : "border-gray-300"}`}>
                       <SelectValue placeholder="Select unit" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       {units.filter((u) => u.status === "Active").map((u) => (
                         <SelectItem key={u.id} value={String(u.id)}>
                           {u.unit_name} ({u.abbreviation})
@@ -645,19 +673,20 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
               </div>
             </div>
           </div>
+          </div>{/* end scrollable body */}
 
-          {/* ── Footer ── */}
-          <div className="flex-shrink-0 flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="px-5">
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading} className="px-6 gap-2 bg-blue-600 hover:bg-blue-700">
-              {isLoading && <Spinner className="text-white" />}
-              {isLoading
-                ? (mode === "add" ? "Adding…" : "Saving…")
-                : (mode === "add" ? "Add Product" : "Save Changes")}
-            </Button>
-          </div>
+        {/* Sticky footer */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-3 shrink-0">
+          <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="px-5">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isLoading} className={`px-6 gap-2 ${mode === "add" ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-800 hover:bg-gray-900"}`}>
+            {isLoading && <Spinner className="text-white" />}
+            {isLoading
+              ? (mode === "add" ? "Adding…" : "Saving…")
+              : (mode === "add" ? "Add Product" : "Save Changes")}
+          </Button>
+        </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -677,80 +706,129 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
   const status = deriveStatus(product.quantity, product.reorder_level);
   return (
     <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" /> Product Details
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-lg font-bold text-gray-900">{product.barcode}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Product Details</DialogTitle>
+        {/* Slate header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-bold text-white truncate">{product.product_name}</h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="font-mono text-xs text-slate-300">{product.barcode}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
                 product.barcode_source === "store"
-                  ? "bg-purple-100 text-purple-700"
-                  : "bg-blue-100 text-blue-700"
+                  ? "bg-purple-400/30 text-purple-100"
+                  : "bg-blue-400/30 text-blue-100"
               }`}>
-                {product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"}
-              </span>
-            </div>
-            {statusBadge(status)}
-          </div>
-          <p className="text-lg font-semibold text-gray-900">{product.product_name}</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-gray-700">
-            <div><span className="font-medium text-gray-500">Category:</span> {product.category || "—"}</div>
-            <div><span className="font-medium text-gray-500">Supplier:</span> {product.supplier || "—"}</div>
-            <div><span className="font-medium text-gray-500">Unit:</span> {product.unit} ({product.unit_abbreviation})</div>
-            <div><span className="font-medium text-gray-500">Reorder Level:</span> {product.reorder_level}</div>
-            <div><span className="font-medium text-gray-500">Cost Price:</span>{" "}
-              {product.pricing_type === "MARKET_BASED"
-                ? <span className="text-amber-600 font-medium text-xs">Managed via Commodity Prices</span>
-                : `₱${Number(product.cost_price).toFixed(2)}`}
-            </div>
-            <div><span className="font-medium text-gray-500">Selling Price:</span>{" "}
-              {product.pricing_type === "MARKET_BASED"
-                ? <span className="text-amber-600 font-medium text-xs">Managed via Commodity Prices</span>
-                : `₱${Number(product.selling_price).toFixed(2)}`}
-            </div>
-            <div><span className="font-medium text-gray-500">Stock:</span> {(() => {
-              const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type, product.unit_allow_decimal);
-              return (
-                <span className="font-bold text-gray-900">
-                  {parts.number}
-                  {parts.unit && <span className="text-xs text-gray-500 ml-0.5">{parts.unit}</span>}
-                </span>
-              );
-            })()}</div>
-            <div><span className="font-medium text-gray-500">Damaged:</span> {product.damaged_stock}</div>
-            <div><span className="font-medium text-gray-500">Returnable:</span> {product.is_returnable ? "Yes" : "No"}</div>
-            <div><span className="font-medium text-gray-500">Status:</span> {product.status}</div>
-            <div><span className="font-medium text-gray-500">Tax Type:</span> {product.tax_type ?? "VATABLE"}</div>
-            <div><span className="font-medium text-gray-500">Pricing Type:</span>{" "}
-              <span className={product.pricing_type === "MARKET_BASED" ? "text-amber-700 font-semibold" : ""}>
-                {product.pricing_type === "MARKET_BASED" ? "Market-Based" : "Fixed Price"}
+                {product.barcode_source === "store" ? "Store" : "Manufacturer"}
               </span>
             </div>
           </div>
+          {statusBadge(status)}
+        </div>
+
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
+          {/* Core info grid */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <div><span className="text-xs text-gray-500 block mb-0.5">Category</span><span className="font-medium text-gray-900">{product.category || "—"}</span></div>
+            <div><span className="text-xs text-gray-500 block mb-0.5">Supplier</span><span className="font-medium text-gray-900">{product.supplier || "—"}</span></div>
+            <div><span className="text-xs text-gray-500 block mb-0.5">Unit</span><span className="font-medium text-gray-900">{product.unit} ({product.unit_abbreviation})</span></div>
+            <div><span className="text-xs text-gray-500 block mb-0.5">Reorder Level</span><span className="font-medium text-gray-900">{product.reorder_level}</span></div>
+            <div>
+              <span className="text-xs text-gray-500 block mb-0.5">Cost Price</span>
+              <span className="font-medium text-gray-900">
+                {product.pricing_type === "MARKET_BASED"
+                  ? <span className="text-amber-600 text-xs font-medium">Via Commodity Prices</span>
+                  : `₱${Number(product.cost_price).toFixed(2)}`}
+              </span>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 block mb-0.5">Selling Price</span>
+              <span className="font-semibold text-gray-900">
+                {product.pricing_type === "MARKET_BASED"
+                  ? <span className="text-amber-600 text-xs font-medium">Via Commodity Prices</span>
+                  : `₱${Number(product.selling_price).toFixed(2)}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Stock + flags */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <p className="text-xs text-gray-500 mb-1">Stock</p>
+              {(() => {
+                const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type, product.unit_allow_decimal);
+                return (
+                  <p className={`text-xl font-bold tabular-nums ${
+                    product.quantity === 0 ? "text-red-600" :
+                    product.quantity <= product.reorder_level ? "text-amber-600" : "text-gray-900"
+                  }`}>
+                    {parts.number}
+                    {parts.unit && <span className="text-xs text-gray-500 ml-0.5">{parts.unit}</span>}
+                  </p>
+                );
+              })()}
+            </div>
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <p className="text-xs text-gray-500 mb-1">Damaged</p>
+              <p className={`text-xl font-bold tabular-nums ${product.damaged_stock > 0 ? "text-red-500" : "text-gray-300"}`}>
+                {product.damaged_stock}
+              </p>
+            </div>
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <p className="text-xs text-gray-500 mb-1">Returnable</p>
+              <p className={`text-sm font-bold mt-1 ${product.is_returnable ? "text-emerald-600" : "text-gray-400"}`}>
+                {product.is_returnable ? "Yes" : "No"}
+              </p>
+            </div>
+          </div>
+
+          {/* Tags row */}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className={`px-2 py-1 rounded-full font-medium border ${
+              product.status === "Active"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-gray-100 text-gray-500 border-gray-200"
+            }`}>{product.status}</span>
+            <span className="px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-600 border border-gray-200">
+              {product.tax_type ?? "VATABLE"}
+            </span>
+            <span className={`px-2 py-1 rounded-full font-medium border ${
+              product.pricing_type === "MARKET_BASED"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-blue-50 text-blue-700 border-blue-200"
+            }`}>
+              {product.pricing_type === "MARKET_BASED" ? "Market-Based" : "Fixed Price"}
+            </span>
+          </div>
+
           {product.supplier_barcode && (
-            <div><span className="font-medium text-gray-500">Supplier Barcode:</span> {product.supplier_barcode}</div>
+            <div className="text-sm">
+              <span className="text-xs text-gray-500">Supplier Barcode:</span>{" "}
+              <span className="font-mono font-medium text-gray-800">{product.supplier_barcode}</span>
+            </div>
           )}
           {product.description && (
-            <div className="pt-1 border-t border-gray-100">
-              <p className="font-medium text-gray-500 mb-1">Description</p>
+            <div className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-sm">
+              <p className="text-xs text-gray-500 font-medium mb-1">Description</p>
               <p className="text-gray-700">{product.description}</p>
             </div>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button className="gap-2" onClick={() => { onClose(); onEdit(product); }}>
-            <Edit2 className="h-4 w-4" /> Edit
-          </Button>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2">
           <Button variant="outline" className="gap-2" onClick={() => printBarcode(product)}>
             <Barcode className="h-4 w-4" /> Print Barcode
           </Button>
-        </DialogFooter>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { onClose(); onEdit(product); }}>
+              <Edit2 className="h-4 w-4" /> Edit
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -785,31 +863,50 @@ function DeleteDialog({ product, onClose, onDeleted }: DeleteDialogProps) {
   };
 
   return (
-    <AlertDialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove Product?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will remove <span className="font-semibold text-gray-900">{product?.product_name}</span>{" "}
-            ({product?.barcode}). If it has sales history it will be deactivated instead.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg mt-2">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Remove Product</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5 text-white" />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm} disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
-            {isLoading && <Spinner className="mr-2 text-white" />}
+          <div>
+            <h2 className="text-base font-bold text-white">Remove Product</h2>
+            <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Product info card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="font-semibold text-gray-900 text-sm">{product?.product_name}</p>
+            <p className="font-mono text-xs text-gray-500 mt-0.5">{product?.barcode}</p>
+          </div>
+          <p className="text-sm text-gray-700">
+            If this product has sales history it will be <strong>deactivated</strong> instead of permanently deleted.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={isLoading}
+            className="bg-red-600 hover:bg-red-700 text-white gap-2"
+          >
+            {isLoading && <Spinner className="text-white" />}
             {isLoading ? "Removing…" : "Remove"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

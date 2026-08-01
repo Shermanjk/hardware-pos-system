@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 export interface UnifiedRequest {
   type: 'STOCK_COUNT_STANDARD' | 'STOCK_COUNT_MARKET' | 'VOID' | 'RETURN';
@@ -39,9 +33,7 @@ export interface RequestKPI {
 }
 
 export async function getPendingRequests(): Promise<UnifiedRequest[]> {
-  const res = await axios.get<UnifiedRequest[]>("/api/requests/pending", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<UnifiedRequest[]>("/api/requests/pending");
   return res.data;
 }
 
@@ -54,17 +46,14 @@ export async function getRequestHistory(filters?: {
   limit?: number;
   offset?: number;
 }): Promise<UnifiedRequest[]> {
-  const res = await axios.get<UnifiedRequest[]>("/api/requests/history", {
-    headers: authHeaders(),
+  const res = await httpClient.get<UnifiedRequest[]>("/api/requests/history", {
     params: filters,
   });
   return res.data;
 }
 
 export async function getRequestKPI(): Promise<RequestKPI> {
-  const res = await axios.get<RequestKPI>("/api/requests/kpi", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<RequestKPI>("/api/requests/kpi");
   return res.data;
 }
 
@@ -75,22 +64,19 @@ export async function createStockCountRequest(data: {
   reason: string;
   remarks?: string;
 }): Promise<{ reference: string }> {
-  const res = await axios.post<{ reference: string }>("/api/requests/stock-count-standard", data, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.post<{ reference: string }>(
+    "/api/requests/stock-count-standard",
+    data
+  );
   return res.data;
 }
 
 export async function approveRequest(type: string, id: number): Promise<void> {
-  await axios.post(`/api/requests/${type}/${id}/approve`, {}, {
-    headers: authHeaders(),
-  });
+  await httpClient.post(`/api/requests/${type}/${id}/approve`, {});
 }
 
 export async function rejectRequest(type: string, id: number, reason: string): Promise<void> {
-  await axios.post(
-    `/api/requests/${type}/${id}/reject`,
-    { rejection_reason: reason },
-    { headers: authHeaders() }
-  );
+  await httpClient.post(`/api/requests/${type}/${id}/reject`, {
+    rejection_reason: reason,
+  });
 }

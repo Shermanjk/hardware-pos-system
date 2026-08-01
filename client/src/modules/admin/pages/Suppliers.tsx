@@ -9,10 +9,6 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
-} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier } from "@/shared/api/productsApi";
 import type { Supplier } from "@/shared/api/productsApi";
@@ -118,90 +114,105 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
     }
   };
 
+  const isAdd = mode === "add";
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Add New Supplier" : "Edit Supplier"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {errors.general && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-700">{errors.general}</p>
-            </div>
-          )}
-
-          {/* Supplier Name */}
-          <div>
-            <Label className="mb-1.5 block font-semibold">
-              Supplier Name <span className="text-red-500">*</span>
-            </Label>
-            <Input value={form.supplier_name} onChange={(e) => set("supplier_name", e.target.value)}
-              placeholder="e.g. BuildCo Supplies" disabled={isLoading} autoFocus
-              className={errors.supplier_name ? "border-red-400" : ""} />
-            {errors.supplier_name && <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>}
+      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">{isAdd ? "Add New Supplier" : "Edit Supplier"}</DialogTitle>
+        {/* Colored header */}
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-600" : "bg-gray-700"}`}>
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Truck className="h-5 w-5 text-white" />
           </div>
+          <div>
+            <h2 className="text-base font-bold text-white">{isAdd ? "Add New Supplier" : "Edit Supplier"}</h2>
+            <p className={`text-xs mt-0.5 ${isAdd ? "text-blue-100" : "text-gray-300"}`}>
+              {isAdd ? "Fill in the supplier information below" : "Update supplier details"}
+            </p>
+          </div>
+        </div>
 
-          {/* Contact Person + Number */}
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-5 space-y-4">
+            {errors.general && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-700">{errors.general}</p>
+              </div>
+            )}
+
+            {/* Supplier Name */}
+            <div>
+              <Label className="mb-1.5 block font-semibold">
+                Supplier Name <span className="text-red-500">*</span>
+              </Label>
+              <Input value={form.supplier_name} onChange={(e) => set("supplier_name", e.target.value)}
+                placeholder="e.g. BuildCo Supplies" disabled={isLoading} autoFocus
+                className={errors.supplier_name ? "border-red-400" : ""} />
+              {errors.supplier_name && <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>}
+            </div>
+
+            {/* Contact Person + Number */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="mb-1.5 block font-semibold text-sm">
+                  Contact Person <span className="text-gray-400 font-normal">(optional)</span>
+                </Label>
+                <Input value={form.contact_person} onChange={(e) => set("contact_person", e.target.value)}
+                  placeholder="e.g. Juan dela Cruz" disabled={isLoading} />
+              </div>
+              <div>
+                <Label className="mb-1.5 block font-semibold text-sm">
+                  Contact Number <span className="text-gray-400 font-normal">(optional)</span>
+                </Label>
+                <Input value={form.contact_number} onChange={(e) => set("contact_number", e.target.value)}
+                  placeholder="e.g. 09171234567" disabled={isLoading} />
+              </div>
+            </div>
+
+            {/* Email */}
             <div>
               <Label className="mb-1.5 block font-semibold text-sm">
-                Contact Person <span className="text-gray-400 font-normal">(optional)</span>
+                Email <span className="text-gray-400 font-normal">(optional)</span>
               </Label>
-              <Input value={form.contact_person} onChange={(e) => set("contact_person", e.target.value)}
-                placeholder="e.g. Juan dela Cruz" disabled={isLoading} />
+              <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)}
+                placeholder="e.g. supplier@example.com" disabled={isLoading}
+                className={errors.email ? "border-red-400" : ""} />
+              {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
             </div>
+
+            {/* Address */}
             <div>
               <Label className="mb-1.5 block font-semibold text-sm">
-                Contact Number <span className="text-gray-400 font-normal">(optional)</span>
+                Address <span className="text-gray-400 font-normal">(optional)</span>
               </Label>
-              <Input value={form.contact_number} onChange={(e) => set("contact_number", e.target.value)}
-                placeholder="e.g. 09171234567" disabled={isLoading} />
+              <textarea value={form.address} onChange={(e) => set("address", e.target.value)}
+                rows={2} disabled={isLoading}
+                placeholder="Street, City, Province"
+                className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+            </div>
+
+            {/* Status */}
+            <div>
+              <Label className="mb-1.5 block font-semibold text-sm">Status</Label>
+              <Select value={form.status} onValueChange={(v) => set("status", v)} disabled={isLoading}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {/* Email */}
-          <div>
-            <Label className="mb-1.5 block font-semibold text-sm">
-              Email <span className="text-gray-400 font-normal">(optional)</span>
-            </Label>
-            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)}
-              placeholder="e.g. supplier@example.com" disabled={isLoading}
-              className={errors.email ? "border-red-400" : ""} />
-            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
-          </div>
-
-          {/* Address */}
-          <div>
-            <Label className="mb-1.5 block font-semibold text-sm">
-              Address <span className="text-gray-400 font-normal">(optional)</span>
-            </Label>
-            <textarea value={form.address} onChange={(e) => set("address", e.target.value)}
-              rows={2} disabled={isLoading}
-              placeholder="Street, City, Province"
-              className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
-          </div>
-
-          {/* Status */}
-          <div>
-            <Label className="mb-1.5 block font-semibold text-sm">Status</Label>
-            <Select value={form.status} onValueChange={(v) => set("status", v)} disabled={isLoading}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <DialogFooter>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <Spinner className="mr-2 text-white" />}
-              {isLoading ? "Saving…" : mode === "add" ? "Add Supplier" : "Save Changes"}
+              {isLoading ? "Saving…" : isAdd ? "Add Supplier" : "Save Changes"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -237,32 +248,46 @@ function DeleteDialog({ supplier, onClose, onDeleted }: DeleteDialogProps) {
   };
 
   return (
-    <AlertDialog open={!!supplier} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Supplier?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete{" "}
-            <span className="font-semibold text-gray-900">{supplier?.supplier_name}</span>.
-            Suppliers linked to active products cannot be deleted.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+    <Dialog open={!!supplier} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Delete Supplier</DialogTitle>
+        {/* Red header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-red-600 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Trash2 className="h-5 w-5 text-white" />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm} disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
-            {isLoading && <Spinner className="mr-2 text-white" />}
+          <div>
+            <h2 className="text-base font-bold text-white">Delete Supplier</h2>
+            <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Supplier name in gray card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm font-semibold text-gray-900">{supplier?.supplier_name}</p>
+          </div>
+          <p className="text-sm text-gray-700">
+            This will permanently delete this supplier. Suppliers linked to active products cannot be deleted.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button onClick={handleConfirm} disabled={isLoading}
+            className="bg-red-600 hover:bg-red-700 text-white gap-2">
+            {isLoading && <Spinner className="text-white" />}
             {isLoading ? "Deleting…" : "Delete"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -276,17 +301,25 @@ function ViewModal({ supplier, onClose, onEdit }: {
   if (!supplier) return null;
   return (
     <Dialog open={!!supplier} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5 text-blue-600" /> Supplier Details
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Supplier Details</DialogTitle>
+        {/* Slate header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Truck className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Supplier Details</h2>
+            <p className="text-xs text-slate-300 mt-0.5">View supplier information</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-lg font-bold text-gray-900">{supplier.supplier_name}</p>
             {statusBadge(supplier.status)}
           </div>
+
           <div className="grid grid-cols-1 gap-2.5 text-sm">
             {supplier.contact_person && (
               <div className="flex items-center gap-2.5 text-gray-700">
@@ -306,6 +339,9 @@ function ViewModal({ supplier, onClose, onEdit }: {
                 <a href={`mailto:${supplier.email}`} className="text-blue-600 hover:underline">{supplier.email}</a>
               </div>
             )}
+            {(supplier.contact_person || supplier.contact_number || supplier.email) && supplier.address && (
+              <div className="border-t border-gray-100 my-1" />
+            )}
             {supplier.address && (
               <div className="flex items-start gap-2.5 text-gray-700">
                 <MapPin className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
@@ -314,17 +350,25 @@ function ViewModal({ supplier, onClose, onEdit }: {
             )}
             <div className="flex items-center gap-2.5 text-gray-700">
               <Package className="h-4 w-4 text-gray-400 shrink-0" />
-              <span><span className="font-semibold text-gray-900">{supplier.product_count}</span> active product{supplier.product_count !== 1 ? "s" : ""}</span>
+              <span>
+                <span className="font-semibold text-gray-900">{supplier.product_count}</span> active product{supplier.product_count !== 1 ? "s" : ""}
+                {supplier.product_count > 0 && (
+                  <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-full">
+                    Used in {supplier.product_count} product{supplier.product_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </span>
             </div>
           </div>
         </div>
-        <DialogFooter>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
             onClick={() => { onClose(); onEdit(supplier); }}>
             <Edit2 className="h-4 w-4" /> Edit
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

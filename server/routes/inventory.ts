@@ -385,6 +385,7 @@ router.get("/notifications", async (req: Request, res: Response) => {
         p.barcode,
         p.quantity,
         p.reorder_level,
+        p.updated_at,
         CASE
           WHEN p.quantity = 0 THEN 'out_of_stock'
           WHEN p.quantity <= FLOOR(p.reorder_level * 0.5) THEN 'critical'

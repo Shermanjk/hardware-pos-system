@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 export interface SuspendedCartItem {
   product_id: number;
@@ -45,50 +39,42 @@ export interface CompleteSuspendedSalePayload {
   change_amount?: number;
 }
 
-// Get all suspended sales for current cashier
 export async function getSuspendedSales(): Promise<SuspendedSale[]> {
-  const res = await axios.get<SuspendedSale[]>("/api/suspended-sales", {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<SuspendedSale[]>("/api/suspended-sales");
   return res.data;
 }
 
-// Get specific suspended sale
 export async function getSuspendedSale(id: string): Promise<SuspendedSale> {
-  const res = await axios.get<SuspendedSale>(`/api/suspended-sales/${id}`, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.get<SuspendedSale>(`/api/suspended-sales/${id}`);
   return res.data;
 }
 
-// Suspend (save) a sale
-export async function suspendSale(payload: SuspendSalePayload): Promise<{ id: string; message: string }> {
-  const res = await axios.post<{ id: string; message: string }>("/api/suspended-sales", payload, {
-    headers: authHeaders(),
-  });
+export async function suspendSale(
+  payload: SuspendSalePayload
+): Promise<{ id: string; message: string }> {
+  const res = await httpClient.post<{ id: string; message: string }>(
+    "/api/suspended-sales",
+    payload
+  );
   return res.data;
 }
 
-// Update suspended sale (for resuming)
 export async function updateSuspendedSale(
   id: string,
   payload: SuspendSalePayload
 ): Promise<{ message: string }> {
-  const res = await axios.put<{ message: string }>(`/api/suspended-sales/${id}`, payload, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.put<{ message: string }>(
+    `/api/suspended-sales/${id}`,
+    payload
+  );
   return res.data;
 }
 
-// Discard a suspended sale
 export async function discardSuspendedSale(id: string): Promise<{ message: string }> {
-  const res = await axios.delete<{ message: string }>(`/api/suspended-sales/${id}`, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.delete<{ message: string }>(`/api/suspended-sales/${id}`);
   return res.data;
 }
 
-// Complete a suspended sale (convert to actual sale)
 export async function completeSuspendedSale(
   id: string,
   payload: CompleteSuspendedSalePayload
@@ -101,8 +87,6 @@ export async function completeSuspendedSale(
   change_amount: number;
   items: any[];
 }> {
-  const res = await axios.post(`/api/suspended-sales/${id}/complete`, payload, {
-    headers: authHeaders(),
-  });
+  const res = await httpClient.post(`/api/suspended-sales/${id}/complete`, payload);
   return res.data;
 }

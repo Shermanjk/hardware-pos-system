@@ -155,7 +155,13 @@ export default function ClerkDashboard() {
         setLoading(false);
       }
     };
+
     fetchData();
+
+    // Auto-refresh every 3 minutes so the clerk dashboard stays current
+    // throughout the business day without requiring a manual page reload.
+    const id = setInterval(fetchData, 3 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   const cards = [

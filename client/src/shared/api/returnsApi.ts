@@ -1,10 +1,4 @@
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-
-function authHeaders() {
-  const token = loadToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import httpClient from "@/shared/api/httpClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,8 +50,6 @@ export interface ResolveReturnPayload {
   item_condition: "good" | "damaged";
 }
 
-// ─── API functions ────────────────────────────────────────────────────────────
-
 export interface ApprovedReturnSummary {
   id: number;
   return_number: string;
@@ -69,17 +61,17 @@ export interface ApprovedReturnSummary {
   created_at: string;
 }
 
+// ─── API functions ────────────────────────────────────────────────────────────
+
 export async function searchApprovedReturns(customer_name: string): Promise<ApprovedReturnSummary[]> {
-  const response = await axios.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
-    headers: authHeaders(),
+  const response = await httpClient.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
     params: { customer_name },
   });
   return response.data;
 }
 
 export async function getWaitingForCashierReturns(customer_name: string): Promise<ApprovedReturnSummary[]> {
-  const response = await axios.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
-    headers: authHeaders(),
+  const response = await httpClient.get<ApprovedReturnSummary[]>("/api/returns/search-approved", {
     params: { customer_name },
   });
   return response.data;
@@ -88,10 +80,9 @@ export async function getWaitingForCashierReturns(customer_name: string): Promis
 export async function createReturn(
   payload: CreateReturnPayload
 ): Promise<{ return_number: string; id: number }> {
-  const response = await axios.post<{ return_number: string; id: number }>(
+  const response = await httpClient.post<{ return_number: string; id: number }>(
     "/api/returns",
-    payload,
-    { headers: authHeaders() }
+    payload
   );
   return response.data;
 }
@@ -101,63 +92,37 @@ export async function getReturns(params?: {
   date_from?: string;
   date_to?: string;
 }): Promise<Return[]> {
-  const response = await axios.get<Return[]>("/api/returns", {
-    headers: authHeaders(),
-    params,
-  });
+  const response = await httpClient.get<Return[]>("/api/returns", { params });
   return response.data;
 }
 
 export async function getReturnById(id: number): Promise<Return> {
-  const response = await axios.get<Return>(`/api/returns/${id}`, {
-    headers: authHeaders(),
-  });
+  const response = await httpClient.get<Return>(`/api/returns/${id}`);
   return response.data;
 }
 
 export async function approveReturn(id: number): Promise<Return> {
-  const response = await axios.patch<Return>(
-    `/api/returns/${id}/approve`,
-    {},
-    { headers: authHeaders() }
-  );
+  const response = await httpClient.patch<Return>(`/api/returns/${id}/approve`, {});
   return response.data;
 }
 
-export async function rejectReturn(
-  id: number,
-  return_reason: string
-): Promise<Return> {
-  const response = await axios.patch<Return>(
-    `/api/returns/${id}/reject`,
-    { return_reason },
-    { headers: authHeaders() }
-  );
+export async function rejectReturn(id: number, return_reason: string): Promise<Return> {
+  const response = await httpClient.patch<Return>(`/api/returns/${id}/reject`, { return_reason });
   return response.data;
 }
 
-export async function resolveReturn(
-  id: number,
-  payload: ResolveReturnPayload
-): Promise<Return> {
-  const response = await axios.patch<Return>(
-    `/api/returns/${id}/resolve`,
-    payload,
-    { headers: authHeaders() }
-  );
+export async function resolveReturn(id: number, payload: ResolveReturnPayload): Promise<Return> {
+  const response = await httpClient.patch<Return>(`/api/returns/${id}/resolve`, payload);
   return response.data;
 }
 
 export async function getMyPendingReturns(): Promise<Return[]> {
-  const response = await axios.get<Return[]>("/api/returns/my-pending", {
-    headers: authHeaders(),
-  });
+  const response = await httpClient.get<Return[]>("/api/returns/my-pending");
   return response.data;
 }
 
 export async function getMyReturnHistory(search?: string): Promise<Return[]> {
-  const response = await axios.get<Return[]>("/api/returns/my-history", {
-    headers: authHeaders(),
+  const response = await httpClient.get<Return[]>("/api/returns/my-history", {
     params: { search },
   });
   return response.data;
