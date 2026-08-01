@@ -15,7 +15,7 @@ router.get("/pending-counts", authenticate, async (_req: Request, res: Response)
       `SELECT COUNT(*) AS cnt FROM returns WHERE status = 'pending'`
     );
     const [[voidsRow]] = await pool.execute<any[]>(
-      `SELECT COUNT(*) AS cnt FROM void_requests WHERE status = 'pending'`
+      `SELECT COUNT(*) AS cnt FROM sale_voids WHERE status = 'pending'`
     );
 
     res.json({

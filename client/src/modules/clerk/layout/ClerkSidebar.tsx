@@ -1,13 +1,44 @@
 import { useLocation, Link } from "wouter";
+import { useEffect, useState, useCallback } from "react";
 import {
   LayoutDashboard, Boxes, PackagePlus, SlidersHorizontal,
   ClipboardList, Barcode, AlertTriangle,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
+import httpClient from "@/shared/api/httpClient";
 
 interface ClerkSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+}
+
+// ─── Hook: low-stock count ─────────────────────────────────────────────────────
+
+function useLowStockCount() {
+  const [count, setCount] = useState(0);
+
+  const fetch = useCallback(async () => {
+    try {
+      const res = await httpClient.get<{
+        out_of_stock: string;
+        critical: string;
+        low_stock: string;
+      }>("/api/inventory/summary");
+      setCount(
+        Number(res.data.out_of_stock ?? 0) +
+        Number(res.data.critical     ?? 0) +
+        Number(res.data.low_stock    ?? 0)
+      );
+    } catch { /* silently ignore */ }
+  }, []);
+
+  useEffect(() => {
+    fetch();
+    const id = setInterval(fetch, 2 * 60 * 1000); // refresh every 2 min
+    return () => clearInterval(id);
+  }, [fetch]);
+
+  return count;
 }
 
 const mainMenu = [
@@ -22,6 +53,8 @@ const mainMenu = [
 
 export default function ClerkSidebar({ isOpen, onToggle }: ClerkSidebarProps) {
   const [location] = useLocation();
+  const lowStockCount = useLowStockCount();
+  const hasLowStock = lowStockCount > 0;
 
   return (
     <aside
@@ -67,12 +100,12 @@ export default function ClerkSidebar({ isOpen, onToggle }: ClerkSidebarProps) {
               {isOpen && (
                 <span className="text-sm font-medium truncate">{item.label}</span>
               )}
-              {isOpen && item.href === "/clerk/low-stock" && (
+              {isOpen && item.href === "/clerk/low-stock" && hasLowStock && (
                 <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                   !
                 </span>
               )}
-              {isActive && isOpen && item.href !== "/clerk/low-stock" && (
+              {isActive && isOpen && !(item.href === "/clerk/low-stock" && hasLowStock) && (
                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
               )}
             </Link>

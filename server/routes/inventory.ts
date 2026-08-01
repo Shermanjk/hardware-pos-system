@@ -258,7 +258,7 @@ router.post("/stock-in", async (req: Request, res: Response) => {
       }
 
       const product = productRows[0];
-      const newQuantity = product.quantity + item.quantity_received;
+      const newQuantity = Number(product.quantity) + item.quantity_received;
 
       await conn.execute("UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?", [newQuantity, product.id]);
       await conn.execute(`
@@ -330,16 +330,16 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
     let quantityChange: number;
 
     if (type === "Correction") {
-      quantityChange = quantity - product.quantity;
+      quantityChange = quantity - Number(product.quantity);
       newQuantity = quantity;
     } else {
-      if (quantity > product.quantity) {
+      if (quantity > Number(product.quantity)) {
         await conn.rollback();
         res.status(422).json({ message: "Insufficient stock for this adjustment" });
         return;
       }
       quantityChange = -quantity;
-      newQuantity = product.quantity - quantity;
+      newQuantity = Number(product.quantity) - quantity;
     }
 
     await conn.execute("UPDATE products SET quantity = ? WHERE id = ?", [newQuantity, product_id]);
