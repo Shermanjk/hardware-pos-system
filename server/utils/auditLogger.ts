@@ -24,6 +24,8 @@ export type AuditAction =
   | "RETURN_REJECTED"
   | "REFUND_PROCESSED"
   | "EXCHANGE_COMPLETED"
+  | "STORE_CREDIT_ISSUED"
+  | "RETURN_RESOLVED"
   // ── Inventory ───────────────────────────────────────────────────────────────
   | "STOCK_RECEIVED"
   | "STOCK_ADJUSTED"

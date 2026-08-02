@@ -54,13 +54,13 @@ function buildReceiptText(params: SaleReceiptParams): string {
   } = params;
 
   const storeName              = settings.store_name              || "";
-  const storeFb                = settings.store_fb                || "";
-  const storePhone             = settings.store_phone             || "";
-  const storeAddress           = settings.store_address           || "";
+  const storeFb                = settings.facebook                || "";
+  const storePhone             = settings.contact_number          || "";
+  const storeAddress           = settings.address                || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const storeTIN               = settings.tin || settings.business_license || "";
   const documentType           = settings.document_type           || "SALES INVOICE";
-  const taxRate                = Number(settings.tax_rate) > 0 ? Number(settings.tax_rate) : 12;
+  const taxRate                = Number(settings.vat_rate) > 0 ? Number(settings.vat_rate) : 12;
   const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
 
   const now      = new Date();
@@ -78,7 +78,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(center(storeName));
   ln(center(storeAddress));
   ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}`));
-  if (settings.vat_registered) ln(center("VAT REGISTERED"));
+  if (settings.vat_enabled) ln(center("VAT REGISTERED"));
   if (posMin || posSerial) ln(center(`MIN: ${posMin}   |   S/N: ${posSerial}`));
   ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
@@ -117,7 +117,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
     ln(label + (gap > 0 ? " ".repeat(gap) : " ") + val);
   };
 
-  if (settings.vat_registered) {
+  if (settings.vat_enabled) {
     const snaps = params.itemSnapshots;
     const vatableNetCents = snaps.filter((s) => s.tax_type === "VATABLE").reduce((acc, s) => acc + toCentavos(s.taxable_amount), 0);
     const vatExemptCents  = snaps.filter((s) => s.tax_type === "VAT_EXEMPT").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);

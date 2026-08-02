@@ -41,19 +41,41 @@ router.get("/", async (_req: Request, res: Response) => {
     const [todayRows] = await pool.execute<any[]>(`
       SELECT
         COUNT(*)            AS today_transactions,
-        COALESCE(SUM(total_amount), 0) AS today_revenue
+        COALESCE(SUM(total_amount), 0) AS today_gross_revenue
       FROM sales
       WHERE DATE(created_at) = ?
         AND void_status != 'voided'
     `, [today]);
 
+    const [todayRefunds] = await pool.execute<any[]>(`
+      SELECT COALESCE(SUM(r.refund_amount), 0) AS today_refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) = ?
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+    `, [today]);
+
+    const today_revenue = Number(todayRows[0].today_gross_revenue) - Number(todayRefunds[0].today_refunds);
+
     // ── Monthly sales ────────────────────────────────────────────────────────
     const [monthRows] = await pool.execute<any[]>(`
-      SELECT COALESCE(SUM(total_amount), 0) AS monthly_revenue
+      SELECT COALESCE(SUM(total_amount), 0) AS monthly_gross_revenue
       FROM sales
       WHERE DATE(created_at) >= ?
         AND void_status != 'voided'
     `, [monthStart]);
+
+    const [monthRefunds] = await pool.execute<any[]>(`
+      SELECT COALESCE(SUM(r.refund_amount), 0) AS month_refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) >= ?
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+    `, [monthStart]);
+
+    const monthly_revenue = Number(monthRows[0].monthly_gross_revenue) - Number(monthRefunds[0].month_refunds);
 
     // ── Product counts ───────────────────────────────────────────────────────
     const [productRows] = await pool.execute<any[]>(`
@@ -79,27 +101,68 @@ router.get("/", async (_req: Request, res: Response) => {
     // ── Daily sales for the last 7 days ──────────────────────────────────────
     const [weeklyRows] = await pool.execute<any[]>(`
       SELECT
-        DATE(created_at)               AS sale_date,
+        DATE(s.created_at)               AS sale_date,
         COUNT(*)                        AS transactions,
-        COALESCE(SUM(total_amount), 0)  AS revenue
-      FROM sales
-      WHERE DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-        AND void_status != 'voided'
-      GROUP BY DATE(created_at)
+        COALESCE(SUM(s.total_amount), 0)  AS gross_revenue
+      FROM sales s
+      WHERE DATE(s.created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND s.void_status != 'voided'
+      GROUP BY DATE(s.created_at)
       ORDER BY sale_date ASC
     `);
+
+    // Get refunds for each day to subtract from gross revenue
+    const [weeklyRefunds] = await pool.execute<any[]>(`
+      SELECT
+        DATE(r.resolved_at) AS sale_date,
+        COALESCE(SUM(r.refund_amount), 0) AS refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+      GROUP BY DATE(r.resolved_at)
+    `);
+
+    // Merge refunds into weekly data
+    const refundMap = new Map(weeklyRefunds.map((r: any) => [r.sale_date, Number(r.refunds)]));
+    const weekly_sales = weeklyRows.map((row: any) => ({
+      sale_date: row.sale_date,
+      transactions: row.transactions,
+      revenue: Number(row.gross_revenue) - (refundMap.get(row.sale_date) || 0)
+    }));
 
     // ── Monthly revenue for last 6 months ────────────────────────────────────
     const [monthlyRows] = await pool.execute<any[]>(`
       SELECT
-        DATE_FORMAT(created_at, '%Y-%m') AS month,
-        COALESCE(SUM(total_amount), 0)   AS revenue
-      FROM sales
-      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
-        AND void_status != 'voided'
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        DATE_FORMAT(s.created_at, '%Y-%m') AS month,
+        COALESCE(SUM(s.total_amount), 0)   AS gross_revenue
+      FROM sales s
+      WHERE s.created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
+        AND s.void_status != 'voided'
+      GROUP BY DATE_FORMAT(s.created_at, '%Y-%m')
       ORDER BY month ASC
     `);
+
+    // Get refunds for each month
+    const [monthlyRefunds] = await pool.execute<any[]>(`
+      SELECT
+        DATE_FORMAT(r.resolved_at, '%Y-%m') AS month,
+        COALESCE(SUM(r.refund_amount), 0) AS refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE r.resolved_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+      GROUP BY DATE_FORMAT(r.resolved_at, '%Y-%m')
+    `);
+
+    // Merge refunds into monthly data
+    const monthlyRefundMap = new Map(monthlyRefunds.map((r: any) => [r.month, Number(r.refunds)]));
+    const monthly_sales = monthlyRows.map((row: any) => ({
+      month: row.month,
+      revenue: Number(row.gross_revenue) - (monthlyRefundMap.get(row.month) || 0)
+    }));
 
     // ── Top 5 selling products (by qty sold, all time) ───────────────────────
     const [topProductRows] = await pool.execute<any[]>(`
@@ -152,8 +215,8 @@ router.get("/", async (_req: Request, res: Response) => {
     res.status(200).json({
       kpis: {
         today_transactions: Number(todayRows[0].today_transactions),
-        today_revenue:      Number(todayRows[0].today_revenue),
-        monthly_revenue:    Number(monthRows[0].monthly_revenue),
+        today_revenue:      today_revenue,
+        monthly_revenue:    monthly_revenue,
         total_products:     Number(productRows[0].total_products),
         out_of_stock:       Number(productRows[0].out_of_stock),
         critical:           Number(productRows[0].critical),
@@ -161,8 +224,8 @@ router.get("/", async (_req: Request, res: Response) => {
         total_suppliers:    Number(supplierRows[0].total_suppliers),
         pending_returns:    Number(returnsRows[0].pending_returns),
       },
-      weekly_sales:   weeklyRows,
-      monthly_sales:  monthlyRows,
+      weekly_sales:   weekly_sales,
+      monthly_sales:  monthly_sales,
       top_products:   topProductRows,
       recent_sales:   recentSalesRows,
       low_stock_items: lowStockRows,

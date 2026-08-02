@@ -5,7 +5,7 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import { createSale, markReceiptPrinted, generateClientTransactionId, type CreateSalePayload } from "@/shared/api/salesApi";
 import { getMyVoidRequests, type MyVoidRequest } from "@/shared/api/voidApi";
 import { getProduct } from "@/shared/api/productsApi";
-import { getReturnById, resolveReturn, getMyPendingReturns, type Return as ReturnFull } from "@/shared/api/returnsApi";
+import { getMyPendingReturns } from "@/shared/api/returnsApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import httpClient from "@/shared/api/httpClient";
 import { toast } from "sonner";
@@ -125,12 +125,7 @@ export default function Cashier() {
   const [heldReturns, setHeldReturns]       = useState<HeldReturn[]>([]);
   const [showHeldReturns, setShowHeldReturns] = useState(false);
   const [showReturns, setShowReturns]         = useState(false);
-  const [resolveData, setResolveData]         = useState<ReturnFull | null>(null);
-  const [showResolution, setShowResolution]   = useState(false);
-  const [resolution, setResolution]           = useState<"refund" | "replacement">("refund");
-  const [itemCondition, setItemCondition]     = useState<"good" | "damaged">("good");
-  const [resolveLoading, setResolveLoading]   = useState(false);
-  const [resolveError, setResolveError]       = useState<string | null>(null);
+  const [returnToProcessId, setReturnToProcessId] = useState<number | null>(null);
 
   // ── Calculations ──────────────────────────────────────────────────────────
   const totalCents    = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
@@ -224,25 +219,12 @@ export default function Cashier() {
   // ── Cart helpers ──────────────────────────────────────────────────────────
   const clearCart = () => { setCartItems([]); setCashTendered(""); };
 
-  const handleReturnResolve = async () => {
-    if (!resolveData) return;
-    setResolveLoading(true); setResolveError(null);
-    try {
-      await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
-      toast.success(resolution === "refund" ? "Return completed." : "Replacement completed.");
-      setShowResolution(false); setResolveData(null);
-      setHeldReturns((prev) => prev.filter((r) => r.returnId !== resolveData.id));
-      fetchPendingData();
-    } catch (err: unknown) { setResolveError(getErrorMessage(err, "Failed.")); }
-    finally { setResolveLoading(false); }
-  };
-
-  const handleProcessReturn = async (hr: HeldReturn) => {
+  const handleProcessReturn = (hr: HeldReturn) => {
     setShowHeldReturns(false);
-    const ret = await getReturnById(hr.returnId).catch(() => { toast.error("Failed."); throw new Error("fail"); });
-    if (ret.status !== "waiting_for_cashier") { toast.error("Not approved yet."); throw new Error("not_approved"); }
-    setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
-    setHeldReturns((prev) => prev.filter((r) => r.id !== hr.id));
+    // The ReturnsPanel owns execution so only the server-approved resolution
+    // and verified condition are displayed to the cashier.
+    setReturnToProcessId(hr.returnId);
+    setShowReturns(true);
   };
 
   // ── Suspended sales ───────────────────────────────────────────────────────
@@ -489,11 +471,12 @@ export default function Cashier() {
         show={showReturns} onClose={() => setShowReturns(false)}
         storeSettings={storeSettings}
         onHeldReturn={(hr: HeldReturn) => setHeldReturns((prev) => [...prev, hr])}
-        onProcessResolution={(ret: ReturnFull) => { setResolveData(ret); setShowResolution(true); }}
         onReturnResolved={(returnId: number) => {
           setHeldReturns((prev) => prev.filter((r) => r.returnId !== returnId));
         }}
         existingHeldReturns={heldReturns}
+        returnToProcessId={returnToProcessId}
+        onReturnToProcessHandled={() => setReturnToProcessId(null)}
       />
       <CashierVoidRequestsPanel
         show={showVoidRequests} onClose={() => setShowVoidRequests(false)}
@@ -502,51 +485,6 @@ export default function Cashier() {
       />
       <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
 
-      {/* Return resolution modal */}
-      {showResolution && resolveData && (
-        <div
-          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
-          onClick={() => setShowResolution(false)}
-        >
-          <div className="bg-white rounded-xl p-6 w-96 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">Process Return</h3>
-            <div className="text-xs text-gray-500">
-              <p>Return: <span className="font-mono">{resolveData.return_number}</span></p>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {(["refund", "replacement"] as const).map((opt) => (
-                <button
-                  key={opt} onClick={() => setResolution(opt)}
-                  className={`p-3 rounded-lg border-2 text-sm font-medium ${
-                    resolution === opt ? "border-blue-500 bg-blue-50" : "border-gray-200"
-                  }`}
-                >
-                  {opt === "refund" ? "💰 Refund" : "🔄 Replace"}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {(["good", "damaged"] as const).map((opt) => (
-                <button
-                  key={opt} onClick={() => setItemCondition(opt)}
-                  className={`p-3 rounded-lg border-2 text-sm font-medium ${
-                    itemCondition === opt ? "border-blue-500 bg-blue-50" : "border-gray-200"
-                  }`}
-                >
-                  {opt === "good" ? "✅ Good" : "⚠️ Damaged"}
-                </button>
-              ))}
-            </div>
-            {resolveError && <p className="text-xs text-red-600">{resolveError}</p>}
-            <button
-              onClick={handleReturnResolve} disabled={resolveLoading}
-              className="w-full h-10 bg-green-600 text-white rounded-lg font-semibold"
-            >
-              {resolveLoading ? "Processing…" : `Confirm ${resolution === "refund" ? "Refund" : "Replacement"}`}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

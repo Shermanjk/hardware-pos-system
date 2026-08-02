@@ -16,9 +16,10 @@ interface ReturnsPanelProps {
   onClose: () => void;
   storeSettings: StoreSettings;
   onHeldReturn: (hr: HeldReturn) => void;
-  onProcessResolution: (ret: ReturnFull) => void;
   onReturnResolved?: (returnId: number) => void;
   existingHeldReturns?: HeldReturn[];
+  returnToProcessId?: number | null;
+  onReturnToProcessHandled?: () => void;
 }
 
 interface SelectedItem {
@@ -29,7 +30,7 @@ interface SelectedItem {
   barcodeConfirmed: boolean;
 }
 
-export default function ReturnsPanel({ show, onClose, storeSettings, onHeldReturn, onProcessResolution, onReturnResolved, existingHeldReturns = [] }: ReturnsPanelProps) {
+export default function ReturnsPanel({ show, onClose, storeSettings, onHeldReturn, onReturnResolved, existingHeldReturns = [], returnToProcessId, onReturnToProcessHandled }: ReturnsPanelProps) {
   const { user } = useAuth();
   const [searchMode, setSearchMode] = useState<"search" | "date" | "history">("history");
   const [unifiedSearch, setUnifiedSearch] = useState("");
@@ -46,8 +47,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   const [submittedReturn, setSubmittedReturn] = useState<{ return_number: string; id: number } | null>(null);
   const [showResolution, setShowResolution] = useState(false);
   const [resolveData, setResolveData] = useState<ReturnFull | null>(null);
-  const [resolution, setResolution] = useState<"refund" | "replacement">("refund");
-  const [itemCondition, setItemCondition] = useState<"good" | "damaged">("good");
+  const [itemCondition, setItemCondition] = useState<"good" | "damaged" | "defective">("good");
   const [resolveLoading, setResolveLoading] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [returnHistory, setReturnHistory] = useState<ReturnFull[]>([]);
@@ -103,8 +103,8 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
           setReturnLookupError("Invoice not found.");
         }
       } else {
-        // Otherwise search by customer name
-        const results = await searchSales({ customer_name: unifiedSearch.trim() });
+        // Otherwise search by customer name (exclude sales with completed returns)
+        const results = await searchSales({ customer_name: unifiedSearch.trim(), return_status: "no_returns" });
         const active = results.filter((s) => s.void_status !== "voided");
         if (active.length === 0) {
           setReturnLookupError("No transactions found.");
@@ -119,7 +119,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   const handleSaleSearch = async () => {
     setReturnLookupLoading(true); setReturnLookupError(null); setSaleSearchResults([]);
     try {
-      const results = await searchSales({ date_from: dateFrom || undefined, date_to: dateTo || undefined });
+      const results = await searchSales({ date_from: dateFrom || undefined, date_to: dateTo || undefined, return_status: "no_returns" });
       const active = results.filter((s) => s.void_status !== "voided");
       if (active.length === 0) setReturnLookupError("No transactions found.");
       else setSaleSearchResults(active);
@@ -137,7 +137,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     if (itemsToReturn.length === 0) { setReturnSubmitError("Select at least one item."); return; }
     setReturnSubmitLoading(true);
     try {
-      const result = await createReturn({ sale_id: Number(returnSale.id), return_reason: itemsToReturn[0]._reason, items: itemsToReturn.map(({ sale_item_id, product_id, quantity_returned, unit_price }) => ({ sale_item_id: Number(sale_item_id), product_id: Number(product_id), quantity_returned, unit_price })) });
+      const result = await createReturn({ sale_id: Number(returnSale.id), return_reason: itemsToReturn[0]._reason, item_condition: itemCondition, items: itemsToReturn.map(({ sale_item_id, product_id, quantity_returned, unit_price }) => ({ sale_item_id: Number(sale_item_id), product_id: Number(product_id), quantity_returned, unit_price })) });
       setSubmittedReturn(result);
     } catch (err: any) { setReturnSubmitError(err?.response?.data?.message ?? "Failed to submit."); }
     finally { setReturnSubmitLoading(false); }
@@ -150,19 +150,52 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
         toast.error("Not approved yet.");
         return;
       }
-      setResolveData(ret); setResolution("refund"); setItemCondition("good"); setResolveError(null); setShowResolution(true);
+      setResolveData(ret); setResolveError(null); setShowResolution(true);
     } catch {
       toast.error("Failed to fetch return details.");
     }
   };
 
+  // Preserve the Pending Returns panel's direct “Process Now” behavior while
+  // routing execution through this read-only approval dialog.
+  useEffect(() => {
+    if (!show || !returnToProcessId) return;
+    void handleFetchForResolution(returnToProcessId);
+    onReturnToProcessHandled?.();
+  }, [show, returnToProcessId]);
+
   const handleResolve = async () => {
     if (!resolveData) return;
     setResolveLoading(true); setResolveError(null);
     try {
-      const resolved = await resolveReturn(resolveData.id, { resolution, item_condition: itemCondition });
-      printReturnReceipt({ return_number: resolved.return_number, invoice_number: resolved.invoice_number, customer_name: resolved.customer_name, processed_by_name: user?.full_name ?? "—", resolution: resolved.resolution!, item_condition: resolved.item_condition!, refund_amount: resolved.refund_amount, items: resolved.items.map((i) => ({ product_name: i.product_name, quantity_returned: i.quantity_returned, unit_price: i.unit_price })), resolved_at: resolved.resolved_at ?? undefined, store_name: storeSettings.store_name, store_fb: storeSettings.store_fb, store_phone: storeSettings.store_phone, store_address: storeSettings.store_address, store_tin: storeSettings.business_license, store_vat_registered: storeSettings.vat_registered, currency: storeSettings.currency });
-      toast.success(resolution === "refund" ? "Return completed." : "Replacement completed.");
+      const resolved = await resolveReturn(resolveData.id, {});
+      printReturnReceipt({
+        return_number: resolved.return_number,
+        invoice_number: resolved.invoice_number,
+        customer_name: resolved.customer_name,
+        processed_by_name: user?.full_name ?? "—",
+        resolution: resolved.resolution!,
+        item_condition: resolved.item_condition!,
+        refund_amount: resolved.refund_amount,
+        items: resolved.items.map((i) => ({
+          product_name: i.product_name,
+          quantity_returned: i.quantity_returned,
+          unit_price: i.unit_price
+        })),
+        resolved_at: resolved.resolved_at ?? undefined,
+        store_name: storeSettings.store_name,
+        facebook: storeSettings.facebook,
+        contact_number: storeSettings.contact_number,
+        address: storeSettings.address,
+        store_tin: storeSettings.business_license,
+        vat_enabled: storeSettings.vat_enabled,
+        currency: storeSettings.currency,
+        exchange_barcode: resolved.exchange_barcode ?? undefined,
+        exchange_quantity: resolved.exchange_quantity ?? undefined,
+        additional_payment: resolved.additional_payment ?? undefined,
+        refund_difference: resolved.refund_difference ?? undefined
+      });
+      toast.success("Return completed.");
       // Notify parent to update pending returns
       if (onReturnResolved) {
         onReturnResolved(resolved.id);
@@ -211,9 +244,76 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                   <button key={m} onClick={() => { setSearchMode(m); setReturnLookupError(null); setSaleSearchResults([]); if (m === "history") loadReturnHistory(); }} className={`flex-1 py-2 ${searchMode === m ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{m === "search" ? "Search" : m === "date" ? "Date" : "History"}</button>
                 ))}
               </div>
-              {searchMode === "search" && (<div className="flex gap-2"><Input value={unifiedSearch} onChange={(e) => setUnifiedSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleUnifiedSearch()} placeholder="Search Invoice # or Customer..." className="h-10 text-sm flex-1 border-2 border-gray-300" autoFocus /><Button size="sm" onClick={handleUnifiedSearch} disabled={returnLookupLoading || !unifiedSearch.trim()}>{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
-              {searchMode === "date" && (<div className="space-y-2"><div className="flex gap-2"><div className="flex-1"><label className="text-xs mb-0.5 block">From</label><Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 text-sm border-2 border-gray-300" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">To</label><Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 text-sm border-2 border-gray-300" /></div></div><Button size="sm" onClick={handleSaleSearch} disabled={returnLookupLoading || (!dateFrom && !dateTo)} className="h-9 w-full">{returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
-              {searchMode === "history" && (<div className="flex gap-2"><Input value={blendedSearch} onChange={(e) => setBlendedSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadReturnHistory()} placeholder="Search Invoice # or Customer..." className="h-10 text-sm flex-1 border-2 border-gray-300" autoFocus /><Button size="sm" onClick={loadReturnHistory} disabled={historyLoading}>{historyLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}</Button></div>)}
+              {searchMode === "search" && (
+                <div className="flex gap-2">
+                  <Input
+                    value={unifiedSearch}
+                    onChange={(e) => setUnifiedSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleUnifiedSearch()}
+                    placeholder="Search Invoice # or Customer..."
+                    className="h-10 text-sm flex-1 border-2 border-gray-300"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleUnifiedSearch}
+                    disabled={returnLookupLoading || !unifiedSearch.trim()}
+                  >
+                    {returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
+              )}
+              {searchMode === "date" && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs mb-0.5 block">From</label>
+                      <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="h-10 text-sm border-2 border-gray-300"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs mb-0.5 block">To</label>
+                      <Input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="h-10 text-sm border-2 border-gray-300"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaleSearch}
+                    disabled={returnLookupLoading || (!dateFrom && !dateTo)}
+                    className="h-9 w-full"
+                  >
+                    {returnLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
+              )}
+              {searchMode === "history" && (
+                <div className="flex gap-2">
+                  <Input
+                    value={blendedSearch}
+                    onChange={(e) => setBlendedSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadReturnHistory()}
+                    placeholder="Search Invoice # or Customer..."
+                    className="h-10 text-sm flex-1 border-2 border-gray-300"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={loadReturnHistory}
+                    disabled={historyLoading}
+                  >
+                    {historyLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
+              )}
               {returnLookupError && <p className="text-xs text-red-600">{returnLookupError}</p>}
               {searchMode === "history" && (
                 <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -274,18 +374,259 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                       </div>
                     ))
                   )}
+              </div>
+              )}
+              {saleSearchResults.length > 0 && (
+                <div className="border-2 border-gray-300 rounded-lg overflow-hidden max-h-56 overflow-y-auto shadow-sm">
+                  {saleSearchResults.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setSaleSearchResults([]);
+                        setUnifiedSearch(s.invoice_number);
+                        setReturnLookupLoading(true);
+                        setReturnLookupError(null);
+                        getSaleByInvoice(s.invoice_number)
+                          .then((sale) => {
+                            setReturnSale(sale);
+                            const init: Record<number, SelectedItem> = {};
+                            sale.items.forEach((item) => {
+                              const rem = item.quantity - item.quantity_returned;
+                              if (rem > 0 && item.is_returnable) {
+                                init[item.id] = {
+                                  checked: false,
+                                  quantity: 1,
+                                  reason: "Damaged",
+                                  scannedBarcode: "",
+                                  barcodeConfirmed: !item.barcode
+                                };
+                              }
+                            });
+                            setSelectedItems(init);
+                          })
+                          .catch((err: any) =>
+                            setReturnLookupError(
+                              err?.response?.status === 404 ? "Not found." : err?.response?.data?.message
+                            )
+                          )
+                          .finally(() => setReturnLookupLoading(false));
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left border-b border-gray-200 last:border-b-0"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{s.invoice_number}</p>
+                        <p className="text-xs text-gray-500">{s.customer_name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-semibold text-blue-600">
+                          ₱{Number(s.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
-              {returnLookupError && <p className="text-xs text-red-600">{returnLookupError}</p>}
-              {saleSearchResults.length > 0 && (<div className="border-2 border-gray-300 rounded-lg overflow-hidden max-h-56 overflow-y-auto shadow-sm">{saleSearchResults.map((s) => (<button key={s.id} onClick={() => { setSaleSearchResults([]); setUnifiedSearch(s.invoice_number); setReturnLookupLoading(true); setReturnLookupError(null); getSaleByInvoice(s.invoice_number).then((sale) => { setReturnSale(sale); const init: Record<number, SelectedItem> = {}; sale.items.forEach((item) => { const rem = item.quantity - item.quantity_returned; if (rem > 0 && item.is_returnable) init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode }; }); setSelectedItems(init); }).catch((err: any) => setReturnLookupError(err?.response?.status === 404 ? "Not found." : err?.response?.data?.message)).finally(() => setReturnLookupLoading(false)); }} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 text-left border-b border-gray-200 last:border-b-0"><div><p className="text-sm font-medium">{s.invoice_number}</p><p className="text-xs text-gray-500">{s.customer_name}</p></div><div className="text-right"><p className="text-xs font-semibold text-blue-600">₱{Number(s.total_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p><p className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString()}</p></div></button>))}</div>)}
-            </div>)}
-          {returnSale && !submittedReturn && (<div className="space-y-4"><div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 text-sm space-y-1 shadow-sm"><div className="flex justify-between"><span className="text-gray-500">Invoice</span><span className="font-semibold">{returnSale.invoice_number}</span></div><div className="flex justify-between"><span className="text-gray-500">Customer</span><span className="font-medium">{returnSale.customer_name}</span></div></div><div><p className="text-xs font-semibold text-gray-500 uppercase mb-2">Select Items</p><div className="space-y-2">{returnSale.items.filter((item) => { const rem = item.quantity - item.quantity_returned; return rem > 0 && item.is_returnable; }).map((item) => { const sel = selectedItems[item.id]; if (!sel) return null; const rem = item.quantity - item.quantity_returned; return (<div key={item.id} className={`border-2 rounded-lg p-3 shadow-sm ${sel.checked ? "border-blue-400 bg-blue-50/40" : "border-gray-300 bg-white"}`}><div className="flex items-start gap-2"><input type="checkbox" checked={sel.checked} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], checked: e.target.checked } }))} className="mt-0.5 h-4 w-4 accent-blue-600" /><div className="flex-1"><p className="text-sm font-medium">{item.product_name}</p><p className="text-xs text-gray-500">Ret: {rem} · ₱{Number(item.unit_price).toFixed(2)}</p></div></div>{sel.checked && (<div className="pl-6 flex gap-2 mt-2"><div className="flex-1"><label className="text-xs mb-0.5 block">Qty</label><input type="number" min={1} max={rem} value={sel.quantity} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], quantity: Math.min(rem, Math.max(1, Number(e.target.value))) } }))} className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2" /></div><div className="flex-1"><label className="text-xs mb-0.5 block">Reason</label><select value={sel.reason} onChange={(e) => setSelectedItems((prev) => ({ ...prev, [item.id]: { ...prev[item.id], reason: e.target.value } }))} className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2"><option>Damaged</option><option>Missing Items</option><option>Wrong Item</option><option>Other</option></select></div></div>)}</div>); })}</div></div>{returnSubmitError && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{returnSubmitError}</p>}<div className="flex gap-2"><Button variant="outline" size="sm" className="flex-1" onClick={() => { setReturnSale(null); setUnifiedSearch(""); setSelectedItems({}); }}>Back</Button><Button size="sm" className="flex-1" onClick={handleReturnSubmit} disabled={returnSubmitLoading || !Object.values(selectedItems).some((v) => v.checked)}>{returnSubmitLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Submit Return"}</Button></div></div>)}
-          {submittedReturn && (<div className="space-y-4"><div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 text-center shadow-sm"><div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto"><RotateCcw className="h-5 w-5 text-green-600" /></div><p className="text-sm font-semibold text-green-800 mt-2">Return Submitted</p><p className="text-xs font-mono text-green-700 bg-green-100 rounded px-2 py-1 mt-1">{submittedReturn.return_number}</p><p className="text-xs text-green-700 mt-1">Wait for admin approval.</p></div><Button className="w-full" onClick={() => handleFetchForResolution(submittedReturn.id)}>Process Return</Button><Button variant="outline" className="w-full border-2 border-gray-300" onClick={() => { onHeldReturn({ id: `hret-${Date.now()}`, heldAt: new Date(), returnId: submittedReturn.id, returnNumber: submittedReturn.return_number, invoiceNumber: returnSale?.invoice_number ?? "", customerName: returnSale?.customer_name ?? "" }); onClose(); resetPanel(); toast.success("Return parked."); }}><Hourglass className="h-4 w-4 mr-2" />Serve Next Customer</Button><Button variant="outline" className="w-full h-9 text-xs" onClick={resetPanel}>Start New Return</Button></div>)}
+            </div>
+          )}
+          {returnSale && !submittedReturn && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 text-sm space-y-1 shadow-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Invoice</span>
+                  <span className="font-semibold">{returnSale.invoice_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Customer</span>
+                  <span className="font-medium">{returnSale.customer_name}</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Item Condition</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {(["good", "damaged", "defective"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setItemCondition(opt)}
+                      className={`p-3 rounded-lg border-2 text-sm font-medium ${
+                        itemCondition === opt ? "border-blue-500 bg-blue-50" : "border-gray-200"
+                      }`}
+                    >
+                      {opt === "good" ? "✅ Good" : opt === "damaged" ? "⚠️ Damaged" : "🔧 Defective"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Select Items</p>
+                <div className="space-y-2">
+                  {returnSale.items
+                    .filter((item) => {
+                      const rem = item.quantity - item.quantity_returned;
+                      return rem > 0 && item.is_returnable;
+                    })
+                    .map((item) => {
+                      const sel = selectedItems[item.id];
+                      if (!sel) return null;
+                      const rem = item.quantity - item.quantity_returned;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`border-2 rounded-lg p-3 shadow-sm ${
+                            sel.checked ? "border-blue-400 bg-blue-50/40" : "border-gray-300 bg-white"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              checked={sel.checked}
+                              onChange={(e) =>
+                                setSelectedItems((prev) => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], checked: e.target.checked },
+                                }))
+                              }
+                              className="mt-0.5 h-4 w-4 accent-blue-600"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{item.product_name}</p>
+                              <p className="text-xs text-gray-500">
+                                Ret: {rem} · ₱{Number(item.unit_price).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                          {sel.checked && (
+                            <div className="pl-6 flex gap-2 mt-2">
+                              <div className="flex-1">
+                                <label className="text-xs mb-0.5 block">Qty</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={rem}
+                                  value={sel.quantity}
+                                  onChange={(e) =>
+                                    setSelectedItems((prev) => ({
+                                      ...prev,
+                                      [item.id]: {
+                                        ...prev[item.id],
+                                        quantity: Math.min(rem, Math.max(1, Number(e.target.value))),
+                                      },
+                                    }))
+                                  }
+                                  className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-xs mb-0.5 block">Reason</label>
+                                <select
+                                  value={sel.reason}
+                                  onChange={(e) =>
+                                    setSelectedItems((prev) => ({
+                                      ...prev,
+                                      [item.id]: { ...prev[item.id], reason: e.target.value },
+                                    }))
+                                  }
+                                  className="w-full h-9 text-sm border-2 border-gray-300 rounded px-2"
+                                >
+                                  <option value="Damaged">Damaged</option>
+                                  <option value="Missing Items">Missing Items</option>
+                                  <option value="Wrong Item">Wrong Item</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleReturnSubmit}
+                disabled={returnSubmitLoading || Object.values(selectedItems).filter((v) => v.checked).length === 0}
+              >
+                {returnSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Submit Return Request
+              </Button>
+            </div>
+          )}
+          {submittedReturn && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 text-center shadow-sm">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                  <RotateCcw className="h-5 w-5 text-green-600" />
+                </div>
+                <p className="text-sm font-semibold text-green-800 mt-2">Return Submitted</p>
+                <p className="text-xs font-mono text-green-700 bg-green-100 rounded px-2 py-1 mt-1">
+                  {submittedReturn.return_number}
+                </p>
+                <p className="text-xs text-green-700 mt-1">Wait for admin approval.</p>
+              </div>
+              <Button className="w-full" onClick={() => handleFetchForResolution(submittedReturn.id)}>
+                Process Return
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full border-2 border-gray-300"
+                onClick={() => {
+                  onHeldReturn({
+                    id: `hret-${Date.now()}`,
+                    heldAt: new Date(),
+                    returnId: submittedReturn.id,
+                    returnNumber: submittedReturn.return_number,
+                    invoiceNumber: returnSale?.invoice_number ?? "",
+                    customerName: returnSale?.customer_name ?? "",
+                  });
+                  onClose();
+                  resetPanel();
+                  toast.success("Return parked.");
+                }}
+              >
+                <Hourglass className="h-4 w-4 mr-2" /> Serve Next Customer
+              </Button>
+              <Button variant="outline" className="w-full h-9 text-xs" onClick={resetPanel}>
+                Start New Return
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       <Dialog open={showResolution} onOpenChange={(o) => { if (!o) { setShowResolution(false); setResolveData(null); setResolveError(null); } }}>
-        <DialogContent className="max-w-md"><DialogHeader><DialogTitle>Process Return</DialogTitle></DialogHeader>
-          {resolveData && (<div className="space-y-4"><div className="text-xs text-gray-500"><p>Return: <span className="font-mono font-semibold">{resolveData.return_number}</span></p><p>Invoice: <span className="font-semibold">{resolveData.invoice_number}</span></p></div><div><p className="text-sm font-semibold mb-2">Resolution</p><div className="grid grid-cols-2 gap-2">{(["refund", "replacement"] as const).map((opt) => (<button key={opt} onClick={() => setResolution(opt)} className={`p-3 rounded-lg border-2 text-sm font-medium ${resolution === opt ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}>{opt === "refund" ? "💰 Refund" : "🔄 Replace"}</button>))}</div></div><div><p className="text-sm font-semibold mb-2">Condition</p><div className="grid grid-cols-2 gap-2">{(["good", "damaged"] as const).map((opt) => (<button key={opt} onClick={() => setItemCondition(opt)} className={`p-3 rounded-lg border-2 text-sm font-medium ${itemCondition === opt ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}>{opt === "good" ? "✅ Good" : "⚠️ Damaged"}</button>))}</div></div>{resolveError && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{resolveError}</p>}<Button className="w-full" onClick={handleResolve} disabled={resolveLoading}>{resolveLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Confirm {resolution === "refund" ? "Refund" : "Replacement"}</Button></div>)}
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Process Return</DialogTitle>
+          </DialogHeader>
+          {resolveData && (
+            <div className="space-y-4">
+              <div className="text-xs text-gray-500">
+                <p>Return: <span className="font-mono font-semibold">{resolveData.return_number}</span></p>
+                <p>Invoice: <span className="font-semibold">{resolveData.invoice_number}</span></p>
+              </div>
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-blue-900 mb-1">Approved Resolution</p>
+                <p className="text-sm font-bold text-blue-700 capitalize">
+                  {resolveData.resolution === "refund" ? "💰 Refund" : resolveData.resolution === "exchange" ? "🔄 Exchange" : resolveData.resolution === "store_credit" ? "💳 Store Credit" : "❌ Rejected"}
+                </p>
+              </div>
+              {resolveData.resolution === "exchange" && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-amber-900 mb-1">Exchange Details</p>
+                  <p className="text-xs text-amber-700">Barcode: {resolveData.exchange_barcode ?? "Not available"}</p>
+                  <p className="text-xs text-amber-700">Quantity: {resolveData.exchange_quantity ?? "Not available"}</p>
+                </div>
+              )}
+              <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-gray-900 mb-1">Item Condition</p>
+                <p className="text-sm font-medium text-gray-700 capitalize">{resolveData.item_condition ?? "Not recorded"}</p>
+              </div>
+              {resolveError && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{resolveError}</p>}
+              <Button className="w-full" onClick={handleResolve} disabled={resolveLoading}>
+                {resolveLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Execute {resolveData.resolution === "refund" ? "Refund" : resolveData.resolution === "exchange" ? "Exchange" : resolveData.resolution === "store_credit" ? "Store Credit" : "Resolution"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

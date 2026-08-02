@@ -27,7 +27,7 @@ router.get("/", async (req: Request, res: Response) => {
     const [summaryRows] = await pool.execute<any[]>(`
       SELECT
         COUNT(*)                          AS total_transactions,
-        COALESCE(SUM(total_amount), 0)    AS total_revenue,
+        COALESCE(SUM(total_amount), 0)    AS gross_revenue,
         COALESCE(SUM(vat_amount), 0)      AS total_vat,
         COALESCE(SUM(subtotal), 0)        AS total_subtotal,
         COALESCE(AVG(total_amount), 0)    AS avg_order_value,
@@ -39,21 +39,68 @@ router.get("/", async (req: Request, res: Response) => {
         ${cashierFilter}
     `, [date_from, date_to, ...cashierParams]);
 
+    // Get total refunds for the period
+    const [refundRows] = await pool.execute<any[]>(`
+      SELECT COALESCE(SUM(r.refund_amount), 0) AS total_refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) BETWEEN ? AND ?
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+        ${cashierFilter.replace('s.', 's.')}
+    `, [date_from, date_to, ...cashierParams]);
+
+    const grossRevenue = Number(summaryRows[0].gross_revenue);
+    const totalRefunds = Number(refundRows[0].total_refunds);
+    const netRevenue = grossRevenue - totalRefunds;
+
+    // Update summary with net revenue
+    const summary = {
+      ...summaryRows[0],
+      gross_revenue: grossRevenue,
+      total_revenue: netRevenue,
+      total_refunds: totalRefunds,
+    };
+
     // ── 2. Daily sales breakdown — exclude voided ────────────────────────────
     const [dailyRows] = await pool.execute<any[]>(`
       SELECT
-        DATE(created_at)                  AS sale_date,
+        DATE(s.created_at)                  AS sale_date,
         COUNT(*)                          AS transactions,
-        COALESCE(SUM(subtotal), 0)        AS subtotal,
-        COALESCE(SUM(vat_amount), 0)      AS vat,
-        COALESCE(SUM(total_amount), 0)    AS total
-      FROM sales
-      WHERE DATE(created_at) BETWEEN ? AND ?
-        AND void_status != 'voided'
+        COALESCE(SUM(s.subtotal), 0)      AS subtotal,
+        COALESCE(SUM(s.vat_amount), 0)    AS vat,
+        COALESCE(SUM(s.total_amount), 0)  AS gross_total
+      FROM sales s
+      WHERE DATE(s.created_at) BETWEEN ? AND ?
+        AND s.void_status != 'voided'
         ${cashierFilter}
-      GROUP BY DATE(created_at)
+      GROUP BY DATE(s.created_at)
       ORDER BY sale_date ASC
     `, [date_from, date_to, ...cashierParams]);
+
+    // Get daily refunds
+    const [dailyRefunds] = await pool.execute<any[]>(`
+      SELECT
+        DATE(r.resolved_at) AS sale_date,
+        COALESCE(SUM(r.refund_amount), 0) AS refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) BETWEEN ? AND ?
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+        ${cashierFilter.replace('s.', 's.')}
+      GROUP BY DATE(r.resolved_at)
+    `, [date_from, date_to, ...cashierParams]);
+
+    // Merge refunds into daily data
+    const dailyRefundMap = new Map(dailyRefunds.map((r: any) => [r.sale_date, Number(r.refunds)]));
+    const daily_sales = dailyRows.map((row: any) => ({
+      sale_date: row.sale_date,
+      transactions: row.transactions,
+      subtotal: Number(row.subtotal),
+      vat: Number(row.vat),
+      total: Number(row.gross_total) - (dailyRefundMap.get(row.sale_date) || 0)
+    }));
 
     // ── 3. Top products — exclude voided sales ───────────────────────────────
     const [topProductRows] = await pool.execute<any[]>(`
@@ -193,8 +240,8 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.status(200).json({
       period:       { date_from, date_to },
-      summary:      summaryRows[0],
-      daily_sales:  dailyRows,
+      summary:      summary,
+      daily_sales:  daily_sales,
       top_products: topProductRows,
       by_cashier:   cashierRows,
       vat_summary,

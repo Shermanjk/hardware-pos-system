@@ -364,12 +364,12 @@ router.post(
         ? JSON.parse(suspended.cart_data) 
         : suspended.cart_data;
 
-      // 1. Read tax_rate and vat_registered from store_settings (authoritative)
+      // 1. Read tax_rate and vat_registered from system_settings (authoritative)
       const [settingsRows] = await conn.execute<any[]>(
-        `SELECT tax_rate, vat_registered FROM store_settings WHERE id = 1 LIMIT 1`
+        `SELECT vat_rate, vat_enabled FROM system_settings WHERE id = 1 LIMIT 1`
       );
-      const dbTaxRate   = Number(settingsRows[0]?.tax_rate ?? 12);
-      const dbVatActive = settingsRows[0]?.vat_registered === true || settingsRows[0]?.vat_registered === 1;
+      const dbTaxRate   = Number(settingsRows[0]?.vat_rate ?? 12);
+      const dbVatActive = settingsRows[0]?.vat_enabled === true || settingsRows[0]?.vat_enabled === 1;
 
       // 2. Validate product_ids exist and fetch authoritative DB product data
       //    Also lock product rows and check stock BEFORE any writes

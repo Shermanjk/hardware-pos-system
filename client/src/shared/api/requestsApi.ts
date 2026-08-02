@@ -75,6 +75,17 @@ export async function approveRequest(type: string, id: number): Promise<void> {
   await httpClient.post(`/api/requests/${type}/${id}/approve`, {});
 }
 
+export async function approveReturnRequest(id: number, payload: {
+  resolution: "refund" | "exchange" | "store_credit" | "rejected";
+  exchange_product_id?: number;
+  exchange_quantity?: number;
+  additional_payment?: number;
+  refund_difference?: number;
+  rejection_reason?: string;
+}): Promise<void> {
+  await httpClient.patch(`/api/returns/${id}/approve`, payload);
+}
+
 export async function rejectRequest(type: string, id: number, reason: string): Promise<void> {
   await httpClient.post(`/api/requests/${type}/${id}/reject`, {
     rejection_reason: reason,

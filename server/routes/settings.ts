@@ -18,17 +18,19 @@ function requireAdmin(req: Request, res: Response): boolean {
 const settingsSchema = z.object({
   // General
   store_name:                z.string().max(150).optional(),
-  store_fb:                  z.string().max(150).optional(),
-  store_phone:               z.string().max(50).optional(),
-  store_address:             z.string().max(255).optional(),
+  facebook:                  z.string().max(150).optional(), // renamed from store_fb
+  contact_number:            z.string().max(50).optional(), // renamed from store_phone
+  address:                   z.string().max(255).optional(), // renamed from store_address
   currency:                  z.string().max(10).optional(),
   // Business / taxpayer
+  proprietor:                z.string().max(150).optional(),
   registered_taxpayer_name:  z.string().max(200).optional(),
   tin:                       z.string().max(30).optional(),
-  business_license:          z.string().max(100).optional(), // kept for backward compat
+  business_license:          z.string().max(100).optional(),
   document_type:             z.string().max(60).optional(),
-  tax_rate:                  z.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot exceed 100").optional(),
-  vat_registered:            z.boolean().optional(),
+  vat_rate:                  z.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot exceed 100").optional(),
+  vat_enabled:               z.boolean().optional(), // renamed from vat_registered
+  vat_registered:            z.boolean().optional(), // alias for compatibility
   // POS machine
   pos_min:                   z.string().max(30).optional(),
   pos_serial:                z.string().max(30).optional(),
@@ -37,13 +39,14 @@ const settingsSchema = z.object({
 // ─── GET /api/settings ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
+    const [rows] = await pool.execute<any[]>("SELECT * FROM system_settings WHERE id = 1 LIMIT 1");
     const row = rows[0] ?? {};
     res.set("Cache-Control", "no-store");
     res.status(200).json({
       ...row,
-      tax_rate:       Number(row.tax_rate ?? 0),
-      vat_registered: Boolean(row.vat_registered),
+      vat_rate:       Number(row.vat_rate ?? 0),
+      vat_enabled:    Boolean(row.vat_enabled),
+      vat_registered: Boolean(row.vat_enabled), // Alias for frontend compatibility
     });
   } catch (err) {
     console.error("[settings/GET] Unexpected error:", err);
@@ -73,7 +76,7 @@ router.put("/", async (req: Request, res: Response) => {
 
   try {
     // Fetch previous values for audit log
-    const [prevRows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
+    const [prevRows] = await pool.execute<any[]>("SELECT * FROM system_settings WHERE id = 1 LIMIT 1");
     const previous = prevRows[0] ?? {};
 
     const setClauses: string[] = ["updated_at = NOW()"];
@@ -81,18 +84,24 @@ router.put("/", async (req: Request, res: Response) => {
 
     const fieldMap: Record<string, string> = {
       store_name:               "store_name",
-      store_fb:                 "store_fb",
-      store_phone:              "store_phone",
-      store_address:            "store_address",
+      facebook:                 "facebook",
+      contact_number:           "contact_number",
+      address:                  "address",
       currency:                 "currency",
-      tax_rate:                 "tax_rate",
+      vat_rate:                 "vat_rate",
       business_license:         "business_license",
       registered_taxpayer_name: "registered_taxpayer_name",
+      proprietor:               "proprietor",
       tin:                      "tin",
       document_type:            "document_type",
       pos_min:                  "pos_min",
       pos_serial:               "pos_serial",
-      vat_registered:           "vat_registered",
+      vat_enabled:              "vat_enabled",
+      vat_registered:           "vat_enabled", // alias maps to same column
+      // Legacy field names for backward compatibility
+      store_fb:                 "facebook",
+      store_phone:              "contact_number",
+      store_address:            "address",
     };
 
     for (const [key, col] of Object.entries(fieldMap)) {
@@ -103,18 +112,18 @@ router.put("/", async (req: Request, res: Response) => {
     }
 
     values.push(1); // WHERE id = 1
-    await pool.execute(`UPDATE store_settings SET ${setClauses.join(", ")} WHERE id = ?`, values as any[]);
+    await pool.execute(`UPDATE system_settings SET ${setClauses.join(", ")} WHERE id = ?`, values as any[]);
 
-    const [rows] = await pool.execute<any[]>("SELECT * FROM store_settings WHERE id = 1 LIMIT 1");
+    const [rows] = await pool.execute<any[]>("SELECT * FROM system_settings WHERE id = 1 LIMIT 1");
     const row = rows[0] ?? {};
 
     // Determine audit action type
-    const isTaxChange = data.tax_rate !== undefined || data.vat_registered !== undefined;
+    const isTaxChange = data.vat_rate !== undefined || data.vat_enabled !== undefined || data.vat_registered !== undefined;
     const isBusinessInfoChange =
       data.registered_taxpayer_name !== undefined ||
       data.tin !== undefined ||
       data.document_type !== undefined ||
-      data.store_address !== undefined;
+      data.address !== undefined;
 
     const auditAction = isTaxChange
       ? "TAX_CONFIGURATION_UPDATED"
@@ -126,7 +135,7 @@ router.put("/", async (req: Request, res: Response) => {
       action: auditAction,
       performedById: req.user!.id,
       performedByUsername: req.user!.username,
-      entityType: "store_settings",
+      entityType: "system_settings",
       entityId: 1,
       previousValues: Object.fromEntries(
         Object.keys(data).map((k) => [k, previous[k]])
@@ -136,8 +145,9 @@ router.put("/", async (req: Request, res: Response) => {
 
     res.status(200).json({
       ...row,
-      tax_rate:       Number(row.tax_rate ?? 0),
-      vat_registered: Boolean(row.vat_registered),
+      vat_rate:       Number(row.vat_rate ?? 0),
+      vat_enabled:    Boolean(row.vat_enabled),
+      vat_registered: Boolean(row.vat_enabled), // Alias for frontend compatibility
     });
   } catch (err) {
     console.error("[settings/PUT] Unexpected error:", err);

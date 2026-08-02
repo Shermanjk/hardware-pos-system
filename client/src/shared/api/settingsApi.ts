@@ -3,17 +3,23 @@ import httpClient from "@/shared/api/httpClient";
 export interface StoreSettings {
   // General
   store_name:               string;
-  store_fb:                 string;
-  store_phone:              string;
-  store_address:            string;
+  facebook:                 string; // renamed from store_fb
+  contact_number:           string; // renamed from store_phone
+  address:                  string; // renamed from store_address
   currency:                 string;
   // Business / taxpayer
+  proprietor:               string; // new field
   registered_taxpayer_name: string;
   tin:                      string;
   business_license:         string;
   document_type:            string;
-  tax_rate:                 number;
-  vat_registered:           boolean;
+  vat_rate:                 number; // renamed from tax_rate
+  vat_enabled:              boolean; // renamed from vat_registered
+  vat_registered:           boolean; // alias for compatibility
+  pricing_type:             string | null; // new field
+  receipt_footer:           string | null; // new field
+  printer_name:             string | null; // new field
+  cash_drawer_enabled:      boolean; // new field
   // POS machine
   pos_min:                  string | undefined;
   pos_serial:               string | undefined;

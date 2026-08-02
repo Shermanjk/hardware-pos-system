@@ -128,15 +128,15 @@ function EditableField({ label, fieldKey, savedValue, placeholder, onSave }: Edi
 
 function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
-    store_name: "", store_fb: "", store_phone: "", store_address: "",
+    store_name: "", facebook: "", contact_number: "", address: "",
   });
 
   useEffect(() => {
     if (initial) setSaved({
       store_name:    initial.store_name    ?? "",
-      store_fb:      initial.store_fb      ?? "",
-      store_phone:   initial.store_phone   ?? "",
-      store_address: initial.store_address ?? "",
+      facebook:      initial.facebook      ?? "",
+      contact_number: initial.contact_number ?? "",
+      address:       initial.address       ?? "",
     });
   }, [initial]);
 
@@ -148,9 +148,9 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
 
   const fields: { key: string; label: string; placeholder: string }[] = [
     { key: "store_name",    label: "Store Name",    placeholder: "e.g. Isra Hardware" },
-    { key: "store_fb",      label: "Facebook Page", placeholder: "e.g. Isra Hardware Page" },
-    { key: "store_phone",   label: "Store Phone",   placeholder: "+63 912 345 6789" },
-    { key: "store_address", label: "Store Address", placeholder: "123 Main Street, City" },
+    { key: "facebook",      label: "Facebook Page", placeholder: "e.g. Isra Hardware Page" },
+    { key: "contact_number", label: "Store Phone",   placeholder: "+63 912 345 6789" },
+    { key: "address",       label: "Store Address", placeholder: "123 Main Street, City" },
   ];
 
   return (
@@ -176,15 +176,16 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
 
 function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
-    registered_taxpayer_name: "", tin: "", business_license: "",
+    proprietor: "", registered_taxpayer_name: "", tin: "", business_license: "",
     document_type: "", pos_min: "", pos_serial: "",
   });
-  const [vatRegistered, setVatRegistered] = useState(false);
+  const [vatEnabled, setVatEnabled] = useState(false);
   const [vatSaving, setVatSaving] = useState(false);
 
   useEffect(() => {
     if (initial) {
       setSaved({
+        proprietor:               initial.proprietor               ?? "",
         registered_taxpayer_name: initial.registered_taxpayer_name ?? "",
         tin:                      initial.tin                      ?? "",
         business_license:         initial.business_license         ?? "",
@@ -192,7 +193,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         pos_min:                  initial.pos_min                  ?? "",
         pos_serial:               initial.pos_serial               ?? "",
       });
-      setVatRegistered(initial.vat_registered ?? false);
+      setVatEnabled(initial.vat_enabled ?? false);
     }
   }, [initial]);
 
@@ -205,8 +206,8 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
   const handleVatToggle = async (checked: boolean) => {
     setVatSaving(true);
     try {
-      const updated = await updateSettings({ vat_registered: checked });
-      setVatRegistered(checked);
+      const updated = await updateSettings({ vat_enabled: checked });
+      setVatEnabled(checked);
       onSettingsChange(updated);
     } finally {
       setVatSaving(false);
@@ -226,6 +227,13 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
           <p className="text-xs text-amber-600">
             Confirm these values with your accountant or BIR before printing on official documents.
           </p>
+          <EditableField
+            label="Proprietor Name"
+            fieldKey="proprietor"
+            savedValue={saved.proprietor}
+            placeholder="e.g. Juan Dela Cruz"
+            onSave={handleSave}
+          />
           <EditableField
             label="Registered Taxpayer Name"
             fieldKey="registered_taxpayer_name"
@@ -263,12 +271,12 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
           <Label className="mb-1.5 block font-semibold text-sm">VAT Registered</Label>
           <div className="flex items-center gap-3 h-9">
             <Switch
-              checked={vatRegistered}
+              checked={vatEnabled}
               onCheckedChange={handleVatToggle}
               disabled={vatSaving}
             />
             <span className="text-sm text-gray-600">
-              {vatRegistered ? "Yes — (VAT-Registered) printed on receipts" : "No — VAT label hidden on receipts"}
+              {vatEnabled ? "Yes — (VAT-Registered) printed on receipts" : "No — VAT label hidden on receipts"}
             </span>
           </div>
         </div>

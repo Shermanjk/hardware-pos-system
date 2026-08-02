@@ -16,6 +16,7 @@ const router = Router();
 const createReturnSchema = z.object({
   sale_id: z.number().int().positive(),
   return_reason: z.string().min(1),
+  item_condition: z.enum(["good", "damaged", "defective"]),
   items: z
     .array(
       z.object({
@@ -30,10 +31,18 @@ const createReturnSchema = z.object({
 
 const rejectSchema = z.object({ return_reason: z.string().min(1) });
 
-const resolveSchema = z.object({
-  resolution: z.enum(["refund", "replacement"]),
-  item_condition: z.enum(["good", "damaged"]),
+const approveSchema = z.object({
+  resolution: z.enum(["refund", "exchange", "store_credit", "rejected"]),
+  exchange_barcode: z.string().optional(),
+  exchange_quantity: z.number().int().positive().optional(),
+  additional_payment: z.number().positive().optional(),
+  refund_difference: z.number().positive().optional(),
+  rejection_reason: z.string().optional(),
 });
+
+// Execution is deliberately payload-free.  The approved resolution and the
+// verified item condition are read only at this stage and come from `returns`.
+const resolveSchema = z.object({}).strict();
 
 // ─── Helper: fetch full return summary row ────────────────────────────────────
 async function fetchReturnSummary(conn: PoolConnection, id: number): Promise<any | null> {
@@ -53,12 +62,18 @@ async function fetchReturnSummary(conn: PoolConnection, id: number): Promise<any
        r.item_condition,
        r.return_reason,
        r.refund_amount,
+       r.exchange_product_id,
+       r.exchange_quantity,
+       r.additional_payment,
+       r.refund_difference,
+       exchange_product.barcode AS exchange_barcode,
        r.created_at,
        r.resolved_at
      FROM returns r
      JOIN sales  s  ON s.id  = r.sale_id
-     JOIN users  u1 ON u1.id = r.processed_by
-     LEFT JOIN users u2 ON u2.id = r.approved_by
+      JOIN users  u1 ON u1.id = r.processed_by
+      LEFT JOIN users u2 ON u2.id = r.approved_by
+      LEFT JOIN products exchange_product ON exchange_product.id = r.exchange_product_id
      WHERE r.id = ?
      LIMIT 1`,
     [id]
@@ -103,7 +118,7 @@ router.post(
       return;
     }
 
-    const { sale_id, return_reason, items } = parsed.data;
+    const { sale_id, return_reason, item_condition, items } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -128,9 +143,9 @@ router.post(
       // Insert into returns
       const [returnResult] = await conn.execute<any>(
         `INSERT INTO returns
-           (return_number, sale_id, processed_by, return_reason, status)
-         VALUES (?, ?, ?, ?, 'pending')`,
-        [return_number, sale_id, req.user!.id, return_reason]
+           (return_number, sale_id, processed_by, return_reason, item_condition, status)
+         VALUES (?, ?, ?, ?, ?, 'pending')`,
+        [return_number, sale_id, req.user!.id, return_reason, item_condition]
       );
       const return_id: number = returnResult.insertId;
 
@@ -418,7 +433,7 @@ router.get(
   }
 );
 
-// ─── Task 5.7 — PATCH /:id/approve (Admin only) ──────────────────────────────
+// ─── PATCH /:id/approve (Admin only) - Select resolution ──────────────────────
 router.patch(
   "/:id/approve",
   authenticate,
@@ -430,13 +445,25 @@ router.patch(
       return;
     }
 
+    const parsed = approveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map((i) => ({
+        field: i.path.join("."),
+        message: i.message,
+      }));
+      res.status(400).json({ message: errors[0]?.message ?? "Invalid request", errors });
+      return;
+    }
+
+    const { resolution, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
       // Fetch current return with row lock
       const [rows] = await conn.execute<any[]>(
-        `SELECT id, status FROM returns WHERE id = ? LIMIT 1 FOR UPDATE`,
+        `SELECT id, status, sale_id, item_condition FROM returns WHERE id = ? LIMIT 1 FOR UPDATE`,
         [id]
       );
       const returnRow = rows[0];
@@ -451,22 +478,65 @@ router.patch(
         return;
       }
 
-      await conn.execute(
-        `UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
-        [req.user!.id, id]
-      );
+      // Convert barcode to product_id for exchange
+      let exchange_product_id: number | null = null;
+      if (resolution === "exchange") {
+        if (!exchange_barcode || !exchange_quantity) {
+          await conn.rollback();
+          res.status(400).json({ message: "Exchange requires barcode and quantity." });
+          return;
+        }
+        // Look up product_id from barcode
+        const [productRows] = await conn.execute<any[]>(
+          `SELECT id, quantity FROM products WHERE barcode = ? FOR UPDATE`,
+          [exchange_barcode]
+        );
+        const product = productRows[0];
+        if (!product) {
+          await conn.rollback();
+          res.status(404).json({ message: "Product with this barcode not found." });
+          return;
+        }
+        exchange_product_id = product.id;
+        // Check stock availability
+        if (Number(product.quantity) < exchange_quantity) {
+          await conn.rollback();
+          res.status(409).json({ message: "Insufficient stock for exchange product." });
+          return;
+        }
+      }
+
+      // Validate rejection reason
+      if (resolution === "rejected" && !rejection_reason) {
+        await conn.rollback();
+        res.status(400).json({ message: "Rejection requires a reason." });
+        return;
+      }
+
+      // Update return with resolution
+      if (resolution === "rejected") {
+        await conn.execute(
+          `UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ?, resolution = 'rejected' WHERE id = ?`,
+          [req.user!.id, rejection_reason!, id]
+        );
+      } else {
+        await conn.execute(
+          `UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW(), resolution = ?, exchange_product_id = ?, exchange_quantity = ?, additional_payment = ?, refund_difference = ? WHERE id = ?`,
+          [req.user!.id, resolution, exchange_product_id ?? null, exchange_quantity ?? null, additional_payment ?? null, refund_difference ?? null, id]
+        );
+      }
 
       await conn.commit();
 
       const updated = await fetchReturnSummary(conn, id);
 
       await logAuditEvent({
-        action: "RETURN_APPROVED",
+        action: resolution === "rejected" ? "RETURN_REJECTED" : "RETURN_APPROVED",
         performedById: req.user!.id,
         performedByUsername: req.user!.username,
         entityType: "returns",
         entityId: id,
-        newValues: { return_number: updated.return_number, invoice_number: updated.invoice_number },
+        newValues: { return_number: updated.return_number, invoice_number: updated.invoice_number, resolution },
       });
 
       // Notify the cashier who submitted this return
@@ -476,7 +546,7 @@ router.patch(
         return_number: updated.return_number,
         invoice_number: updated.invoice_number,
         customer_name: updated.customer_name,
-        decision: "approved",
+        decision: resolution === "rejected" ? "rejected" : "approved",
         admin_name: updated.admin_name ?? "Admin",
         cashier_user_id: updated.processed_by,
       });
@@ -576,7 +646,7 @@ router.patch(
   }
 );
 
-// ─── Task 5.9 — PATCH /:id/resolve (Cashier, Admin) ──────────────────────────
+// ─── PATCH /:id/resolve (Cashier, Admin) - Execute approved resolution ─────────────
 router.patch(
   "/:id/resolve",
   authenticate,
@@ -598,15 +668,14 @@ router.patch(
       return;
     }
 
-    const { resolution, item_condition } = parsed.data;
-
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
       // Fetch return with row-level lock to prevent concurrent resolution
       const [returnRows] = await conn.execute<any[]>(
-        `SELECT r.id, r.return_number, r.status, r.resolution
+        `SELECT r.id, r.return_number, r.status, r.resolution, r.item_condition, r.sale_id,
+                r.exchange_product_id, r.exchange_quantity, r.additional_payment, r.refund_difference
          FROM returns r
          WHERE r.id = ? LIMIT 1 FOR UPDATE`,
         [id]
@@ -617,14 +686,14 @@ router.patch(
         res.status(404).json({ message: "Return not found." });
         return;
       }
-      if (returnRow.status !== "waiting_for_cashier" && returnRow.status !== "approved") {
+      if (returnRow.status !== "waiting_for_cashier") {
         await conn.rollback();
         res.status(422).json({ message: "Return must be approved before resolution." });
         return;
       }
-      if (returnRow.resolution !== null) {
+      if (!returnRow.resolution) {
         await conn.rollback();
-        res.status(422).json({ message: "This return has already been resolved." });
+        res.status(422).json({ message: "Return must have an approved resolution." });
         return;
       }
 
@@ -637,20 +706,23 @@ router.patch(
         [id]
       );
 
-      let refund_amount = 0;
-      if (resolution === "refund") {
-        // Refund path
+      // Use the item_condition from the return record (set during initial submission)
+      const finalItemCondition = returnRow.item_condition || "good";
 
+      let refund_amount = 0;
+
+      if (returnRow.resolution === "refund") {
+        // Refund path
         for (const item of itemRows) {
           refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
 
-          if (item_condition === "good") {
+          if (finalItemCondition === "good") {
             await conn.execute(
               `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
               [item.quantity_returned, item.product_id]
             );
           } else {
-            // damaged
+            // damaged or defective
             await conn.execute(
               `UPDATE products SET damaged_stock = damaged_stock + ? WHERE id = ?`,
               [item.quantity_returned, item.product_id]
@@ -666,33 +738,24 @@ router.patch(
 
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'refund', item_condition = ?, refund_amount = ?, resolved_at = NOW(), status = 'completed'
+           SET refund_amount = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
-          [item_condition, refund_amount.toFixed(2), id]
+          [refund_amount.toFixed(2), id]
         );
-      } else {
-        // ── Replacement path ─────────────────────────────────────────────────
-        // Check stock availability first
-        for (const item of itemRows) {
-          const [stockRows] = await conn.execute<any[]>(
-            `SELECT quantity FROM products WHERE id = ? FOR UPDATE`,
-            [item.product_id]
-          );
-          const stock = stockRows[0];
-          if (!stock || Number(stock.quantity) < Number(item.quantity_returned)) {
-            await conn.rollback();
-            res
-              .status(409)
-              .json({
-                message: `Replacement cannot be processed — insufficient stock for: ${item.product_name}. Available: ${stock ? Number(stock.quantity) : 0}, Required: ${item.quantity_returned}.`,
-              });
-            return;
-          }
+      } else if (returnRow.resolution === "exchange") {
+        // Exchange path
+        const exchangeProductId = returnRow.exchange_product_id;
+        const exchangeQuantity = returnRow.exchange_quantity;
+
+        if (!exchangeProductId || !exchangeQuantity) {
+          await conn.rollback();
+          res.status(400).json({ message: "Exchange requires product_id and quantity." });
+          return;
         }
 
+        // Handle returned items
         for (const item of itemRows) {
-          // Return the item back to stock (good → sellable, damaged → damaged_stock)
-          if (item_condition === "good") {
+          if (finalItemCondition === "good") {
             await conn.execute(
               `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
               [item.quantity_returned, item.product_id]
@@ -706,75 +769,89 @@ router.patch(
 
           await conn.execute(
             `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
-             VALUES (?, 'Return', 'return_replacement_in', ?, ?, ?)`,
+             VALUES (?, 'Return', 'return_exchange_in', ?, ?, ?)`,
             [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
-          );
-
-          // Replacement goes out — deduct sellable stock
-          await conn.execute(
-            `UPDATE products SET quantity = quantity - ? WHERE id = ?`,
-            [item.quantity_returned, item.product_id]
-          );
-
-          await conn.execute(
-            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
-             VALUES (?, 'Return', 'return_replacement_out', ?, ?, ?)`,
-            [item.product_id, -item.quantity_returned, returnRow.return_number, req.user!.id]
           );
         }
 
+        // Deduct exchange product from stock
+        await conn.execute(
+          `UPDATE products SET quantity = quantity - ? WHERE id = ?`,
+          [exchangeQuantity, exchangeProductId]
+        );
+
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+           VALUES (?, 'Return', 'return_exchange_out', ?, ?, ?)`,
+          [exchangeProductId, -exchangeQuantity, returnRow.return_number, req.user!.id]
+        );
+
+        await conn.execute(
+          `UPDATE returns SET resolved_at = NOW(), status = 'completed' WHERE id = ?`,
+          [id]
+        );
+      } else if (returnRow.resolution === "store_credit") {
+        // Store Credit path
+        for (const item of itemRows) {
+          refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
+
+          if (finalItemCondition === "good") {
+            await conn.execute(
+              `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
+              [item.quantity_returned, item.product_id]
+            );
+          } else {
+            await conn.execute(
+              `UPDATE products SET damaged_stock = damaged_stock + ? WHERE id = ?`,
+              [item.quantity_returned, item.product_id]
+            );
+          }
+
+          await conn.execute(
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Return', 'return_store_credit', ?, ?, ?)`,
+            [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
+          );
+        }
+
+        // Fetch customer info from sale
+        const [saleRows] = await conn.execute<any[]>(
+          `SELECT customer_name FROM sales WHERE id = ?`,
+          [returnRow.sale_id]
+        );
+        const customerName = saleRows[0]?.customer_name || "Unknown";
+
+        // Create store credit record
+        await conn.execute(
+          `INSERT INTO customer_store_credit
+             (customer_id, customer_name, credit_amount, remaining_balance, return_id)
+           VALUES (?, ?, ?, ?, ?)`,
+          [null, customerName, refund_amount.toFixed(2), refund_amount.toFixed(2), id]
+        );
+
         await conn.execute(
           `UPDATE returns
-           SET resolution = 'replacement', item_condition = ?, resolved_at = NOW(), status = 'completed'
+           SET refund_amount = ?, resolved_at = NOW(), status = 'completed'
            WHERE id = ?`,
-          [item_condition, id]
+          [refund_amount.toFixed(2), id]
         );
       }
 
       await conn.commit();
 
-      // Move activity_logs and audit logging outside transaction
-      if (resolution === "refund") {
-        // WORKFLOW-02 FIX: Wrap activity_logs insert in try/catch — table may not exist in all deployments
-        try {
-          await pool.execute(
-            `INSERT INTO activity_logs (user_id, action, reference)
-             VALUES (?, 'return_refund', ?)`,
-            [req.user!.id, returnRow.return_number]
-          );
-        } catch {
-          // Non-fatal: activity_logs table may not exist; return is already completed
-        }
+      // Audit logging outside transaction
+      const actionName = returnRow.resolution === "refund" ? "REFUND_PROCESSED" :
+                        returnRow.resolution === "exchange" ? "EXCHANGE_COMPLETED" :
+                        returnRow.resolution === "store_credit" ? "STORE_CREDIT_ISSUED" : "RETURN_RESOLVED";
 
-        await logAuditEvent({
-          action: "REFUND_PROCESSED",
-          performedById: req.user!.id,
-          performedByUsername: req.user!.username,
-          entityType: "returns",
-          entityId: id,
-          newValues: { return_number: returnRow.return_number, refund_amount: refund_amount.toFixed(2), item_condition },
-        });
-      } else {
-        // WORKFLOW-02 FIX: Wrap activity_logs insert in try/catch — table may not exist in all deployments
-        try {
-          await pool.execute(
-            `INSERT INTO activity_logs (user_id, action, reference)
-             VALUES (?, 'return_replacement', ?)`,
-            [req.user!.id, returnRow.return_number]
-          );
-        } catch {
-          // Non-fatal: activity_logs table may not exist; return is already completed
-        }
-
-        await logAuditEvent({
-          action: "EXCHANGE_COMPLETED",
-          performedById: req.user!.id,
-          performedByUsername: req.user!.username,
-          entityType: "returns",
-          entityId: id,
-          newValues: { return_number: returnRow.return_number, item_condition },
-        });
-      }
+      await logAuditEvent({
+        action: actionName,
+        performedById: req.user!.id,
+        performedByUsername: req.user!.username,
+        entityType: "returns",
+        entityId: id,
+        newValues: { return_number: returnRow.return_number, resolution: returnRow.resolution, refund_amount: refund_amount.toFixed(2) },
+      });
 
       // Return full resolved return
       const finalReturn = await fetchReturnSummary(conn, id);

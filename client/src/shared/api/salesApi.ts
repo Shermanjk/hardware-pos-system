@@ -48,6 +48,8 @@ export interface SaleSummary {
   payment_status: "pending" | "completed" | "failed";
   receipt_printed: number | boolean;
   created_at: string;
+  return_count?: number;
+  total_refunded?: number;
 }
 
 export interface CreateSalePayload {
@@ -136,6 +138,7 @@ export async function searchSales(params: {
   customer_name?: string;
   date_from?: string;
   date_to?: string;
+  return_status?: string;
 }): Promise<SaleSummary[]> {
   const response = await httpClient.get<SaleSummary[]>("/api/sales", { params });
   return response.data;

@@ -141,8 +141,8 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const hasAlerts       = alertCount > 0;
   const { pendingRequests, pendingCommodity } = usePendingCounts(triggerRefresh);
 
-  // Total pending for "Requests" badge: returns + voids + requests
-  const totalPendingRequests = pendingRequests + pendingReturns + pendingVoids;
+  // Total pending for "Requests" badge (KPI already includes returns + voids)
+  const totalPendingRequests = pendingRequests;
 
   // ── Group expand/collapse ─────────────────────────────────────────────────
   const activeGroup = getGroupForRoute(location);

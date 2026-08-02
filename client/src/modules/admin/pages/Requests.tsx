@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getPendingRequests, getRequestHistory, approveRequest, rejectRequest, type UnifiedRequest } from "@/shared/api/requestsApi";
+import { getPendingRequests, getRequestHistory, approveRequest, approveReturnRequest, rejectRequest, type UnifiedRequest } from "@/shared/api/requestsApi";
 import { toast } from "sonner";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 
@@ -39,8 +39,12 @@ function StatusBadge({ status }: { status: string }) {
   const s = status.toUpperCase();
   if (s === "PENDING" || s === "PENDING_APPROVAL")
     return <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Pending</span>;
-  if (s === "APPROVED")
+  // A return approved by Admin waits for cashier execution under the
+  // `waiting_for_cashier` workflow status. It is still an approved request.
+  if (s === "APPROVED" || s === "WAITING_FOR_CASHIER")
     return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Approved</span>;
+  if (s === "COMPLETED")
+    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Completed</span>;
   return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Rejected</span>;
 }
 
@@ -97,17 +101,181 @@ function RejectDialog({ open, onConfirm, onCancel, loading }: RejectDialogProps)
   );
 }
 
+// ─── Return Approval Dialog ─────────────────────────────────────────────────────
+
+interface ReturnApprovalDialogProps {
+  open: boolean;
+  req: UnifiedRequest | null;
+  onConfirm: (payload: {
+    resolution: "refund" | "exchange" | "store_credit" | "rejected";
+    exchange_barcode?: string;
+    exchange_quantity?: number;
+    additional_payment?: number;
+    refund_difference?: number;
+    rejection_reason?: string;
+  }) => void;
+  onCancel: () => void;
+  loading: boolean;
+}
+
+function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: ReturnApprovalDialogProps) {
+  const [resolution, setResolution] = useState<"refund" | "exchange" | "store_credit" | "rejected">("refund");
+  const [exchangeBarcode, setExchangeBarcode] = useState<string | undefined>();
+  const [exchangeQuantity, setExchangeQuantity] = useState<number | undefined>();
+  const [additionalPayment, setAdditionalPayment] = useState<number | undefined>();
+  const [refundDifference, setRefundDifference] = useState<number | undefined>();
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setResolution("refund");
+      setExchangeBarcode(undefined);
+      setExchangeQuantity(undefined);
+      setAdditionalPayment(undefined);
+      setRefundDifference(undefined);
+      setRejectionReason("");
+    }
+  }, [open]);
+
+  const handleConfirm = () => {
+    if (resolution === "rejected" && !rejectionReason.trim()) {
+      toast.error("Rejection requires a reason.");
+      return;
+    }
+    if (resolution === "exchange" && (!exchangeBarcode || !exchangeQuantity)) {
+      toast.error("Exchange requires barcode and quantity.");
+      return;
+    }
+    onConfirm({
+      resolution,
+      exchange_barcode: exchangeBarcode,
+      exchange_quantity: exchangeQuantity,
+      additional_payment: additionalPayment,
+      refund_difference: refundDifference,
+      rejection_reason: rejectionReason || undefined,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Approve Return</DialogTitle>
+        {/* Green header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-green-500 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Approve Return</h2>
+            <p className="text-xs text-green-100 mt-0.5">Select the resolution for this return</p>
+          </div>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          {req && (
+            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold">{req.return_number}</span></div>
+              <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
+              <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name}</span></div>
+              <div><span className="text-gray-500">Amount:</span> <span className="font-bold text-emerald-700">{fmtPeso(req.amount || 0)}</span></div>
+            </div>
+          )}
+          <div>
+            <Label className="font-semibold mb-2 block">Resolution <span className="text-red-500">*</span></Label>
+            <Select value={resolution} onValueChange={(v: any) => setResolution(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="refund">💰 Refund</SelectItem>
+                <SelectItem value="exchange">🔄 Exchange</SelectItem>
+                <SelectItem value="store_credit">💳 Store Credit</SelectItem>
+                <SelectItem value="rejected">❌ Reject</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {resolution === "exchange" && (
+            <div className="space-y-3">
+              <div>
+                <Label className="font-semibold mb-1 block">Exchange Barcode</Label>
+                <Input
+                  type="text"
+                  value={exchangeBarcode || ""}
+                  onChange={(e) => setExchangeBarcode(e.target.value || undefined)}
+                  placeholder="Enter barcode"
+                />
+              </div>
+              <div>
+                <Label className="font-semibold mb-1 block">Exchange Quantity</Label>
+                <Input
+                  type="number"
+                  value={exchangeQuantity || ""}
+                  onChange={(e) => setExchangeQuantity(Number(e.target.value) || undefined)}
+                  placeholder="Enter quantity"
+                />
+              </div>
+              <div>
+                <Label className="font-semibold mb-1 block">Additional Payment (₱)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={additionalPayment || ""}
+                  onChange={(e) => setAdditionalPayment(Number(e.target.value) || undefined)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <Label className="font-semibold mb-1 block">Refund Difference (₱)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={refundDifference || ""}
+                  onChange={(e) => setRefundDifference(Number(e.target.value) || undefined)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          )}
+          {resolution === "rejected" && (
+            <div>
+              <Label className="font-semibold mb-1 block">Rejection Reason <span className="text-red-500">*</span></Label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Enter reason for rejection…"
+                rows={3}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+              />
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={loading}>Cancel</Button>
+          <Button
+            disabled={loading}
+            onClick={handleConfirm}
+            className="bg-green-600 hover:bg-green-700 text-white gap-2"
+          >
+            {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+            {loading ? "Approving…" : "Approve"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Detail Dialog ────────────────────────────────────────────────────────────
 
 interface DetailDialogProps {
   req: UnifiedRequest | null;
   onClose: () => void;
   onApprove: (type: string, id: number) => void;
+  onApproveReturn: (id: number, payload: any) => void;
   onReject: (type: string, id: number) => void;
   actionLoading: boolean;
 }
 
-function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: DetailDialogProps) {
+function DetailDialog({ req, onClose, onApprove, onApproveReturn, onReject, actionLoading }: DetailDialogProps) {
   if (!req) return null;
   
   const isPending = req.status.toLowerCase() === "pending" || req.status === "PENDING_APPROVAL";
@@ -234,7 +402,13 @@ function DetailDialog({ req, onClose, onApprove, onReject, actionLoading }: Deta
               </Button>
               <Button
                 className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                onClick={() => onApprove(typeMap[req.type], req.id)}
+                onClick={() => {
+                  if (req.type === "RETURN") {
+                    onApproveReturn(req.id, {});
+                  } else {
+                    onApprove(typeMap[req.type], req.id);
+                  }
+                }}
                 disabled={actionLoading}
               >
                 {actionLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
@@ -258,6 +432,7 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
   const [filterStatus, setFilterStatus] = useState("all");
   const [detailReq, setDetailReq] = useState<UnifiedRequest | null>(null);
   const [rejectTarget, setRejectTarget] = useState<{ type: string; id: number } | null>(null);
+  const [returnApprovalTarget, setReturnApprovalTarget] = useState<UnifiedRequest | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -301,6 +476,24 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
       window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Failed to approve request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveReturn = async (payload: any) => {
+    if (!returnApprovalTarget) return;
+    setActionLoading(true);
+    try {
+      await approveReturnRequest(returnApprovalTarget.id, payload);
+      toast.success("Return approved.");
+      setReturnApprovalTarget(null);
+      setDetailReq(null);
+      load();
+      // Dispatch event to refresh sidebar counts immediately
+      window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to approve return.");
     } finally {
       setActionLoading(false);
     }
@@ -486,13 +679,21 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
         req={detailReq}
         onClose={() => setDetailReq(null)}
         onApprove={(type, id) => handleApprove(type, id)}
+        onApproveReturn={(id, payload) => { setDetailReq(null); setReturnApprovalTarget(detailReq); }}
         onReject={(type, id) => { setDetailReq(null); setRejectTarget({ type, id }); }}
         actionLoading={actionLoading}
       />
       <RejectDialog
-        open={rejectTarget != null}
+        open={!!rejectTarget}
         onConfirm={handleReject}
         onCancel={() => setRejectTarget(null)}
+        loading={actionLoading}
+      />
+      <ReturnApprovalDialog
+        open={!!returnApprovalTarget}
+        req={returnApprovalTarget}
+        onConfirm={handleApproveReturn}
+        onCancel={() => setReturnApprovalTarget(null)}
         loading={actionLoading}
       />
     </>

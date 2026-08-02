@@ -9,18 +9,22 @@ export interface ReturnReceiptData {
   invoice_number: string;
   customer_name: string;
   processed_by_name: string;
-  resolution: "refund" | "replacement";
-  item_condition: "good" | "damaged";
+  resolution: "refund" | "exchange" | "store_credit" | "rejected";
+  item_condition: "good" | "damaged" | "defective";
   refund_amount: number | null;
   items: ReturnReceiptItem[];
   resolved_at?: string;
   store_name?: string;
-  store_fb?: string;
-  store_phone?: string;
-  store_address?: string;
+  facebook?: string;
+  contact_number?: string;
+  address?: string;
   store_tin?: string;
-  store_vat_registered?: boolean;
+  vat_enabled?: boolean;
   currency?: string;
+  exchange_barcode?: string;
+  exchange_quantity?: number;
+  additional_payment?: number;
+  refund_difference?: number;
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
@@ -33,11 +37,11 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   };
 
   const storeName    = data.store_name    || "";
-  const storeFb      = data.store_fb      || "";
-  const storePhone   = data.store_phone   || "";
-  const storeAddress = data.store_address || "";
+  const storeFb      = data.facebook      || "";
+  const storePhone   = data.contact_number || "";
+  const storeAddress = data.address      || "";
   const storeTIN     = data.store_tin     || "";
-  const isVAT        = data.store_vat_registered ?? false;
+  const isVAT        = data.vat_enabled ?? false;
   const currSym      = data.currency === "PHP" || !data.currency ? "P" : data.currency;
 
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
@@ -86,16 +90,37 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   ln(lr(`ITEMS: ${totalItems}`, `TOTAL REFUND:  ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`));
   ln(rule("-"));
 
-  // Return-specific information
-  if (data.resolution === "replacement") {
-    ln();
-    ln(center("REPLACEMENT"));
+  // Resolution-specific information
+  ln();
+  ln(center(`RESOLUTION: ${data.resolution.toUpperCase()}`));
+  ln(rule("-"));
+
+  if (data.resolution === "refund") {
+    ln(`AMOUNT REFUNDED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
+  } else if (data.resolution === "exchange") {
+    if (data.exchange_barcode) {
+      ln(`EXCHANGE BARCODE: ${data.exchange_barcode}`);
+    }
+    if (data.exchange_quantity) {
+      ln(`EXCHANGE QUANTITY: ${data.exchange_quantity}`);
+    }
+    if (data.additional_payment && data.additional_payment > 0) {
+      ln(`ADDITIONAL PAYMENT: ${currSym} ${fmtPeso(data.additional_payment)}`);
+    }
+    if (data.refund_difference && data.refund_difference > 0) {
+      ln(`REFUND DIFFERENCE: ${currSym} ${fmtPeso(data.refund_difference)}`);
+    }
+  } else if (data.resolution === "store_credit") {
+    ln(`CREDIT ISSUED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
+    ln(`AVAILABLE BALANCE: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
+  } else if (data.resolution === "rejected") {
+    ln(`RETURN REJECTED`);
   }
 
+  ln(rule("-"));
   ln();
-  ln(`RETURN REASON: ${data.resolution === "refund" ? "Refund Requested" : "Replacement Requested"}`);
-  ln(`ITEM CONDITION: ${data.item_condition === "good" ? "Good" : "Damaged"}`);
-  ln(`INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged"}`);
+  ln(`ITEM CONDITION: ${data.item_condition === "good" ? "Good" : data.item_condition === "damaged" ? "Damaged" : "Defective"}`);
+  ln(`INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged/Defective"}`);
   ln(rule("-"));
   ln();
   ln(`PROCESSED BY: ${data.processed_by_name}`);

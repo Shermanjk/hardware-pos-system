@@ -145,12 +145,12 @@ router.post(
     try {
       await conn.beginTransaction();
 
-      // ── 0. Read tax_rate from store_settings ───────────────────────────────────
+      // ── 0. Read tax_rate from system_settings ───────────────────────────────────
       const [settingsRows] = await conn.execute<any[]>(
-        `SELECT tax_rate, vat_registered FROM store_settings WHERE id = 1 LIMIT 1`
+        `SELECT vat_rate, vat_enabled FROM system_settings WHERE id = 1 LIMIT 1`
       );
-      const dbTaxRate   = Number(settingsRows[0]?.tax_rate ?? 12);
-      const dbVatActive = settingsRows[0]?.vat_registered === true || settingsRows[0]?.vat_registered === 1;
+      const dbTaxRate   = Number(settingsRows[0]?.vat_rate ?? 12);
+      const dbVatActive = settingsRows[0]?.vat_enabled === true || settingsRows[0]?.vat_enabled === 1;
 
       // ── 1. Fetch DB product data + check stock (row-level lock) ───────────────
       const productData: Record<number, {
@@ -805,6 +805,7 @@ router.get(
       cashier_id,
       void_status,
       payment_status,
+      return_status,
     } = req.query as Record<string, string | undefined>;
 
     try {
@@ -839,6 +840,11 @@ router.get(
         conditions.push("s.payment_status = ?");
         params.push(payment_status);
       }
+      if (return_status === "no_returns") {
+        conditions.push("(SELECT COUNT(*) FROM returns r WHERE r.sale_id = s.id AND r.status IN ('pending', 'waiting_for_cashier')) = 0");
+      } else if (return_status === "has_returns") {
+        conditions.push("(SELECT COUNT(*) FROM returns r WHERE r.sale_id = s.id AND r.status IN ('pending', 'waiting_for_cashier')) > 0");
+      }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -846,7 +852,9 @@ router.get(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
                 s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
-                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
+                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at,
+                (SELECT COUNT(*) FROM returns r WHERE r.sale_id = s.id AND r.status IN ('pending', 'waiting_for_cashier', 'completed')) AS return_count,
+                (SELECT COALESCE(SUM(r.refund_amount), 0) FROM returns r WHERE r.sale_id = s.id AND r.status = 'completed') AS total_refunded
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
          ${where}

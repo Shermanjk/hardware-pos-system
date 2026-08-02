@@ -6,6 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { searchSales, getSaleByInvoice } from "@/shared/api/salesApi";
 import type { SaleSummary, Sale } from "@/shared/api/salesApi";
@@ -201,13 +202,14 @@ export default function Sales() {
   const [customer,     setCustomer]     = useState("");
   const [dateFrom,     setDateFrom]     = useState("");
   const [dateTo,       setDateTo]       = useState("");
+  const [returnStatus, setReturnStatus] = useState("all");
   const [showFilters,  setShowFilters]  = useState(true);
 
   // Detail modal
   const [detailInvoice, setDetailInvoice] = useState<string | null>(null);
 
   // Summary stats (computed from loaded results)
-  const totalRevenue = sales.filter((s) => s.void_status !== "voided").reduce((s, r) => s + Number(r.total_amount), 0);
+  const totalRevenue = sales.filter((s) => s.void_status !== "voided").reduce((s, r) => s + Number(r.total_amount) - Number(r.total_refunded || 0), 0);
 
   // Default date range to today
   useEffect(() => {
@@ -221,6 +223,7 @@ export default function Sales() {
     customer_name?: string;
     date_from?: string;
     date_to?: string;
+    return_status?: string;
   }) => {
     setIsLoading(true);
     setLoadError(null);
@@ -242,11 +245,12 @@ export default function Sales() {
       customer_name:  customer.trim() || undefined,
       date_from:      dateFrom || undefined,
       date_to:        dateTo   || undefined,
+      return_status:  returnStatus !== "all" ? returnStatus : undefined,
     });
   };
 
   const handleClear = () => {
-    setInvoice(""); setCustomer("");
+    setInvoice(""); setCustomer(""); setReturnStatus("all");
     const today = new Date().toISOString().split("T")[0];
     setDateFrom(today); setDateTo(today);
     setSales([]); setHasSearched(false); setLoadError(null);
@@ -299,7 +303,7 @@ export default function Sales() {
 
         {showFilters && (
           <form onSubmit={handleSearch} className="px-5 pb-5 pt-1 space-y-4 border-t border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Invoice No.</Label>
                 <Input value={invoice} onChange={(e) => setInvoice(e.target.value)}
@@ -325,6 +329,19 @@ export default function Sales() {
                   <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
                     className="h-9 text-sm pl-8" />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Return Status</Label>
+                <Select value={returnStatus} onValueChange={setReturnStatus}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Sales</SelectItem>
+                    <SelectItem value="no_returns">No Returns</SelectItem>
+                    <SelectItem value="has_returns">Has Returns</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -424,6 +441,11 @@ export default function Sales() {
                         )}
                         {sale.void_status === "void_requested" && (
                           <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">PENDING VOID</span>
+                        )}
+                        {(sale.return_count ?? 0) > 0 && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
+                            RETURN{(sale.return_count ?? 0) > 1 ? ` (${sale.return_count})` : ''}
+                          </span>
                         )}
                       </td>
                       <td className="py-3.5 px-5 text-center">

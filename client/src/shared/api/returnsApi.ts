@@ -25,10 +25,15 @@ export interface Return {
   approved_by: number | null;
   admin_name: string | null;
   status: "pending" | "approved" | "rejected" | "waiting_for_cashier" | "completed";
-  resolution: "refund" | "replacement" | null;
-  item_condition: "good" | "damaged" | null;
+  resolution: "refund" | "exchange" | "store_credit" | "rejected" | null;
+  item_condition: "good" | "damaged" | "defective" | null;
   return_reason: string;
   refund_amount: number | null;
+  exchange_product_id?: number | null;
+  exchange_barcode?: string | null;
+  exchange_quantity?: number | null;
+  additional_payment?: number | null;
+  refund_difference?: number | null;
   created_at: string;
   resolved_at: string | null;
   items: ReturnItem[];
@@ -37,6 +42,7 @@ export interface Return {
 export interface CreateReturnPayload {
   sale_id: number;
   return_reason: string;
+  item_condition: "good" | "damaged" | "defective";
   items: Array<{
     sale_item_id: number;
     product_id: number;
@@ -45,9 +51,19 @@ export interface CreateReturnPayload {
   }>;
 }
 
-export interface ResolveReturnPayload {
-  resolution: "refund" | "replacement";
-  item_condition: "good" | "damaged";
+/**
+ * Resolution execution has no mutable fields. The server uses the Admin
+ * approval and the condition already stored on the return request.
+ */
+export type ResolveReturnPayload = Record<string, never>;
+
+export interface ApproveReturnPayload {
+  resolution: "refund" | "exchange" | "store_credit" | "rejected";
+  exchange_barcode?: string;
+  exchange_quantity?: number;
+  additional_payment?: number;
+  refund_difference?: number;
+  rejection_reason?: string;
 }
 
 export interface ApprovedReturnSummary {
@@ -101,8 +117,8 @@ export async function getReturnById(id: number): Promise<Return> {
   return response.data;
 }
 
-export async function approveReturn(id: number): Promise<Return> {
-  const response = await httpClient.patch<Return>(`/api/returns/${id}/approve`, {});
+export async function approveReturn(id: number, payload: ApproveReturnPayload): Promise<Return> {
+  const response = await httpClient.patch<Return>(`/api/returns/${id}/approve`, payload);
   return response.data;
 }
 
