@@ -31,6 +31,9 @@ export default function SystemUpdate() {
   const [versionStatus, setVersionStatus] = useState<VersionStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const updateRequired = Boolean(
+    versionStatus?.updateAvailable || versionStatus?.databaseUpdateRequired
+  );
 
   useEffect(() => {
     loadVersionStatus();
@@ -49,7 +52,7 @@ export default function SystemUpdate() {
   };
 
   const handleInstallUpdate = async () => {
-    if (!versionStatus?.updateAvailable) return;
+    if (!updateRequired) return;
 
     setIsInstalling(true);
     try {
@@ -138,13 +141,15 @@ export default function SystemUpdate() {
                 </div>
               </div>
 
-              {versionStatus.updateAvailable && (
+              {updateRequired && (
                 <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <CheckCircle className="w-5 h-5 text-blue-600" />
                   <div className="flex-1">
                     <p className="font-medium text-blue-900">Update Ready to Install</p>
                     <p className="text-sm text-blue-700">
-                      Version {versionStatus.downloadedVersion} is available
+                      {versionStatus.updateAvailable
+                        ? `Version ${versionStatus.downloadedVersion} is available`
+                        : `Database migration ${versionStatus.downloadedDatabaseVersion} is ready`}
                     </p>
                   </div>
                   <Button
@@ -157,7 +162,7 @@ export default function SystemUpdate() {
                 </div>
               )}
 
-              {!versionStatus.updateAvailable && (
+              {!updateRequired && (
                 <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <CheckCircle className="w-5 h-5 text-green-600" />
                   <div>
