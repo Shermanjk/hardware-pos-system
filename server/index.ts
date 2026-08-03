@@ -25,6 +25,7 @@ import requestsRoutes from "./routes/requests.js";
 import systemUpdateRoutes from "./routes/systemUpdate.js";
 import backupRoutes from "./routes/backup.js";
 import notificationsRoutes from "./routes/notifications.js";
+import { maintenanceGate } from "./middleware/maintenanceGate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,7 @@ async function startServer() {
 
   // ─── Body parsing ────────────────────────────────────────────────────────────
   app.use(express.json({ limit: "100kb" }));
+  app.use(maintenanceGate);
 
   // ─── Health check (unauthenticated liveness probe) ───────────────────────────
   // Placed before all other routes so it's always reachable. The Cashier

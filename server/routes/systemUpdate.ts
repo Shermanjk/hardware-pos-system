@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { z } from "zod";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
@@ -12,10 +11,10 @@ import {
 } from "../services/backupService.js";
 import {
   executePendingMigrations,
-  rollbackToBackup,
-  autoMigrateAfterRestore,
 } from "../services/migrationService.js";
 import { triggerElectronRestart } from "../utils/electronRestart.js";
+import { maintenanceService } from "../services/maintenanceService.js";
+import { buildApplicationUpdate, pullApplicationUpdate } from "../services/gitUpdateService.js";
 
 const router = Router();
 router.use(authenticate);
@@ -33,12 +32,32 @@ router.get("/version", async (req: Request, res: Response) => {
 
 // ─── POST /api/system-update/install ──────────────────────────────────────────
 router.post("/install", requireRole("Admin"), async (req: Request, res: Response) => {
+  if (!maintenanceService.enter()) {
+    return res.status(409).json({ message: "An update or maintenance operation is already in progress" });
+  }
 
+  // Leave maintenance only when no database/application change was attempted.
+  // After migrations begin, recovery must be deliberate; after success the
+  // restarted process begins in normal mode.
+  let keepMaintenance = false;
   try {
     const userId = req.user!.id;
+    // Maintenance first blocks all new writes. Existing critical work is allowed
+    // to finish before backup, source update, or migrations begin.
+    const drained = await maintenanceService.waitForDrain();
+    if (!drained) {
+      return res.status(409).json({
+        message: "Active transactions did not finish before the update timeout",
+        activeOperations: maintenanceService.activeOperationCount(),
+      });
+    }
+
+    // Update the working tree before reading the target versions so migrations
+    // always come from the exact application revision being installed.
+    const pullResult = await pullApplicationUpdate();
     const versionStatus = await getVersionStatus();
 
-    if (!versionStatus.updateAvailable) {
+    if (!pullResult.changed && !versionStatus.updateAvailable && !versionStatus.databaseUpdateRequired) {
       return res.status(400).json({ message: "No update available" });
     }
 
@@ -59,23 +78,25 @@ router.post("/install", requireRole("Admin"), async (req: Request, res: Response
     const backupId = backupRows[0]?.id;
 
     // Step 2: Execute migrations
+    keepMaintenance = true;
     const migrationResult = await executePendingMigrations(userId, backupId);
     if (!migrationResult.success) {
-      // Rollback to backup
-      await rollbackToBackup(backupId!, userId);
       return res.status(500).json({
-        message: "Migration failed, database rolled back",
+        message: "Migration failed. Maintenance Mode remains enabled; restore the verified pre-update backup only under an explicit recovery procedure.",
         error: migrationResult.error,
       });
     }
 
-    // Step 3: Update installed version
-    await updateInstalledVersion(
-      versionStatus.downloadedVersion,
-      versionStatus.downloadedDatabaseVersion
-    );
+    // Step 3: Install the lockfile-pinned dependencies and rebuild server-dist
+    // and the web client. The existing shortcut continues to launch this folder.
+    await buildApplicationUpdate();
 
-    // Step 4: Log audit event
+    // Step 4: Update installed version
+    // The database version is advanced by each successful forward-only
+    // migration. Keep it unchanged when this release has no DB migration.
+    await updateInstalledVersion(versionStatus.downloadedVersion, versionStatus.downloadedDatabaseVersion);
+
+    // Step 5: Log audit event
     await logAuditEvent({
       action: "UPDATE_INSTALLED",
       performedById: userId,
@@ -88,7 +109,7 @@ router.post("/install", requireRole("Admin"), async (req: Request, res: Response
       },
     });
 
-    // Step 5: Trigger Electron restart
+    // Step 6: Trigger Electron restart
     await triggerElectronRestart();
 
     res.status(200).json({
@@ -100,6 +121,8 @@ router.post("/install", requireRole("Admin"), async (req: Request, res: Response
   } catch (error) {
     console.error("[systemUpdate/install] Error:", error);
     res.status(500).json({ message: "Failed to install update" });
+  } finally {
+    if (!keepMaintenance) maintenanceService.exit();
   }
 });
 

@@ -12,6 +12,14 @@ const fs = require('fs');
 
 let serverProcess;
 let windowCreated = false;
+let restarting = false;
+
+function restartApplication() {
+  if (restarting) return;
+  restarting = true;
+  app.relaunch();
+  app.exit();
+}
 
 function createWindow(url) {
   if (windowCreated) return;
@@ -115,14 +123,21 @@ app.on('window-all-closed', () => {
 
 // ─── IPC Handler for Restart ─────────────────────────────────────────────────────
 ipcMain.handle('restart-app', () => {
-  app.relaunch();
-  app.exit();
+  restartApplication();
 });
 
 // ─── Watch for restart flag file ─────────────────────────────────────────────────
 const restartFlagPath = path.join(__dirname, '../.restart-flag');
 if (fs.existsSync(restartFlagPath)) {
   fs.unlinkSync(restartFlagPath);
-  app.relaunch();
-  app.exit();
+  restartApplication();
 }
+
+// The backend writes this flag after a successful update. Watching it makes
+// the restart signal work immediately rather than only on a later launch.
+fs.watchFile(restartFlagPath, { interval: 500 }, (current, previous) => {
+  if (current.mtimeMs !== previous.mtimeMs && fs.existsSync(restartFlagPath)) {
+    try { fs.unlinkSync(restartFlagPath); } catch (_) { /* restart still proceeds */ }
+    restartApplication();
+  }
+});

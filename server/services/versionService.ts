@@ -27,6 +27,15 @@ interface VersionStatus {
   databaseUpdateRequired: boolean;
 }
 
+function compareVersions(left: string, right: string): number {
+  const a = left.split(".").map((part) => Number(part) || 0);
+  const b = right.split(".").map((part) => Number(part) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) - (b[i] || 0);
+  }
+  return 0;
+}
+
 /**
  * Read version.json from config directory
  */
@@ -68,8 +77,10 @@ export async function getVersionStatus(): Promise<VersionStatus> {
   const installedAppVersion = installedVersion?.application_version || "1.0.0";
   const installedDbVersion = installedVersion?.database_version || "030";
 
-  const updateAvailable = downloadedAppVersion !== installedAppVersion;
-  const databaseUpdateRequired = downloadedDbVersion !== installedDbVersion;
+  // Production updates are forward-only. A stale configuration file must
+  // never make the updater offer (or record) a downgrade.
+  const updateAvailable = compareVersions(downloadedAppVersion, installedAppVersion) > 0;
+  const databaseUpdateRequired = compareVersions(downloadedDbVersion, installedDbVersion) > 0;
 
   return {
     installedVersion: installedAppVersion,
@@ -89,11 +100,18 @@ export async function updateInstalledVersion(
   databaseVersion: string
 ): Promise<void> {
   try {
+    const installed = await getInstalledVersion();
+    const safeApplicationVersion = installed && compareVersions(applicationVersion, installed.application_version) < 0
+      ? installed.application_version
+      : applicationVersion;
+    const safeDatabaseVersion = installed && compareVersions(databaseVersion, installed.database_version) < 0
+      ? installed.database_version
+      : databaseVersion;
     await pool.execute(
       `UPDATE system_version 
        SET application_version = ?, database_version = ?, updated_at = NOW() 
        WHERE id = 1`,
-      [applicationVersion, databaseVersion]
+      [safeApplicationVersion, safeDatabaseVersion]
     );
   } catch (error) {
     console.error("[versionService] Failed to update installed version:", error);

@@ -20,6 +20,8 @@
     "productName": "Isra Hardware POS",
     "files": [
       ".env",
+      "config/version.json",
+      "config/backup.json",
       "server-dist/**/*",
       "electron/**/*",
       "client/public/**/*"
