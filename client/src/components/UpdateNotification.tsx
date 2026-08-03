@@ -1,0 +1,75 @@
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RefreshCw } from "lucide-react";
+
+interface UpdateCheckResponse {
+  installedVersion: string;
+  updateInstalled: boolean;
+}
+
+export function UpdateNotification() {
+  const [showNotification, setShowNotification] = useState(false);
+  const [installedVersion, setInstalledVersion] = useState("");
+
+  useEffect(() => {
+    // Get current version from package.json (injected during build)
+    const currentVersion = import.meta.env.VITE_APP_VERSION || "1.0.0";
+    
+    // Poll every 30 seconds to check for updates
+    const checkForUpdates = async () => {
+      try {
+        const response = await fetch("/api/system-update/check", {
+          headers: {
+            "x-client-version": currentVersion,
+          },
+        });
+        if (response.ok) {
+          const data: UpdateCheckResponse = await response.json();
+          if (data.updateInstalled) {
+            setShowNotification(true);
+            setInstalledVersion(data.installedVersion);
+          }
+        }
+      } catch (error) {
+        // Silently fail - don't spam console with network errors
+      }
+    };
+
+    const intervalId = setInterval(checkForUpdates, 30000);
+    
+    // Initial check
+    checkForUpdates();
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const handleRefresh = () => {
+    window.location.reload();
+  };
+
+  if (!showNotification) return null;
+
+  return (
+    <div className="fixed top-4 right-4 z-50 max-w-md">
+      <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+        <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <AlertTitle className="text-blue-900 dark:text-blue-100">
+          Update Available
+        </AlertTitle>
+        <AlertDescription className="text-blue-800 dark:text-blue-200">
+          The system has been updated to version {installedVersion}. Please refresh to get the latest changes.
+          <div className="mt-3">
+            <Button
+              onClick={handleRefresh}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Refresh Now
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+}

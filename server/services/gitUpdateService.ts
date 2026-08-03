@@ -21,7 +21,6 @@ function runPackageManager(args: string[], cwd: string): Promise<{ stdout: strin
       timeout: 10 * 60 * 1000,
       maxBuffer: 10 * 1024 * 1024,
       env: { ...process.env, CI: "true" },
-      shell: true,
     }, (error, stdout, stderr) => {
       if (error) {
         if (error.code === 'EINVAL' && command.includes('pnpm')) {
@@ -32,7 +31,6 @@ function runPackageManager(args: string[], cwd: string): Promise<{ stdout: strin
             timeout: 10 * 60 * 1000,
             maxBuffer: 10 * 1024 * 1024,
             env: { ...process.env, CI: "true" },
-            shell: true,
           }, (fallbackError, fallbackStdout, fallbackStderr) => {
             if (fallbackError) {
               reject(new Error(`Package manager failed. Tried ${command} and ${fallbackCmd}. Error: ${fallbackStderr.trim() || fallbackError.message}`));

@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UpdateNotification } from "@/components/UpdateNotification";
 import AdminLayout from "./modules/admin/layout/AdminLayout";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
@@ -130,6 +131,7 @@ function App() {
         <AuthProvider>
           <TooltipProvider>
             <Toaster />
+            <UpdateNotification />
             <Router />
           </TooltipProvider>
         </AuthProvider>

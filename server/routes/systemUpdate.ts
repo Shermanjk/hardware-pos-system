@@ -30,6 +30,26 @@ router.get("/version", async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /api/system-update/check ────────────────────────────────────────────
+// Client polling endpoint to detect if an update was installed by another session
+router.get("/check", async (req: Request, res: Response) => {
+  try {
+    const status = await getVersionStatus();
+    const clientVersion = req.headers["x-client-version"] as string;
+    
+    // If client version differs from installed version, an update was installed
+    const updateInstalled = clientVersion && clientVersion !== status.installedVersion;
+    
+    res.status(200).json({
+      installedVersion: status.installedVersion,
+      updateInstalled,
+    });
+  } catch (error) {
+    console.error("[systemUpdate/check] Error:", error);
+    res.status(500).json({ message: "Failed to check for updates" });
+  }
+});
+
 // ─── POST /api/system-update/install ──────────────────────────────────────────
 router.post("/install", requireRole("Admin"), async (req: Request, res: Response) => {
   if (!maintenanceService.enter()) {
