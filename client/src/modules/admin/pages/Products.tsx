@@ -379,8 +379,12 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                     value={form.pricing_type}
                     onValueChange={(v) => {
                       set("pricing_type", v as PricingType);
-                      if (v === "MARKET_BASED" && form.product_usage === "RETAIL_PRODUCT") {
-                        set("product_usage", "RAW_MATERIAL_COMMODITY" as ProductUsage);
+                      if (v === "MARKET_BASED") {
+                        if (form.product_usage === "RETAIL_PRODUCT") {
+                          set("product_usage", "RAW_MATERIAL_COMMODITY" as ProductUsage);
+                        }
+                        set("barcode_source", "store" as "manufacturer" | "store");
+                        set("barcode", "");
                       }
                     }}
                     disabled={isLoading}
@@ -389,8 +393,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
-                      <SelectItem value="FIXED_PRICE">Fixed Price — standard product</SelectItem>
-                      <SelectItem value="MARKET_BASED">Market-Based — commodity (copra, charcoal…)</SelectItem>
+                      <SelectItem value="FIXED_PRICE">Fixed Price</SelectItem>
+                      <SelectItem value="MARKET_BASED">Market-Based</SelectItem>
                     </SelectContent>
                   </Select>
                   {form.pricing_type === "MARKET_BASED" && (
@@ -415,9 +419,16 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                         <SelectItem value="BOTH">Both — retail & raw material</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="mt-1 text-xs text-gray-400">
-                      RAW_MATERIAL_COMMODITY = eligible for external processing delivery.
-                    </p>
+                    {form.product_usage === "RAW_MATERIAL_COMMODITY" && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        RAW_MATERIAL_COMMODITY = eligible for external processing delivery.
+                      </p>
+                    )}
+                    {form.product_usage === "BOTH" && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        BOTH = eligible for external processing delivery and available for retail.
+                      </p>
+                    )}
                   </div>
                 )}
                 {form.pricing_type !== "MARKET_BASED" && <div />}
@@ -510,12 +521,14 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
               </div>
 
               {/* Row 3 — Supplier Barcode (half width) */}
-              <div className="max-w-sm">
-                <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
-                <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
-                  placeholder="Supplier's own barcode, if different" disabled={isLoading}
-                  className="border-gray-300" />
-              </div>
+              {form.pricing_type !== "MARKET_BASED" && (
+                <div className="max-w-sm">
+                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
+                  <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
+                    placeholder="Supplier's own barcode, if different" disabled={isLoading}
+                    className="border-gray-300" />
+                </div>
+              )}
             </div>
           </div>
 

@@ -42,12 +42,12 @@ function StatCard({ icon: Icon, label, value, sub, iconBg, iconColor, loading }:
         </div>
       ) : (
         <div className="flex items-start justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-gray-500">{label}</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
             <p className="text-xs text-gray-400 mt-1">{sub}</p>
           </div>
-          <div className={`p-3 rounded-xl ${iconBg}`}>
+          <div className={`p-3 rounded-xl ${iconBg} shrink-0`}>
             <Icon className={`h-6 w-6 ${iconColor}`} />
           </div>
         </div>
@@ -127,10 +127,15 @@ export default function ClerkDashboard() {
         const allProducts = inventoryData;
         setLowStockProducts(allProducts.filter((p) => p.quantity <= p.reorder_level).slice(0, 6));
 
+        const lowStock = Number(summary.low_stock) || 0;
+        const critical = Number(summary.critical) || 0;
+        const outOfStock = Number(summary.out_of_stock) || 0;
+        const totalLowStock = lowStock + critical + outOfStock;
+
         setStats({
-          totalProducts: summary.total_products ?? 0,
+          totalProducts: Number(summary.total_products ?? 0),
           totalQty: Number(summary.total_units ?? 0),
-          lowStockCount: (summary.low_stock ?? 0) + (summary.critical ?? 0) + (summary.out_of_stock ?? 0),
+          lowStockCount: totalLowStock,
           todayStockIn: inventoryLogs.filter(
             (l) =>
               l.action === "Received Stock" &&
@@ -347,7 +352,7 @@ export default function ClerkDashboard() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-gray-400 text-xs whitespace-nowrap">
-                        {log.timestamp}
+                        {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true })}
                       </td>
                     </tr>
                   ))}
