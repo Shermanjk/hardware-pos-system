@@ -50,6 +50,22 @@ router.get("/check", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/system-update/pull ────────────────────────────────────────────
+// Pull latest changes from remote repository
+router.post("/pull", requireRole("Admin"), async (req: Request, res: Response) => {
+  try {
+    const pullResult = await pullApplicationUpdate();
+    res.status(200).json({
+      message: "Git pull completed",
+      changed: pullResult.changed,
+      output: pullResult.output,
+    });
+  } catch (error) {
+    console.error("[systemUpdate/pull] Error:", error);
+    res.status(500).json({ message: "Failed to pull from repository" });
+  }
+});
+
 // ─── POST /api/system-update/install ──────────────────────────────────────────
 router.post("/install", requireRole("Admin"), async (req: Request, res: Response) => {
   if (!maintenanceService.enter()) {

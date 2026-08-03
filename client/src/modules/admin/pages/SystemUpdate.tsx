@@ -74,9 +74,19 @@ export default function SystemUpdate() {
 
   const handleCheckUpdates = async () => {
     setIsLoading(true);
-    await loadVersionStatus();
-    setIsLoading(false);
-    toast.success("Version status updated");
+    try {
+      const token = loadToken();
+      await axios.post("/api/system-update/pull", {}, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      await loadVersionStatus();
+      toast.success("Version status updated");
+    } catch (error) {
+      console.error("Failed to pull updates:", error);
+      toast.error("Failed to pull from repository");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
