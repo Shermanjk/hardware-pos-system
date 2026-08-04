@@ -1,16 +1,16 @@
-﻿import { useState, useCallback, useEffect } from "react";
-import { FileText, Download, RefreshCw, AlertCircle, Calendar, Table2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import { loadToken } from "@/shared/utils/auth";
+import { formatQuantity, formatQuantityForTable, type QuantityType } from "@/shared/utils/quantityFormat";
+import axios from "axios";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { AlertCircle, Calendar, Download, FileText, RefreshCw, Table2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import axios from "axios";
-import { loadToken } from "@/shared/utils/auth";
-import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
-import { formatQuantity, formatQuantityForTable, type QuantityType } from "@/shared/utils/quantityFormat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,8 +99,11 @@ function generateExcel(data: ReportData, store: StoreSettings) {
     ["Report Period", `${data.period.date_from} to ${data.period.date_to}`],
     ["Generated", new Date(data.generated_at).toLocaleString("en-PH")], [""],
     ["Total Transactions", data.summary.total_transactions],
-    ["Total Revenue", Number(data.summary.total_revenue)],
+    ["Gross Sales", Number(data.summary.gross_revenue)],
+    ["Total Discounts", Number((data.summary as any).total_discounts ?? 0)],
+    ["Net Sales (after discounts)", Number(data.summary.total_revenue)],
     ["Total VAT (12%)", Number(data.summary.total_vat)],
+    ["Total Refunds", Number((data.summary as any).total_refunds ?? 0)],
     ["Net Subtotal", Number(data.summary.total_subtotal)],
     ["Avg Order Value", Number(data.summary.avg_order_value)],
     ["Largest Sale", Number(data.summary.largest_sale)],
@@ -204,8 +207,11 @@ function generatePDF(data: ReportData, store: StoreSettings) {
     [["Metric", "Value"]],
     [
       ["Total Transactions", String(data.summary.total_transactions)],
-      ["Total Revenue", fmt(data.summary.total_revenue)],
+      ["Gross Sales", fmt(data.summary.gross_revenue)],
+      ["Total Discounts", fmt((data.summary as any).total_discounts ?? 0)],
+      ["Net Sales (after discounts)", fmt(data.summary.total_revenue)],
       ["Total VAT (12%)", fmt(data.summary.total_vat)],
+      ["Total Refunds", fmt((data.summary as any).total_refunds ?? 0)],
       ["Net Subtotal", fmt(data.summary.total_subtotal)],
       ["Avg Order Value", fmt(data.summary.avg_order_value)],
       ["Largest Sale", fmt(data.summary.largest_sale)],
@@ -433,8 +439,11 @@ function printReport(data: ReportData, store: StoreSettings) {
     <table>${th(["Metric", "Value"])}<tbody>
       ${[
         ["Total Transactions", String(data.summary.total_transactions)],
-        ["Total Revenue", fmt(data.summary.total_revenue)],
+        ["Gross Sales", fmt(data.summary.gross_revenue)],
+        ["Total Discounts", fmt((data.summary as any).total_discounts ?? 0)],
+        ["Net Sales (after discounts)", fmt(data.summary.total_revenue)],
         ["Total VAT (12%)", fmt(data.summary.total_vat)],
+        ["Total Refunds", fmt((data.summary as any).total_refunds ?? 0)],
         ["Net Subtotal", fmt(data.summary.total_subtotal)],
         ["Avg Order Value", fmt(data.summary.avg_order_value)],
         ["Largest Sale", fmt(data.summary.largest_sale)],
@@ -781,9 +790,13 @@ export default function Reports() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { l: "Total Transactions", v: data.summary.total_transactions.toLocaleString(), c: "text-blue-600" },
-                { l: "Total Revenue", v: fmt(data.summary.total_revenue), c: "text-emerald-600" },
+                { l: "Gross Sales", v: fmt(data.summary.gross_revenue), c: "text-emerald-600" },
+                { l: "Total Discounts", v: fmt((data.summary as any).total_discounts ?? 0), c: "text-amber-600" },
+                { l: "Net Sales", v: fmt(data.summary.total_revenue), c: "text-green-700" },
                 { l: "Total VAT (12%)", v: fmt(data.summary.total_vat), c: "text-purple-600" },
-                { l: "Avg Order Value", v: fmt(data.summary.avg_order_value), c: "text-amber-600" },
+                { l: "Total Refunds", v: fmt((data.summary as any).total_refunds ?? 0), c: "text-red-600" },
+                { l: "Avg Order Value", v: fmt(data.summary.avg_order_value), c: "text-indigo-600" },
+                { l: "Largest Sale", v: fmt(data.summary.largest_sale), c: "text-gray-700" },
               ].map((c) => (
                 <div
                   key={c.l}

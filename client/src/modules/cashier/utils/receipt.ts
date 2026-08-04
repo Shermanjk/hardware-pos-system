@@ -1,7 +1,7 @@
-import { toCentavos, fmtCents } from "./money";
 import type { TaxType } from "@/shared/api/productsApi";
 import type { SaleItemSnapshot } from "@/shared/api/salesApi";
 import type { StoreSettings } from "@/shared/api/settingsApi";
+import { fmtCents, toCentavos } from "./money";
 
 export interface CartItem {
   id: number;
@@ -15,6 +15,8 @@ export interface CartItem {
   tax_rate?: number;
   taxable_amount?: number;
   vat_amount?: number;
+  /** Available stock at time of adding — used to cap quantity input */
+  stock?: number;
 }
 
 export interface CustomerInfo {
@@ -36,6 +38,10 @@ interface SaleReceiptParams {
   cashierName: string;
   settings: StoreSettings;
   itemSnapshots: SaleItemSnapshot[];
+  discountCents?: number;
+  discountName?: string;
+  discountPercentage?: number;
+  finalTotalCents?: number;
 }
 
 const W = 72;
@@ -51,7 +57,13 @@ function buildReceiptText(params: SaleReceiptParams): string {
     invoiceNumber, cartItems, customerInfo,
     subtotalCents, taxCents, totalCents,
     cashCents, changeCents, cashierName, settings,
+    discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
   } = params;
+
+  // grossCents = pre-discount items total
+  // totalCents from the server is already the net (post-discount) amount.
+  // Derive the gross so the receipt shows it correctly above the discount line.
+  const grossCents = discountCents > 0 ? finalTotalCents + discountCents : totalCents;
 
   const storeName              = settings.store_name              || "";
   const storeFb                = settings.facebook                || "";
@@ -105,8 +117,19 @@ function buildReceiptText(params: SaleReceiptParams): string {
   }
 
   ln(rule("-"));
-  ln(lr(`ITEMS: ${totalItems}`, `TOTAL:         ${currSym} ${fmtCents(totalCents)}`));
+  ln(lr(`ITEMS: ${totalItems}`, `TOTAL:         ${currSym} ${fmtCents(grossCents)}`));
   ln(rule("-"));
+  
+  // Discount section
+  if (discountCents > 0) {
+    ln();
+    ln(lr(`DISCOUNT: ${discountName || "N/A"} (${discountPercentage}%)`, `- ${currSym} ${fmtCents(discountCents)}`));
+    ln(rule("-"));
+    ln(lr(`GROSS TOTAL:`, `${currSym} ${fmtCents(grossCents)}`));
+    ln(lr(`NET TOTAL:`, `${currSym} ${fmtCents(finalTotalCents)}`));
+    ln(rule("-"));
+  }
+  
   ln();
   ln(center("VAT BREAKDOWN"));
   ln();
@@ -119,22 +142,27 @@ function buildReceiptText(params: SaleReceiptParams): string {
 
   if (settings.vat_enabled) {
     const snaps = params.itemSnapshots;
-    const vatableNetCents = snaps.filter((s) => s.tax_type === "VATABLE").reduce((acc, s) => acc + toCentavos(s.taxable_amount), 0);
-    const vatExemptCents  = snaps.filter((s) => s.tax_type === "VAT_EXEMPT").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
-    const zeroRatedCents  = snaps.filter((s) => s.tax_type === "ZERO_RATED").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
-    const nonTaxableCents = snaps.filter((s) => s.tax_type === "NON_TAXABLE").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0);
+    // When a discount is applied, scale VAT amounts proportionally to the net total
+    const discountRatio = grossCents > 0 && discountCents > 0
+      ? finalTotalCents / grossCents
+      : 1;
+    const vatableNetCents = Math.round(snaps.filter((s) => s.tax_type === "VATABLE").reduce((acc, s) => acc + toCentavos(s.taxable_amount), 0) * discountRatio);
+    const vatExemptCents  = Math.round(snaps.filter((s) => s.tax_type === "VAT_EXEMPT").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
+    const zeroRatedCents  = Math.round(snaps.filter((s) => s.tax_type === "ZERO_RATED").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
+    const nonTaxableCents = Math.round(snaps.filter((s) => s.tax_type === "NON_TAXABLE").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
+    const scaledTaxCents  = Math.round(taxCents * discountRatio);
     bline(`VATable Sales (Net of VAT):`,  vatableNetCents);
-    bline(`VAT Amount (${taxRate}%):`,    taxCents);
+    bline(`VAT Amount (${taxRate}%):`,    scaledTaxCents);
     bline("VAT-Exempt Sales:",            vatExemptCents);
     bline("Zero-Rated Sales:",            zeroRatedCents);
     bline("Non-Taxable Sales:",           nonTaxableCents);
   } else {
-    bline("Non-VAT Sales:",   totalCents);
+    bline("Non-VAT Sales:",   finalTotalCents);
     bline("Total VAT Amount:", 0);
   }
 
   ln(rule("-"));
-  bline("TOTAL AMOUNT DUE:", totalCents);
+  bline("TOTAL AMOUNT DUE:", finalTotalCents);
   ln();
   bline("Cash Tendered:", cashCents);
   bline("Change:",         changeCents ?? 0);

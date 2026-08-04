@@ -1,31 +1,34 @@
 import "dotenv/config";
 import express from "express";
-import { createServer } from "http";
-import { initWebSocket } from "./ws.js";
-import path from "path";
 import fs from "fs";
+import { createServer } from "http";
+import path from "path";
 import { fileURLToPath } from "url";
-import authRoutes from "./routes/auth.js";
-import usersRoutes from "./routes/users.js";
-import auditLogsRoutes from "./routes/auditLogs.js";
-import salesRoutes from "./routes/sales.js";
-import returnsRoutes from "./routes/returns.js";
-import productsRoutes from "./routes/products.js";
-import categoriesRoutes from "./routes/categories.js";
-import suppliersRoutes from "./routes/suppliers.js";
-import unitsRoutes from "./routes/units.js";
-import inventoryRoutes from "./routes/inventory.js";
-import dashboardRoutes from "./routes/dashboard.js";
-import reportsRoutes from "./routes/reports.js";
-import settingsRoutes from "./routes/settings.js";
-import commodityPricesRoutes from "./routes/commodityPrices.js";
-import externalProcessingRoutes from "./routes/externalProcessing.js";
-import suspendedSalesRoutes from "./routes/suspendedSales.js";
-import requestsRoutes from "./routes/requests.js";
-import systemUpdateRoutes from "./routes/systemUpdate.js";
-import backupRoutes from "./routes/backup.js";
-import notificationsRoutes from "./routes/notifications.js";
 import { maintenanceGate } from "./middleware/maintenanceGate.js";
+import auditLogsRoutes from "./routes/auditLogs.js";
+import authRoutes from "./routes/auth.js";
+import authorizationHistoryRoutes from "./routes/authorizationHistory.js";
+import backupRoutes from "./routes/backup.js";
+import categoriesRoutes from "./routes/categories.js";
+import commodityPricesRoutes from "./routes/commodityPrices.js";
+import dashboardRoutes from "./routes/dashboard.js";
+import discountApprovalsRoutes from "./routes/discountApprovals.js";
+import discountsRoutes from "./routes/discounts.js";
+import externalProcessingRoutes from "./routes/externalProcessing.js";
+import inventoryRoutes from "./routes/inventory.js";
+import notificationsRoutes from "./routes/notifications.js";
+import productsRoutes from "./routes/products.js";
+import reportsRoutes from "./routes/reports.js";
+import requestsRoutes from "./routes/requests.js";
+import returnsRoutes from "./routes/returns.js";
+import salesRoutes from "./routes/sales.js";
+import settingsRoutes from "./routes/settings.js";
+import suppliersRoutes from "./routes/suppliers.js";
+import suspendedSalesRoutes from "./routes/suspendedSales.js";
+import systemUpdateRoutes from "./routes/systemUpdate.js";
+import unitsRoutes from "./routes/units.js";
+import usersRoutes from "./routes/users.js";
+import { initWebSocket } from "./ws.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +69,9 @@ async function startServer() {
   app.use("/api/system-update", systemUpdateRoutes);
   app.use("/api/backup", backupRoutes);
   app.use("/api/notifications", notificationsRoutes);
+  app.use("/api/discounts", discountsRoutes);
+  app.use("/api/discount-approvals", discountApprovalsRoutes);
+  app.use("/api/authorization-history", authorizationHistoryRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   // When bundled to server-dist/index.js, static files are at ../dist/public

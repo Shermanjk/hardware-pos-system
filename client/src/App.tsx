@@ -1,41 +1,43 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotification } from "@/components/UpdateNotification";
-import AdminLayout from "./modules/admin/layout/AdminLayout";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import AdminLayout from "./modules/admin/layout/AdminLayout";
 import ErrorBoundary from "./shared/components/ErrorBoundary";
-import { ThemeProvider } from "./shared/contexts/ThemeContext";
-import { AuthProvider } from "./shared/contexts/AuthContext";
-import ProtectedRoute from "./shared/components/ProtectedRoute";
 import PasswordChangeGuard from "./shared/components/PasswordChangeGuard";
+import ProtectedRoute from "./shared/components/ProtectedRoute";
+import { AuthProvider } from "./shared/contexts/AuthContext";
+import { ThemeProvider } from "./shared/contexts/ThemeContext";
 
 // Admin pages
-import Dashboard from "./modules/admin/pages/Dashboard";
-import Products from "./modules/admin/pages/Products";
+import AuthorizationHistory from "./modules/admin/pages/AuthorizationHistory";
 import Categories from "./modules/admin/pages/Categories";
-import Inventory from "./modules/admin/pages/Inventory";
-import Suppliers from "./modules/admin/pages/Suppliers";
-import Sales from "./modules/admin/pages/Sales";
-import Reports from "./modules/admin/pages/Reports";
-import Users from "./modules/admin/pages/Users";
-import Settings from "./modules/admin/pages/Settings";
 import CommodityPrices from "./modules/admin/pages/CommodityPrices";
+import Dashboard from "./modules/admin/pages/Dashboard";
+import DiscountManagement from "./modules/admin/pages/DiscountManagement";
 import ExternalProcessing from "./modules/admin/pages/ExternalProcessing";
+import Inventory from "./modules/admin/pages/Inventory";
+import Products from "./modules/admin/pages/Products";
+import Reports from "./modules/admin/pages/Reports";
 import Requests from "./modules/admin/pages/Requests";
-import Login from "./pages/Login";
-import ChangePassword from "./pages/ChangePassword";
+import Sales from "./modules/admin/pages/Sales";
+import Settings from "./modules/admin/pages/Settings";
+import Suppliers from "./modules/admin/pages/Suppliers";
+import Users from "./modules/admin/pages/Users";
 import Cashier from "./modules/cashier/pages/Cashier";
+import ChangePassword from "./pages/ChangePassword";
+import Login from "./pages/Login";
 
 // Clerk module
 import ClerkLayout from "./modules/clerk/layout/ClerkLayout";
+import ClerkBarcodePrinting from "./modules/clerk/pages/ClerkBarcodePrinting";
 import ClerkDashboard from "./modules/clerk/pages/ClerkDashboard";
 import ClerkInventory from "./modules/clerk/pages/ClerkInventory";
-import ClerkStockIn from "./modules/clerk/pages/ClerkStockIn";
+import ClerkLowStock from "./modules/clerk/pages/ClerkLowStock";
 import ClerkStockAdjustment from "./modules/clerk/pages/ClerkStockAdjustment";
 import ClerkStockCount from "./modules/clerk/pages/ClerkStockCount";
-import ClerkBarcodePrinting from "./modules/clerk/pages/ClerkBarcodePrinting";
-import ClerkLowStock from "./modules/clerk/pages/ClerkLowStock";
+import ClerkStockIn from "./modules/clerk/pages/ClerkStockIn";
 
 // ─── Clerk router ─────────────────────────────────────────────────────────────
 
@@ -74,6 +76,8 @@ function AdminRouter() {
         <Route path="/commodity-prices" component={CommodityPrices} />
         <Route path="/external-processing" component={ExternalProcessing} />
         <Route path="/requests"        component={Requests}       />
+        <Route path="/discounts"       component={DiscountManagement} />
+        <Route path="/authorization-history" component={AuthorizationHistory} />
         <Route path="/404"             component={NotFound}       />
         <Route component={NotFound} />
       </Switch>

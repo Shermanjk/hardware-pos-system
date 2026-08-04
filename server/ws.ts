@@ -49,6 +49,32 @@ export interface VoidDecisionNotification {
   cashier_user_id: number;
 }
 
+export interface DiscountRequestNotification {
+  type: "discount_request";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  requested_percentage: number;
+  discount_amount: number;
+  reason: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  created_at: string;
+}
+
+export interface DiscountDecisionNotification {
+  type: "discount_decision";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  requested_percentage: number;
+  discount_amount: number;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason: string | null;
+  cashier_user_id: number;
+}
+
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
@@ -173,6 +199,22 @@ export function sendReturnDecision(notification: ReturnDecisionNotification): vo
 }
 
 export function sendVoidDecision(notification: VoidDecisionNotification): void {
+  const sockets = cashierClients.get(notification.cashier_user_id);
+  if (!sockets) return;
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(sockets)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function broadcastDiscountRequest(notification: DiscountRequestNotification): void {
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(adminClients)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function sendDiscountDecision(notification: DiscountDecisionNotification): void {
   const sockets = cashierClients.get(notification.cashier_user_id);
   if (!sockets) return;
   const message = JSON.stringify(notification);

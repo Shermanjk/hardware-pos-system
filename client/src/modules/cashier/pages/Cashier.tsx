@@ -1,29 +1,30 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { LogOut, Clock, User, ChevronDown, WifiOff } from "lucide-react";
-import { useAuth } from "@/shared/contexts/AuthContext";
-import { createSale, markReceiptPrinted, generateClientTransactionId, type CreateSalePayload } from "@/shared/api/salesApi";
-import { getMyVoidRequests, type MyVoidRequest } from "@/shared/api/voidApi";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import httpClient from "@/shared/api/httpClient";
 import { getProduct } from "@/shared/api/productsApi";
 import { getMyPendingReturns } from "@/shared/api/returnsApi";
+import { createSale, generateClientTransactionId, markReceiptPrinted, type CreateSalePayload } from "@/shared/api/salesApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
-import httpClient from "@/shared/api/httpClient";
-import { toast } from "sonner";
+import { discardSuspendedSale, getSuspendedSales, suspendSale, type SuspendedSale as SuspendedSaleApi } from "@/shared/api/suspendedSalesApi";
+import { getMyVoidRequests } from "@/shared/api/voidApi";
+import { useAuth } from "@/shared/contexts/AuthContext";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
-import { toCentavos, parseCashInput } from "../utils/money";
-import { printSaleReceipt } from "../utils/receipt";
+import { ChevronDown, Clock, LogOut, User, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import CartPanel from "../components/CartPanel";
+import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
 import CustomerPanel from "../components/CustomerPanel";
-import PaymentPanel from "../components/PaymentPanel";
+import DiscountApprovalModal from "../components/DiscountApprovalModal";
+import type { HeldOrder } from "../components/HeldOrdersPanel";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
+import PaymentPanel from "../components/PaymentPanel";
+import type { HeldReturn } from "../components/PendingReturnsPanel";
 import PendingReturnsPanel from "../components/PendingReturnsPanel";
 import ReturnsPanel from "../components/ReturnsPanel";
-import type { CartItem, CustomerInfo } from "../utils/receipt";
-import type { HeldOrder } from "../components/HeldOrdersPanel";
-import type { HeldReturn } from "../components/PendingReturnsPanel";
-import { getSuspendedSales, suspendSale, discardSuspendedSale, type SuspendedSale as SuspendedSaleApi } from "@/shared/api/suspendedSalesApi";
 import VoidSaleDialog from "../components/VoidSaleDialog";
-import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
+import { parseCashInput, toCentavos } from "../utils/money";
+import type { CartItem, CustomerInfo } from "../utils/receipt";
+import { printSaleReceipt } from "../utils/receipt";
 
 // ─── Polling constants ────────────────────────────────────────────────────────
 const HEALTH_POLL_MS   = 15_000; // check server reachability every 15 s
@@ -71,9 +72,15 @@ function LiveClock() {
 export default function Cashier() {
   const { logout, user } = useAuth();
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
-    store_name: "", store_fb: "", store_phone: "", store_address: "",
-    currency: "PHP", tax_rate: 0, business_license: "", registered_taxpayer_name: "",
+    store_name: "", facebook: "", contact_number: "", address: "",
+    currency: "PHP", vat_rate: 0, business_license: "", registered_taxpayer_name: "",
     tin: "", document_type: "SALES INVOICE", pos_min: "", pos_serial: "", vat_registered: false,
+    vat_enabled: false,
+    proprietor: "",
+    pricing_type: null,
+    receipt_footer: null,
+    printer_name: null,
+    cash_drawer_enabled: false,
   });
   useEffect(() => { getSettings().then(setStoreSettings).catch(() => {}); }, []);
 
@@ -96,7 +103,7 @@ export default function Cashier() {
   }, []);
 
   // ── Cart state ────────────────────────────────────────────────────────────
-  const [cartItems, setCartItems]       = useState<CartItem[]>([]);
+  const [cartItems, setCartItemsRaw]    = useState<CartItem[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -104,12 +111,39 @@ export default function Cashier() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeRef    = useRef<HTMLInputElement>(null);
 
+  // Wraps the raw cart setter. When the cart is cleared to empty AND there is
+  // a pending discount request, automatically cancel it on the server (Req-6).
+  const discountRequestIdRef = useRef<number | null>(null);
+  const setCartItems: typeof setCartItemsRaw = useCallback((value) => {
+    setCartItemsRaw((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      if (next.length === 0 && prev.length > 0 && discountRequestIdRef.current) {
+        const id = discountRequestIdRef.current;
+        discountRequestIdRef.current = null;
+        httpClient.delete(`/api/discount-approvals/${id}`).catch(() => {});
+        // Reset client-side discount state in next tick to avoid mid-render setState
+        setTimeout(() => {
+          setSelectedDiscount(null);
+          setDiscountRequestId(null);
+        }, 0);
+      }
+      return next;
+    });
+  }, []);
+
   // ── Payment state ─────────────────────────────────────────────────────────
   const [cashTendered, setCashTendered]   = useState("");
   const [customerInfo, setCustomerInfo]   = useState<CustomerInfo>({ name: "", address: "", tin: "", businessStyle: "" });
   const [holdCounter, setHoldCounter]     = useState(0);
   const [showHolds, setShowHolds]         = useState(false);
   const [isProcessing, setIsProcessing]   = useState(false);
+  const [selectedDiscount, setSelectedDiscount] = useState<{ id: number; name: string; percentage: number; requiresApproval: boolean } | null>(null);
+  const [discountRequestId, setDiscountRequestId] = useState<number | null>(null);
+  const [showDiscountApprovalModal, setShowDiscountApprovalModal] = useState(false);
+
+  // Keep the ref in sync with state so the wrapped setCartItems can read it
+  // without a stale closure.
+  useEffect(() => { discountRequestIdRef.current = discountRequestId; }, [discountRequestId]);
 
   // ── Void state ────────────────────────────────────────────────────────────
   const [showVoidDialog, setShowVoidDialog]         = useState(false);
@@ -129,12 +163,19 @@ export default function Cashier() {
 
   // ── Calculations ──────────────────────────────────────────────────────────
   const totalCents    = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
-  const taxRate       = storeSettings.tax_rate > 0 ? storeSettings.tax_rate : 12;
+  const taxRate       = storeSettings.vat_rate > 0 ? storeSettings.vat_rate : 12;
   const vatableCents  = cartItems.filter((i) => i.tax_type === "VATABLE").reduce((s, i) => s + toCentavos(i.subtotal), 0);
   const taxCents      = Math.round(vatableCents * taxRate / (100 + taxRate));
   const subtotalCents = totalCents - taxCents;
+  
+  // Calculate discount amount
+  const discountCents = selectedDiscount 
+    ? Math.round((totalCents * selectedDiscount.percentage) / 100)
+    : 0;
+  const finalTotalCents = totalCents - discountCents;
+  
   const cashCents     = parseCashInput(cashTendered);
-  const changeCents   = cashCents >= totalCents ? cashCents - totalCents : null;
+  const changeCents   = cashCents >= finalTotalCents ? cashCents - finalTotalCents : null;
   const fmt = (n: number) => "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // ── Unified pending data fetch (returns + voids) ──────────────────────────
@@ -252,12 +293,15 @@ export default function Cashier() {
           taxable_amount: item.taxable_amount, vat_amount: item.vat_amount,
         })),
         label,
+        discount: selectedDiscount ?? null,
       });
       toast.success("Transaction suspended and saved.");
       loadSuspendedSales(); clearCart();
+      setSelectedDiscount(null);
+      setDiscountRequestId(null);
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
     } catch (err: unknown) { toast.error(getErrorMessage(err, "Failed to suspend sale.")); }
-  }, [cartItems, customerInfo, holdCounter, loadSuspendedSales]);
+  }, [cartItems, customerInfo, holdCounter, loadSuspendedSales, selectedDiscount]);
 
   const handleRecall = useCallback(async (holdId: string) => {
     const held = suspendedSales.find((h) => h.suspended_order_id === holdId);
@@ -268,6 +312,9 @@ export default function Cashier() {
       tax_type: item.tax_type || "VATABLE", tax_rate: item.tax_rate || taxRate,
       taxable_amount: item.taxable_amount || 0, vat_amount: item.vat_amount || 0,
     })));
+    // Restore discount — a held transaction keeps its selected discount
+    setSelectedDiscount(held.discount ?? null);
+    setDiscountRequestId(null); // approval must be re-obtained after recall
     setCustomerInfo({ name: held.customer_name || "", address: held.customer_address || "", tin: held.customer_tin || "", businessStyle: "" });
     setCashTendered(""); setShowHolds(false);
     try { await discardSuspendedSale(holdId); loadSuspendedSales(); }
@@ -293,8 +340,30 @@ export default function Cashier() {
   }));
 
   // ── Payment processing ────────────────────────────────────────────────────
-  const handleProcessPayment = async () => {
-    if (cartItems.length === 0 || cashCents < totalCents || !customerInfo.name.trim()) return;
+  const handleDiscountApproved = (requestId: number) => {
+    setDiscountRequestId(requestId);
+    // Pass the requestId directly to avoid depending on React state having
+    // flushed before handleProcessPayment reads discountRequestId.
+    handleProcessPaymentWithRequest(requestId);
+  };
+
+  const handleDiscountRejected = () => {
+    setSelectedDiscount(null);
+    setDiscountRequestId(null);
+  };
+
+  // Core payment handler — accepts an optional override for discountRequestId
+  // so it can be called immediately after approval without waiting for setState.
+  const handleProcessPaymentWithRequest = async (overrideRequestId?: number) => {
+    const effectiveDiscountRequestId = overrideRequestId ?? discountRequestId;
+    if (cartItems.length === 0 || cashCents < finalTotalCents || !customerInfo.name.trim()) return;
+
+    // Check if discount requires approval and we don't have one yet
+    if (selectedDiscount && selectedDiscount.requiresApproval && !effectiveDiscountRequestId) {
+      setShowDiscountApprovalModal(true);
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const freshResults = await Promise.allSettled(cartItems.map((item) => getProduct(item.id)));
@@ -324,18 +393,45 @@ export default function Cashier() {
         subtotal: subtotalCents / 100, vat_amount: taxCents / 100, total_amount: totalCents / 100,
         cash_tendered: cashCents / 100, change_amount: changeCents ? changeCents / 100 : 0,
         client_transaction_id: clientTxnId,
+        discount_id: selectedDiscount?.id,
+        discount_request_id: effectiveDiscountRequestId || undefined,
         items: cartItems.map((i) => ({ product_id: i.id, quantity: i.quantity, unit_price: Number(i.unitPrice), subtotal: Number(i.subtotal), tax_type: i.tax_type })),
       };
       const saleResult = await createSale(payload);
 
       const printedCartItems    = [...cartItems];
       const printedCustomerInfo = { ...customerInfo };
+      // Snapshot discount info before state is cleared (used for receipt below)
+      const printedDiscountCents      = discountCents;
+      const printedDiscountName       = selectedDiscount?.name;
+      const printedDiscountPercentage = selectedDiscount?.percentage;
+      const printedFinalTotalCents    = finalTotalCents;
+      // Clear discount state BEFORE clearing cart so the wrapped setCartItems
+      // does not attempt to cancel an already-used or already-completed request.
+      setSelectedDiscount(null);
+      setDiscountRequestId(null);
       clearCart();
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
 
       let receiptPrinted = false;
       try {
-        printSaleReceipt({ invoiceNumber: saleResult.invoice_number, cartItems: printedCartItems, customerInfo: printedCustomerInfo, subtotalCents: Math.round(saleResult.subtotal * 100), taxCents: Math.round(saleResult.vat_amount * 100), totalCents: Math.round(saleResult.total_amount * 100), cashCents, changeCents: Math.round(saleResult.change_amount * 100), cashierName: user?.full_name ?? "—", settings: storeSettings, itemSnapshots: saleResult.items });
+        printSaleReceipt({ 
+          invoiceNumber: saleResult.invoice_number, 
+          cartItems: printedCartItems, 
+          customerInfo: printedCustomerInfo, 
+          subtotalCents: Math.round(saleResult.subtotal * 100), 
+          taxCents: Math.round(saleResult.vat_amount * 100), 
+          totalCents: Math.round(saleResult.total_amount * 100), 
+          cashCents, 
+          changeCents: Math.round(saleResult.change_amount * 100), 
+          cashierName: user?.full_name ?? "—", 
+          settings: storeSettings, 
+          itemSnapshots: saleResult.items,
+          discountCents: printedDiscountCents,
+          discountName: printedDiscountName,
+          discountPercentage: printedDiscountPercentage,
+          finalTotalCents: printedFinalTotalCents,
+        });
         receiptPrinted = true;
       } catch {
         toast.warning("Sale saved but receipt failed to print. You can reprint from the sales history.");
@@ -352,6 +448,8 @@ export default function Cashier() {
       toast.error(getErrorMessage(err, "Payment failed. No changes were saved."));
     } finally { setIsProcessing(false); }
   };
+
+  const handleProcessPayment = () => handleProcessPaymentWithRequest();
 
   const today = new Date().toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 
@@ -426,12 +524,20 @@ export default function Cashier() {
       {/* Main POS area */}
       <div className="flex-1 flex gap-3 p-3 overflow-hidden min-h-0">
         <CartPanel
-          cartItems={cartItems} setCartItems={setCartItems}
-          barcodeInput={barcodeInput} setBarcodeInput={setBarcodeInput}
-          searchResults={searchResults} setSearchResults={setSearchResults}
-          searchLoading={searchLoading} setSearchLoading={setSearchLoading}
-          showDropdown={showDropdown} setShowDropdown={setShowDropdown}
-          barcodeRef={barcodeRef} searchTimeoutRef={searchTimeout}
+          cartItems={cartItems}
+          setCartItems={setCartItems}
+          barcodeInput={barcodeInput}
+          setBarcodeInput={setBarcodeInput}
+          searchResults={searchResults}
+          setSearchResults={setSearchResults}
+          searchLoading={searchLoading}
+          setSearchLoading={setSearchLoading}
+          showDropdown={showDropdown}
+          setShowDropdown={setShowDropdown}
+          barcodeRef={barcodeRef}
+          searchTimeoutRef={searchTimeout}
+          selectedDiscount={selectedDiscount}
+          setSelectedDiscount={setSelectedDiscount}
         />
         <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} />
         <PaymentPanel
@@ -440,9 +546,14 @@ export default function Cashier() {
           cashTendered={cashTendered} setCashTendered={setCashTendered}
           cartLength={cartItems.length} customerName={customerInfo.name}
           isProcessing={isProcessing} isOffline={isOffline}
+          pendingApproval={showDiscountApprovalModal}
           onProcessPayment={handleProcessPayment}
           onHold={handleHold}
           onHoldOrders={() => setShowHolds(true)}
+          discountCents={discountCents}
+          discountName={selectedDiscount?.name}
+          discountPercentage={selectedDiscount?.percentage}
+          finalTotalCents={finalTotalCents}
           onReturn={() => setShowReturns(true)}
           onPendingReturns={() => setShowHeldReturns(true)}
           onVoid={() => setShowVoidDialog(true)}
@@ -484,6 +595,14 @@ export default function Cashier() {
         onRequestVoid={() => setShowVoidDialog(true)}
       />
       <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
+      <DiscountApprovalModal
+        open={showDiscountApprovalModal}
+        onClose={() => setShowDiscountApprovalModal(false)}
+        discount={selectedDiscount}
+        totalAmount={totalCents}
+        onApproved={handleDiscountApproved}
+        onRejected={handleDiscountRejected}
+      />
 
     </div>
   );

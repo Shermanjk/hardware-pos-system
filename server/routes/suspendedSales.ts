@@ -1,10 +1,21 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 
 const router = Router();
+
+// ─── Helper: parse cart_data JSON (supports old array format & new wrapper) ───
+// Old format:  JSON array of items  →  { items: [...], discount: null }
+// New format:  { items: [...], discount: {...} | null }
+function parseCartData(raw: any): { cart_data: any[]; discount: any | null } {
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  if (Array.isArray(parsed)) {
+    return { cart_data: parsed, discount: null };
+  }
+  return { cart_data: parsed?.items ?? [], discount: parsed?.discount ?? null };
+}
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -27,6 +38,12 @@ const suspendSaleSchema = z.object({
   customer_tin: z.string().optional(),
   cart_items: z.array(suspendedItemSchema).min(1),
   label: z.string().optional(),
+  discount: z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    percentage: z.number(),
+    requiresApproval: z.boolean(),
+  }).nullable().optional(),
 });
 
 // ─── GET /api/suspended-sales — List suspended sales for current cashier ───────
@@ -61,7 +78,7 @@ router.get(
         customer_name: row.customer_name,
         customer_address: row.customer_address,
         customer_tin: row.customer_tin,
-        cart_data: typeof row.cart_data === 'string' ? JSON.parse(row.cart_data) : row.cart_data,
+        ...parseCartData(row.cart_data),
         status: row.status,
         label: row.label,
         created_at: row.created_at,
@@ -91,7 +108,7 @@ router.post(
       return;
     }
 
-    const { customer_name, customer_address, customer_tin, cart_items, label } = parsed.data;
+    const { customer_name, customer_address, customer_tin, cart_items, label, discount } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -127,7 +144,10 @@ router.post(
         suspendedOrderId = `SUSP-${String(nextNum).padStart(6, "0")}`;
       }
 
-      // Insert suspended sale
+      // Insert suspended sale — cart_data stores items, label stores discount as JSON in the label
+      // We store discount separately inside a wrapper JSON object
+      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null });
+
       await conn.execute(
         `INSERT INTO suspended_sales 
            (suspended_order_id, cashier_id, customer_name, customer_address, customer_tin, cart_data, label)
@@ -138,7 +158,7 @@ router.post(
           customer_name || "",
           customer_address || null,
           customer_tin || null,
-          JSON.stringify(cart_items),
+          cartDataJson,
           label || null,
         ]
       );
@@ -199,7 +219,7 @@ router.get(
         customer_name: row.customer_name,
         customer_address: row.customer_address,
         customer_tin: row.customer_tin,
-        cart_data: typeof row.cart_data === 'string' ? JSON.parse(row.cart_data) : row.cart_data,
+        ...parseCartData(row.cart_data),
         status: row.status,
         label: row.label,
         created_at: row.created_at,
@@ -228,7 +248,7 @@ router.put(
       return;
     }
 
-    const { customer_name, customer_address, customer_tin, cart_items, label } = parsed.data;
+    const { customer_name, customer_address, customer_tin, cart_items, label, discount } = parsed.data;
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -246,6 +266,8 @@ router.put(
         return;
       }
 
+      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null });
+
       const [result] = await conn.execute<any>(
         `UPDATE suspended_sales 
          SET customer_name = ?, customer_address = ?, customer_tin = ?, cart_data = ?, label = ?, updated_at = NOW()
@@ -254,7 +276,7 @@ router.put(
           customer_name || "",
           customer_address || null,
           customer_tin || null,
-          JSON.stringify(cart_items),
+          cartDataJson,
           label || null,
           id,
           req.user!.id,
@@ -360,9 +382,7 @@ router.post(
       }
 
       const suspended = rows[0];
-      const cartItems = typeof suspended.cart_data === 'string' 
-        ? JSON.parse(suspended.cart_data) 
-        : suspended.cart_data;
+      const { cart_data: cartItems } = parseCartData(suspended.cart_data);
 
       // 1. Read tax_rate and vat_registered from system_settings (authoritative)
       const [settingsRows] = await conn.execute<any[]>(

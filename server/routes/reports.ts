@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
@@ -32,7 +32,8 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(SUM(subtotal), 0)        AS total_subtotal,
         COALESCE(AVG(total_amount), 0)    AS avg_order_value,
         COALESCE(MAX(total_amount), 0)    AS largest_sale,
-        COALESCE(MIN(total_amount), 0)    AS smallest_sale
+        COALESCE(MIN(total_amount), 0)    AS smallest_sale,
+        COALESCE(SUM(COALESCE(discount, 0)), 0) AS total_discounts
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
         AND void_status != 'voided'
@@ -52,12 +53,14 @@ router.get("/", async (req: Request, res: Response) => {
 
     const grossRevenue = Number(summaryRows[0].gross_revenue);
     const totalRefunds = Number(refundRows[0].total_refunds);
+    const totalDiscounts = Number(summaryRows[0].total_discounts);
     const netRevenue = grossRevenue - totalRefunds;
 
     // Update summary with net revenue
     const summary = {
       ...summaryRows[0],
       gross_revenue: grossRevenue,
+      total_discounts: totalDiscounts,
       total_revenue: netRevenue,
       total_refunds: totalRefunds,
     };

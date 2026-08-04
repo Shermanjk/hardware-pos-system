@@ -20,6 +20,7 @@ export interface SuspendedSale {
   customer_address: string | null;
   customer_tin: string | null;
   cart_data: SuspendedCartItem[];
+  discount?: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
   status: "SUSPENDED" | "COMPLETED" | "CANCELLED";
   label: string | null;
   created_at: string;
@@ -32,6 +33,7 @@ export interface SuspendSalePayload {
   customer_tin?: string;
   cart_items: SuspendedCartItem[];
   label?: string;
+  discount?: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
 }
 
 export interface CompleteSuspendedSalePayload {

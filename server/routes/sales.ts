@@ -25,6 +25,9 @@ const createSaleSchema = z.object({
   // the second request returns the existing sale instead of creating a duplicate.
   // This prevents duplicate sales after network retry, browser refresh, or power outage.
   client_transaction_id: z.string().min(1).optional(),
+  // Discount fields
+  discount_id: z.number().int().positive().optional(),
+  discount_request_id: z.number().int().positive().optional(),
   items: z.array(z.object({
     product_id: z.number().int().positive(),
     quantity:   z.number().int().positive(),
@@ -87,7 +90,60 @@ router.post(
     const {
       customer_name, customer_address, customer_tin,
       cash_tendered, items,
+      discount_id, discount_request_id,
     } = parsed.data;
+
+    // ── DISCOUNT VALIDATION ────────────────────────────────────────────────────
+    let discountAmount = 0;
+    let discountName = null;
+    if (discount_id) {
+      const [discountRows] = await pool.execute<any[]>(
+        `SELECT id, discount_name, discount_type, value, requires_admin_approval, status
+         FROM discounts WHERE id = ?`,
+        [discount_id]
+      );
+      if (discountRows.length === 0) {
+        res.status(404).json({ message: "Discount not found." });
+        return;
+      }
+      const discount = discountRows[0];
+      if (discount.status !== "Active") {
+        res.status(422).json({ message: "Discount is not active." });
+        return;
+      }
+      if (discount.discount_type !== "Percentage") {
+        res.status(422).json({ message: "Only percentage discounts are supported." });
+        return;
+      }
+
+      // If discount requires approval, validate the approval request
+      if (discount.requires_admin_approval) {
+        if (!discount_request_id) {
+          res.status(422).json({ message: "This discount requires admin approval. Please submit an approval request first." });
+          return;
+        }
+        const [approvalRows] = await pool.execute<any[]>(
+          `SELECT id, status, discount_id, discount_amount
+           FROM discount_requests
+           WHERE id = ? AND discount_id = ? AND cashier_id = ?`,
+          [discount_request_id, discount_id, req.user!.id]
+        );
+        if (approvalRows.length === 0) {
+          res.status(404).json({ message: "Discount approval request not found." });
+          return;
+        }
+        const approval = approvalRows[0];
+        if (approval.status !== "approved") {
+          res.status(422).json({ message: `Discount request is ${approval.status}. Only approved discounts can be applied.` });
+          return;
+        }
+        discountAmount = Number(approval.discount_amount);
+      } else {
+        // Calculate discount amount from percentage (will be applied after item totals calculated)
+        discountAmount = 0; // Will be calculated after item totals
+      }
+      discountName = discount.discount_name;
+    }
 
     // ── IDEMPOTENCY CHECK ─────────────────────────────────────────────────────
     // If client_transaction_id is provided, check if a sale with this key already exists.
@@ -214,20 +270,39 @@ router.post(
         calcItems.reduce((s, i) => s + i.vat_amount, 0) * 100
       ) / 100;
       const calc_subtotal = Math.round((calc_total_amount - calc_vat_amount) * 100) / 100;
-      const calc_change   = Math.round((cash_tendered - calc_total_amount) * 100) / 100;
 
-      // ── 4. Generate invoice number (concurrency-safe) ─────────────────────────
+      // ── 4. Apply discount if applicable ──────────────────────────────────────
+      let final_discount_amount = 0;
+      if (discount_id && discountAmount === 0) {
+        // Calculate discount from percentage for non-approval discounts
+        const [discountRows] = await conn.execute<any[]>(
+          `SELECT value FROM discounts WHERE id = ?`,
+          [discount_id]
+        );
+        if (discountRows.length > 0) {
+          const percentage = Number(discountRows[0].value);
+          final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+        }
+      } else if (discount_id) {
+        // Use the pre-calculated discount amount from approval request
+        final_discount_amount = discountAmount;
+      }
+
+      const final_total_amount = Math.round((calc_total_amount - final_discount_amount) * 100) / 100;
+      const calc_change = Math.round((cash_tendered - final_total_amount) * 100) / 100;
+
+      // ── 5. Generate invoice number (concurrency-safe) ─────────────────────────
       const invoice_number = await generateInvoiceNumber(conn);
 
-      // ── 5. Insert the sale row using backend-calculated totals ────────────────
+      // ── 6. Insert the sale row using backend-calculated totals ────────────────
       // payment_status starts as 'pending' — it will be updated to 'completed'
       // after the transaction commits successfully.
       const [saleResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount,
+            cashier_id, subtotal, discount, discount_id, vat_amount, total_amount, cash_tendered, change_amount,
             payment_status, client_transaction_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [
           invoice_number,
           customer_name,
@@ -235,8 +310,10 @@ router.post(
           customer_tin ?? null,
           req.user!.id,
           calc_subtotal,
+          final_discount_amount,
+          discount_id ?? null,
           calc_vat_amount,
-          calc_total_amount,
+          final_total_amount,
           cash_tendered,
           calc_change >= 0 ? calc_change : 0,
           clientTxnId ?? null,
@@ -244,7 +321,15 @@ router.post(
       );
       const sale_id: number = saleResult.insertId;
 
-      // ── 6. Insert sale items using backend-calculated values ──────────────────
+      // ── 7. Update discount request with sale_id if applicable ───────────────────
+      if (discount_request_id) {
+        await conn.execute(
+          `UPDATE discount_requests SET sale_id = ? WHERE id = ?`,
+          [sale_id, discount_request_id]
+        );
+      }
+
+      // ── 8. Insert sale items using backend-calculated values ──────────────────
       // Track running quantity per product (in case same product appears multiple times)
       const runningQty: Record<number, number> = {};
       for (const ci of calcItems) {
@@ -277,12 +362,12 @@ router.post(
         );
       }
 
-      // ── 7. COMMIT — all-or-nothing ───────────────────────────────────────────
+      // ── 9. COMMIT — all-or-nothing ───────────────────────────────────────────
       // If power fails here, the entire transaction is rolled back.
       // No sale, no inventory deduction, no invoice number consumed.
       await conn.commit();
 
-      // ── 8. Update payment_status to 'completed' (post-commit) ─────────────────
+      // ── 10. Update payment_status to 'completed' (post-commit) ────────────────
       // This is done in a separate, simple UPDATE so that if the sale row exists
       // with payment_status='pending', we know the transaction committed but
       // something failed after (e.g., response not sent, receipt not printed).
@@ -297,22 +382,43 @@ router.post(
         console.warn(`[SALES] Failed to update payment_status for sale ${sale_id}:`, updateErr);
       }
 
-      // ── 9. Audit log (non-fatal, outside transaction) ─────────────────────────
+      // ── 11. Audit log (non-fatal, outside transaction) ────────────────────────
       await logAuditEvent({
         action: "SALE_COMPLETED",
         performedById: req.user!.id,
         performedByUsername: req.user!.username,
         entityType: "sales",
         entityId: sale_id,
-        newValues: { invoice_number, total_amount: calc_total_amount, customer_name },
+        newValues: { invoice_number, total_amount: final_total_amount, customer_name, discount: final_discount_amount, discount_name: discountName },
       });
+
+      // Log discount application if applicable
+      if (discount_id) {
+        await logAuditEvent({
+          action: "DISCOUNT_APPLIED",
+          performedById: req.user!.id,
+          performedByUsername: req.user!.username,
+          entityType: "sales",
+          entityId: sale_id,
+          newValues: {
+            discount_id,
+            discount_name: discountName,
+            discount_amount: final_discount_amount,
+            subtotal: calc_subtotal,
+            final_total: final_total_amount,
+          },
+        });
+      }
 
       res.status(201).json({
         invoice_number,
         id: sale_id,
         subtotal:      calc_subtotal,
+        discount:       final_discount_amount,
+        discount_name:  discountName,
+        discount_id:    discount_id,
         vat_amount:    calc_vat_amount,
-        total_amount:  calc_total_amount,
+        total_amount:  final_total_amount,
         change_amount: calc_change >= 0 ? calc_change : 0,
         payment_status: "completed",
         receipt_printed: false,

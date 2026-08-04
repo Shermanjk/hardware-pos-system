@@ -62,6 +62,8 @@ export interface CreateSalePayload {
   cash_tendered: number;
   change_amount: number;
   client_transaction_id?: string;
+  discount_id?: number;
+  discount_request_id?: number;
   items: Array<{
     product_id: number;
     quantity: number;

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, PauseCircle, RotateCcw, Ban } from "lucide-react";
+import { Ban, Loader2, PauseCircle, Percent, RotateCcw } from "lucide-react";
 import { fmtCents, formatCashDisplay, parseCashInput } from "../utils/money";
 
 interface PaymentPanelProps {
@@ -14,6 +14,8 @@ interface PaymentPanelProps {
   isProcessing: boolean;
   /** When true the server is unreachable — payment button is disabled. */
   isOffline: boolean;
+  /** When true a discount approval request is pending — payment button shows waiting state. */
+  pendingApproval?: boolean;
   onProcessPayment: () => void;
   onHold: () => void;
   onHoldOrders: () => void;
@@ -25,18 +27,24 @@ interface PaymentPanelProps {
   hasApprovedReturns: boolean;
   pendingVoidRequestsCount: number;
   pendingHeldOrdersCount: number;
+  discountCents?: number;
+  discountName?: string;
+  discountPercentage?: number;
+  finalTotalCents?: number;
 }
 
 export default function PaymentPanel({
   subtotalCents, taxCents, totalCents, taxRate,
   cashTendered, setCashTendered,
   cartLength, customerName, isProcessing, isOffline,
+  pendingApproval = false,
   onProcessPayment, onHold, onHoldOrders, onReturn, onPendingReturns, onVoid, onVoidRequests,
   pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
+  discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
 }: PaymentPanelProps) {
   const cashCents   = parseCashInput(cashTendered);
-  const changeCents = cashCents >= totalCents ? cashCents - totalCents : null;
-  const isExact     = cashCents === totalCents;
+  const changeCents = cashCents >= finalTotalCents ? cashCents - finalTotalCents : null;
+  const isExact     = cashCents === finalTotalCents;
 
   return (
     <div className="w-80 shrink-0 flex flex-col gap-3 min-h-0">
@@ -49,10 +57,21 @@ export default function PaymentPanel({
           <span>VAT ({taxRate}%)</span>
           <span className="font-medium tabular-nums">₱{fmtCents(taxCents)}</span>
         </div>
+        
+        {discountCents > 0 && (
+          <div className="flex justify-between text-sm text-amber-600">
+            <div className="flex items-center gap-1">
+              <Percent className="h-3.5 w-3.5" />
+              <span>{discountName || "Discount"} ({discountPercentage}%)</span>
+            </div>
+            <span className="font-medium tabular-nums">-₱{fmtCents(discountCents)}</span>
+          </div>
+        )}
+        
         <div className="border-t border-gray-200 pt-3 flex flex-col gap-1">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
           <span className="font-bold text-blue-600 tabular-nums leading-none" style={{ fontSize: "2.5rem" }}>
-            ₱{fmtCents(totalCents)}
+            ₱{fmtCents(finalTotalCents)}
           </span>
         </div>
 
@@ -73,24 +92,24 @@ export default function PaymentPanel({
               placeholder="0.00"
               style={{ fontSize: "1.75rem", lineHeight: 1 }}
               className={`w-full rounded-md border px-4 pl-12 pr-4 h-14 font-bold text-right tabular-nums tracking-tight outline-none transition-colors focus:ring-2 focus:ring-offset-0
-                ${cashCents > 0 && cashCents < totalCents
+                ${cashCents > 0 && cashCents < finalTotalCents
                   ? "border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200 text-red-700"
-                  : cashCents >= totalCents && cashCents > 0
+                  : cashCents >= finalTotalCents && cashCents > 0
                   ? "border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-200 text-green-700"
                   : "border-gray-400 bg-white focus:border-blue-500 focus:ring-blue-100 text-gray-900"
                 }`}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && cartLength > 0 && cashCents >= totalCents && customerName.trim()) {
+                if (e.key === "Enter" && cartLength > 0 && cashCents >= finalTotalCents && customerName.trim()) {
                   onProcessPayment();
                 }
               }}
             />
           </div>
 
-          {cashCents > 0 && cashCents < totalCents && (
+          {cashCents > 0 && cashCents < finalTotalCents && (
             <div className="flex justify-between text-xs text-red-600 font-medium bg-red-50 rounded-lg px-3 py-1.5">
               <span>Short by</span>
-              <span className="tabular-nums">₱{fmtCents(totalCents - cashCents)}</span>
+              <span className="tabular-nums">₱{fmtCents(finalTotalCents - cashCents)}</span>
             </div>
           )}
 
@@ -110,7 +129,7 @@ export default function PaymentPanel({
       <div className="flex-1 flex flex-col justify-end gap-2">
         <Button
           className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
-          disabled={cartLength === 0 || cashCents < totalCents || !customerName.trim() || isProcessing || isOffline}
+          disabled={cartLength === 0 || cashCents < finalTotalCents || !customerName.trim() || isProcessing || isOffline || pendingApproval}
           onClick={onProcessPayment}
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center">₱</span>}
@@ -118,9 +137,11 @@ export default function PaymentPanel({
             ? "Processing..."
             : isOffline
             ? "Server Unreachable"
+            : pendingApproval
+            ? "Waiting for Approval…"
             : !customerName.trim()
             ? "Enter Customer Name"
-            : cashCents > 0 && cashCents < totalCents
+            : cashCents > 0 && cashCents < finalTotalCents
             ? "Insufficient Cash"
             : "Process Payment"}
         </Button>

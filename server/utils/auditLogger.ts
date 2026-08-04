@@ -71,7 +71,16 @@ export type AuditAction =
   | "MIGRATION_COMPLETED"
   | "MIGRATION_FAILED"
   | "RESTORE_EXECUTED"
-  | "UPDATE_INSTALLED";
+  | "UPDATE_INSTALLED"
+  // ── Discounts ────────────────────────────────────────────────────────────────
+  | "DISCOUNT_CREATED"
+  | "DISCOUNT_UPDATED"
+  | "DISCOUNT_DELETED"
+  | "DISCOUNT_REQUESTED"
+  | "DISCOUNT_APPROVED"
+  | "DISCOUNT_REJECTED"
+  | "DISCOUNT_REQUEST_CANCELLED"
+  | "DISCOUNT_APPLIED";
 
 export interface AuditEventParams {
   action: AuditAction;

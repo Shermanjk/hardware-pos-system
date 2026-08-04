@@ -1,12 +1,22 @@
-import { useEffect, useState, useCallback } from "react";
-import { useLocation, Link } from "wouter";
-import {
-  LayoutDashboard, Package, FolderOpen, Boxes, Truck,
-  TrendingUp, BarChart3, Users, Settings,
-  ChevronLeft, ChevronRight, ChevronDown, BellRing,
-} from "lucide-react";
 import httpClient from "@/shared/api/httpClient";
 import { useAdminNotificationPoll } from "@/shared/hooks/useAdminNotificationPoll";
+import {
+    BarChart3,
+    BellRing,
+    Boxes,
+    ChevronDown,
+    ChevronLeft, ChevronRight,
+    FolderOpen,
+    LayoutDashboard, Package,
+    Percent,
+    Settings,
+    ShieldCheck,
+    TrendingUp,
+    Truck,
+    Users
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation } from "wouter";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -39,6 +49,7 @@ const navStructure: (NavItem | NavGroup)[] = [
       { icon: TrendingUp, label: "Commodity Purchases",  href: "/commodity-prices",  hasAlertBadge: true },
       { icon: Truck,      label: "External Processing",  href: "/external-processing" },
       { icon: BellRing,   label: "Requests",             href: "/requests",           hasAlertBadge: true },
+      { icon: ShieldCheck, label: "Auth History",        href: "/authorization-history" },
     ],
   } as NavGroup,
   {
@@ -47,6 +58,7 @@ const navStructure: (NavItem | NavGroup)[] = [
     items: [
       { icon: FolderOpen, label: "Categories", href: "/categories" },
       { icon: Users,      label: "Users",      href: "/users" },
+      { icon: Percent,    label: "Discount Management", href: "/discounts", hasAlertBadge: true },
     ],
   } as NavGroup,
   { icon: BarChart3, label: "Reports",  href: "/reports" },
@@ -87,17 +99,21 @@ function useLowStockCount() {
 function usePendingCounts(triggerRefresh: () => void) {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingCommodity, setPendingCommodity] = useState(0);
+  const [pendingDiscountApprovals, setPendingDiscountApprovals] = useState(0);
 
   const fetch = useCallback(async () => {
     try {
-      const [reqRes, commodityRes] = await Promise.allSettled([
+      const [reqRes, commodityRes, discountRes] = await Promise.allSettled([
         httpClient.get<{ pending_requests: number }>("/api/requests/kpi"),
         httpClient.get<{ pending_commodity_approvals: number }>("/api/dashboard/pending-counts"),
+        httpClient.get("/api/discount-approvals"),
       ]);
       if (reqRes.status === "fulfilled")
         setPendingRequests(reqRes.value.data.pending_requests ?? 0);
       if (commodityRes.status === "fulfilled")
         setPendingCommodity(commodityRes.value.data.pending_commodity_approvals ?? 0);
+      if (discountRes.status === "fulfilled")
+        setPendingDiscountApprovals((discountRes.value.data as any[])?.length ?? 0);
     } catch { /* silently ignore */ }
   }, []);
 
@@ -114,7 +130,7 @@ function usePendingCounts(triggerRefresh: () => void) {
     return () => window.removeEventListener("refresh-pending-counts", handleRefresh);
   }, [fetch, triggerRefresh]);
 
-  return { pendingRequests, pendingCommodity };
+  return { pendingRequests, pendingCommodity, pendingDiscountApprovals };
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -139,7 +155,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const { pendingReturns, pendingVoids, triggerRefresh } = useAdminNotificationPoll();
   const alertCount      = useLowStockCount();
   const hasAlerts       = alertCount > 0;
-  const { pendingRequests, pendingCommodity } = usePendingCounts(triggerRefresh);
+  const { pendingRequests, pendingCommodity, pendingDiscountApprovals } = usePendingCounts(triggerRefresh);
 
   // Total pending for "Requests" badge (KPI already includes returns + voids)
   const totalPendingRequests = pendingRequests;
@@ -226,7 +242,8 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           const grpHasInventoryAlert  = group.items.some((s) => s.href === "/inventory") && hasAlerts;
           const grpHasRequestAlert    = group.items.some((s) => s.href === "/requests") && totalPendingRequests > 0;
           const grpHasCommodityAlert  = group.items.some((s) => s.href === "/commodity-prices") && pendingCommodity > 0;
-          const showGroupAlert = (grpHasInventoryAlert || grpHasRequestAlert || grpHasCommodityAlert) && !isExp;
+          const grpHasDiscountAlert   = group.items.some((s) => s.href === "/discounts") && pendingDiscountApprovals > 0;
+          const showGroupAlert = (grpHasInventoryAlert || grpHasRequestAlert || grpHasCommodityAlert || grpHasDiscountAlert) && !isExp;
 
           return (
             <div key={group.label}>
@@ -273,6 +290,9 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                     } else if (subItem.href === "/commodity-prices") {
                       badgeCount = pendingCommodity; showBadge = pendingCommodity > 0;
                       badgeColor = "bg-orange-500";
+                    } else if (subItem.href === "/discounts") {
+                      badgeCount = pendingDiscountApprovals; showBadge = pendingDiscountApprovals > 0;
+                      badgeColor = "bg-amber-500";
                     }
 
                     return (

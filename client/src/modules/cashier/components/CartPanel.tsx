@@ -1,11 +1,16 @@
-import { useRef, useCallback, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Search, Loader2, Minus, Plus, X, Trash2, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import httpClient from "@/shared/api/httpClient";
 import { lookupProduct, type CashierProduct } from "@/shared/api/productsApi";
+import { formatQuantity } from "@/shared/utils/quantityFormat";
+import { Loader2, Minus, Percent, Plus, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { toCentavos, fmtCents } from "../utils/money";
+import { fmtCents, toCentavos } from "../utils/money";
 import type { CartItem } from "../utils/receipt";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+
+/** Per-item qty input draft state (keyed by item id) */
+type QtyDraft = Record<number, string>;
 
 interface CartPanelProps {
   cartItems: CartItem[];
@@ -20,6 +25,16 @@ interface CartPanelProps {
   setShowDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   barcodeRef: React.RefObject<HTMLInputElement | null>;
   searchTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
+  setSelectedDiscount: React.Dispatch<React.SetStateAction<{ id: number; name: string; percentage: number; requiresApproval: boolean } | null>>;
+}
+
+interface Discount {
+  id: number;
+  discount_name: string;
+  discount_type: string;
+  value: number;
+  requires_admin_approval: boolean;
 }
 
 export default function CartPanel({
@@ -29,7 +44,40 @@ export default function CartPanel({
   searchLoading, setSearchLoading,
   showDropdown, setShowDropdown,
   barcodeRef, searchTimeoutRef,
+  selectedDiscount, setSelectedDiscount,
 }: CartPanelProps) {
+
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [qtyDraft, setQtyDraft] = useState<QtyDraft>({});
+
+  const loadDiscounts = async () => {
+    setDiscountsLoading(true);
+    try {
+      const response = await httpClient.get("/api/discounts/active");
+      setDiscounts(response.data);
+    } catch (err) {
+      console.error("Failed to load discounts:", err);
+    } finally {
+      setDiscountsLoading(false);
+    }
+  };
+
+  // Load on mount and whenever the cart transitions from empty → non-empty
+  // so the list is always fresh (admin may have changed discounts mid-session).
+  const wasEmptyRef = useRef(true);
+  useEffect(() => {
+    loadDiscounts();
+  }, []);
+
+  useEffect(() => {
+    const isEmpty = cartItems.length === 0;
+    if (wasEmptyRef.current && !isEmpty) {
+      // Cart just got its first item — refresh the discount list
+      loadDiscounts();
+    }
+    wasEmptyRef.current = isEmpty;
+  }, [cartItems.length]);
 
   const addProductToCart = useCallback((product: CashierProduct) => {
     if (product.quantity <= 0) {
@@ -58,6 +106,7 @@ export default function CartPanel({
         unitPrice: price,
         subtotal:  price,
         tax_type:  product.tax_type ?? "VATABLE",
+        stock:     product.quantity,
       }];
     });
     setBarcodeInput("");
@@ -107,6 +156,51 @@ export default function CartPanel({
       ? { ...item, quantity: qty, subtotal: Math.round(qty * toCentavos(Number(item.unitPrice))) / 100 }
       : item
     ));
+  };
+
+  const handleQtyInputChange = (id: number, value: string) => {
+    // Allow digits and a single leading minus (for delete-all then retype)
+    if (/^\d*$/.test(value)) {
+      setQtyDraft((prev) => ({ ...prev, [id]: value }));
+    }
+  };
+
+  const commitQtyDraft = (id: number) => {
+    const raw = qtyDraft[id];
+    if (raw === undefined) return; // not being edited
+    const parsed = parseInt(raw, 10);
+    const item = cartItems.find((i) => i.id === id);
+    if (!item) return;
+
+    if (!raw || isNaN(parsed) || parsed <= 0) {
+      // Empty or zero — remove item
+      setCartItems((prev) => prev.filter((i) => i.id !== id));
+    } else {
+      const capped = item.stock !== undefined ? Math.min(parsed, item.stock) : parsed;
+      if (item.stock !== undefined && parsed > item.stock) {
+        toast.warning(`Only ${item.stock} unit(s) available. Quantity set to ${item.stock}.`);
+      }
+      updateQty(id, capped);
+    }
+    // Clear draft so span re-appears
+    setQtyDraft((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleQtyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, id: number) => {
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+    } else if (e.key === "Escape") {
+      // Discard draft
+      setQtyDraft((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   return (
@@ -216,7 +310,27 @@ export default function CartPanel({
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
-                    <span className="w-9 text-center text-sm font-bold tabular-nums text-gray-900">{item.quantity}</span>
+                    {qtyDraft[item.id] !== undefined ? (
+                      <input
+                        type="number"
+                        min={1}
+                        max={item.stock}
+                        value={qtyDraft[item.id]}
+                        onChange={(e) => handleQtyInputChange(item.id, e.target.value)}
+                        onBlur={() => commitQtyDraft(item.id)}
+                        onKeyDown={(e) => handleQtyKeyDown(e, item.id)}
+                        autoFocus
+                        className="w-12 text-center text-sm font-bold tabular-nums text-gray-900 border-2 border-blue-400 rounded-md px-1 py-0.5 outline-none focus:ring-2 focus:ring-blue-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                    ) : (
+                      <span
+                        title="Click to edit quantity"
+                        onClick={() => setQtyDraft((prev) => ({ ...prev, [item.id]: String(item.quantity) }))}
+                        className="w-12 text-center text-sm font-bold tabular-nums text-gray-900 border-2 border-transparent rounded-md px-1 py-0.5 cursor-text hover:border-blue-300 hover:bg-blue-50 transition-colors select-none"
+                      >
+                        {item.quantity}
+                      </span>
+                    )}
                     <button
                       onClick={() => updateQty(item.id, item.quantity + 1)}
                       className="w-7 h-7 rounded-md border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-green-50 hover:border-green-300 hover:text-green-600 text-gray-600 transition-colors"
@@ -241,6 +355,71 @@ export default function CartPanel({
             </div>
           )}
         </div>
+
+        {/* Discount Selection */}
+        {cartItems.length > 0 && (
+          <div className="shrink-0 px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center gap-2">
+              <Percent className="h-4 w-4 text-gray-500" />
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Discount</label>
+            </div>
+            <div className="mt-2">
+              <Select
+                value={selectedDiscount?.id.toString() || "none"}
+                onValueChange={(value) => {
+                  if (value === "none") {
+                    setSelectedDiscount(null);
+                    return;
+                  }
+                  const discount = discounts.find((d) => d.id === Number(value));
+                  if (discount) {
+                    setSelectedDiscount({
+                      id: discount.id,
+                      name: discount.discount_name,
+                      percentage: discount.value,
+                      requiresApproval: discount.requires_admin_approval,
+                    });
+                  }
+                }}
+                disabled={discountsLoading || discounts.length === 0}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder={discountsLoading ? "Loading discounts..." : discounts.length === 0 ? "No active discounts" : "Select discount"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No discount</SelectItem>
+                  {discounts.map((discount) => (
+                    <SelectItem key={discount.id} value={discount.id.toString()}>
+                      {discount.discount_name} ({discount.value}%)
+                      {discount.requires_admin_approval && (
+                        <span className="ml-2 text-xs text-amber-600">• Requires approval</span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedDiscount && (
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="text-gray-600">{selectedDiscount.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-amber-600">{selectedDiscount.percentage}%</span>
+                  {selectedDiscount.requiresApproval && (
+                    <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-xs font-medium">
+                      Approval required
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setSelectedDiscount(null)}
+                    className="text-gray-400 hover:text-red-600 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

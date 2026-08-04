@@ -1,26 +1,25 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
-import { logAuditEvent } from "../utils/auditLogger.js";
 import {
-  getVersionStatus,
-  updateInstalledVersion,
-} from "../services/versionService.js";
-import {
-  createBackup,
+    createBackup,
 } from "../services/backupService.js";
-import {
-  executePendingMigrations,
-} from "../services/migrationService.js";
-import { triggerElectronRestart } from "../utils/electronRestart.js";
-import { maintenanceService } from "../services/maintenanceService.js";
 import { buildApplicationUpdate, pullApplicationUpdate } from "../services/gitUpdateService.js";
+import { maintenanceService } from "../services/maintenanceService.js";
+import {
+    executePendingMigrations,
+} from "../services/migrationService.js";
+import {
+    getVersionStatus,
+    updateInstalledVersion,
+} from "../services/versionService.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
+import { triggerElectronRestart } from "../utils/electronRestart.js";
 
 const router = Router();
-router.use(authenticate);
 
 // ─── GET /api/system-update/version ─────────────────────────────────────────
-router.get("/version", async (req: Request, res: Response) => {
+router.get("/version", authenticate, async (req: Request, res: Response) => {
   try {
     const status = await getVersionStatus();
     res.status(200).json(status);
@@ -163,7 +162,7 @@ router.post("/install", requireRole("Admin"), async (req: Request, res: Response
 });
 
 // ─── GET /api/system-update/migration-history ────────────────────────────────
-router.get("/migration-history", async (req: Request, res: Response) => {
+router.get("/migration-history", authenticate, async (req: Request, res: Response) => {
   try {
     const { getMigrationHistory } = await import(
       "../services/migrationService.js"
@@ -177,7 +176,7 @@ router.get("/migration-history", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/system-update/backup-history ───────────────────────────────────
-router.get("/backup-history", async (req: Request, res: Response) => {
+router.get("/backup-history", authenticate, async (req: Request, res: Response) => {
   try {
     const { getBackupHistory } = await import("../services/backupService.js");
     const history = await getBackupHistory(100);
