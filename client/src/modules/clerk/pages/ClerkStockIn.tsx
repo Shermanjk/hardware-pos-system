@@ -1,4 +1,3 @@
-import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,27 +5,50 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  PackagePlus, ScanLine, Search, Trash2, CheckCircle2,
-  ChevronRight, ChevronLeft, Truck, FileText, Plus,
-  Package, Clock, AlertCircle, Edit2, RefreshCw,
-  History, X, TrendingUp, XCircle, Loader2,
-} from "lucide-react";
-
-type HistoryTabType = "stockin" | "commodity";
-import { toast } from "sonner";
-import {
-  lookupProduct, getSuppliers,
-  type Supplier, type CashierProduct,
-} from "@/shared/api/productsApi";
-import {
-  submitStockIn, getInventoryLogs,
-  type StockInSource, type InventoryLog,
-} from "@/shared/api/inventoryApi";
-import {
-  getCurrentPrice, submitCommodityPurchase, getPurchaseHistory,
+  getCurrentPrice,
+  getPurchaseHistory,
+  submitCommodityPurchase,
   type CommodityCurrentPrice, type CommodityPurchase,
 } from "@/shared/api/commodityApi";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import {
+  getInventoryLogs,
+  submitStockIn,
+  type InventoryLog,
+  type StockInSource,
+} from "@/shared/api/inventoryApi";
+import {
+  getSuppliers,
+  lookupProduct,
+  type CashierProduct,
+  type Supplier,
+} from "@/shared/api/productsApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
+import { formatQuantity } from "@/shared/utils/quantityFormat";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Edit2,
+  FileText,
+  History,
+  Loader2,
+  Package,
+  PackagePlus,
+  Plus,
+  RefreshCw,
+  ScanLine, Search, Trash2,
+  TrendingUp,
+  Truck,
+  X,
+  XCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+
+type HistoryTabType = "stockin" | "commodity";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1244,6 +1266,14 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
   );
 }
 
+// ─── Draft type ───────────────────────────────────────────────────────────────
+interface StockInDraft {
+  step: 1 | 2 | 3;
+  session: Step1State;
+  items: WizardItem[];
+  savedAt: string;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ClerkStockIn() {
@@ -1261,6 +1291,26 @@ export default function ClerkStockIn() {
     deliveryDate:  todayISO(),
     remarks:       "",
   });
+
+  // ── Draft recovery ──────────────────────────────────────────────────────────
+  const stockInDraft = useDraftRecovery<StockInDraft>(DRAFT_KEYS.CLERK_STOCK_IN);
+  const [recoverableDraft, setRecoverableDraft] = useState<StockInDraft | null>(null);
+
+  useEffect(() => {
+    const draft = stockInDraft.getRecoverableDraft();
+    if (draft && (draft.items.length > 0 || draft.step > 1)) {
+      setRecoverableDraft(draft);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save whenever step, session, or items change
+  useEffect(() => {
+    if (items.length > 0 || step > 1) {
+      stockInDraft.saveDraft({ step, session, items, savedAt: new Date().toISOString() });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, session, items]);
 
   // History log state
   const [logs,        setLogs]        = useState<InventoryLog[]>([]);
@@ -1315,6 +1365,7 @@ export default function ClerkStockIn() {
     setSession({ source: "", supplierId: "", invoiceNumber: "", deliveryDate: todayISO(), remarks: "" });
     setStep1Errors({});
     setSuccessData(null);
+    stockInDraft.discardDraft();
   };
 
   // ── Save ────────────────────────────────────────────────────────────────────
@@ -1337,6 +1388,8 @@ export default function ClerkStockIn() {
       });
       setSuccessData({ id: result.stock_in_id, count: items.length });
       setRefreshKey((k) => k + 1);
+      // ── Clear draft — stock-in is committed to the DB ─────────────────────
+      stockInDraft.commitDraft();
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? "Failed to save stock in. Please try again.";
       toast.error(msg);
@@ -1345,10 +1398,38 @@ export default function ClerkStockIn() {
     }
   };
 
+  // ── Draft recovery handlers ───────────────────────────────────────────────
+  const handleRestoreStockInDraft = () => {
+    if (!recoverableDraft) return;
+    setStep(recoverableDraft.step);
+    setSession(recoverableDraft.session);
+    setItems(recoverableDraft.items);
+    setRecoverableDraft(null);
+    toast.success("Draft restored — continue where you left off.");
+  };
+
+  const handleDiscardStockInDraft = () => {
+    stockInDraft.discardDraft();
+    setRecoverableDraft(null);
+    toast.info("Draft discarded.");
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+      {/* Draft recovery prompt */}
+      <DraftRecoveryPrompt
+        draft={recoverableDraft}
+        formLabel="Stock In"
+        savedSummary={
+          recoverableDraft
+            ? `Step ${recoverableDraft.step} of 3 · ${recoverableDraft.items.length} item(s)${recoverableDraft.session.source ? ` · ${recoverableDraft.session.source}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+            : undefined
+        }
+        onRestore={handleRestoreStockInDraft}
+        onDiscard={handleDiscardStockInDraft}
+      />
 
       {/* Page header */}
       <div>

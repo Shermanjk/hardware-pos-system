@@ -1,21 +1,30 @@
-import { useState, useEffect, useMemo } from "react";
-import { Card } from "@/components/ui/card";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  ClipboardList, Search, CheckCircle2, RotateCcw,
-  TrendingUp, TrendingDown, Minus, AlertTriangle, RefreshCw,
-  PackagePlus, ShoppingCart, SlidersHorizontal, Loader2,
-} from "lucide-react";
-import { toast } from "sonner";
-import { getInventory, getInventoryLogs, submitStockAdjustment, createAdjustmentRequest, AdjustmentReason } from "@/shared/api/inventoryApi";
+import { AdjustmentReason, createAdjustmentRequest, getInventory, getInventoryLogs } from "@/shared/api/inventoryApi";
 import { createStockCountRequest } from "@/shared/api/requestsApi";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import {
+    AlertTriangle,
+    CheckCircle2,
+    ClipboardList,
+    Loader2,
+    Minus,
+    PackagePlus,
+    RefreshCw,
+    RotateCcw,
+    Search,
+    ShoppingCart, SlidersHorizontal,
+    TrendingDown,
+    TrendingUp,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 // ─── Reason Lists ───────────────────────────────────────────────────────────────
 const STANDARD_REASONS = [
@@ -139,6 +148,13 @@ function SystemQtyCell({ productId, systemQty, unit, quantityType }: { productId
   );
 }
 
+// ─── Draft type ───────────────────────────────────────────────────────────────
+interface StockCountDraft {
+  /** Sparse: only rows that have been touched (physicalCount !== "") */
+  countedRows: Array<{ productId: number; physicalCount: string; remarks: string; reason?: AdjustmentReason }>;
+  savedAt: string;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClerkStockCount() {
   const [loading, setLoading] = useState(true);
@@ -150,27 +166,43 @@ export default function ClerkStockCount() {
     new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
   );
 
-  // Initialise rows from real API
+  // ── Draft recovery ──────────────────────────────────────────────────────────
+  const countDraft = useDraftRecovery<StockCountDraft>(DRAFT_KEYS.CLERK_STOCK_COUNT);
+  const [recoverableDraft, setRecoverableDraft] = useState<StockCountDraft | null>(null);
+
+  useEffect(() => {
+    const draft = countDraft.getRecoverableDraft();
+    if (draft && draft.countedRows.length > 0) {
+      setRecoverableDraft(draft);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Initialise rows from real API, then apply any restored draft
   useEffect(() => {
     const fetchData = async () => {
       try {
         const data = await getInventory();
-        setRows(
-          data.map((p) => ({
-            productId: p.id,
-            barcode: p.barcode,
-            productName: p.product_name,
-            category: p.category,
-            unit: p.unit,
-            unit_abbreviation: p.unit_abbreviation,
-            quantity_type: p.quantity_type,
-            pricing_type: (p as any).pricing_type,
-            systemQty: p.quantity,
-            physicalCount: "",
-            remarks: "",
-            reason: undefined,
-          }))
-        );
+        const baseRows: CountRow[] = data.map((p) => ({
+          productId: p.id,
+          barcode: p.barcode,
+          productName: p.product_name,
+          category: p.category,
+          unit: p.unit,
+          unit_abbreviation: p.unit_abbreviation,
+          quantity_type: p.quantity_type,
+          pricing_type: (p as any).pricing_type,
+          systemQty: p.quantity,
+          physicalCount: "",
+          remarks: "",
+          reason: undefined,
+        }));
+
+        // If the user just restored a draft, overlay the saved counts on top.
+        // We do NOT hold rows in state at this point — the user will be prompted
+        // separately via DraftRecoveryPrompt.  We store them directly here after
+        // the user clicks "Restore".
+        setRows(baseRows);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("Failed to load products:", message.replace(/[\r\n\t]/g, " "));
@@ -182,10 +214,37 @@ export default function ClerkStockCount() {
     fetchData();
   }, []);
 
+  // Auto-save draft whenever any row's physicalCount changes
+  useEffect(() => {
+    const counted = rows.filter((r) => r.physicalCount !== "");
+    if (counted.length > 0) {
+      countDraft.saveDraft({
+        countedRows: counted.map((r) => ({
+          productId: r.productId,
+          physicalCount: r.physicalCount,
+          remarks: r.remarks,
+          reason: r.reason,
+        })),
+        savedAt: new Date().toISOString(),
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
+  // Apply restored draft once rows are loaded
+  const applyDraft = (draft: StockCountDraft) => {
+    setRows((prev) => prev.map((r) => {
+      const saved = draft.countedRows.find((c) => c.productId === r.productId);
+      if (!saved) return r;
+      return { ...r, physicalCount: saved.physicalCount, remarks: saved.remarks, reason: saved.reason };
+    }));
+  };
+
   // Reset count sheet
   const handleReset = () => {
     setRows((prev) => prev.map((r) => ({ ...r, physicalCount: "", remarks: "" })));
     setCountComplete(false);
+    countDraft.discardDraft();
     toast.info("Count sheet cleared");
   };
 
@@ -272,6 +331,8 @@ export default function ClerkStockCount() {
         `Stock count completed — ${countedRows.length} counted, ${standardRows.length + marketBasedRows.length} approval request(s) submitted`
       );
       setCountComplete(true);
+      // ── Clear draft — stock count has been submitted ──────────────────────
+      countDraft.commitDraft();
       setRows((prev) =>
         prev.map((r) => {
           if (r.physicalCount !== "") {
@@ -289,6 +350,26 @@ export default function ClerkStockCount() {
 
   return (
     <div className="space-y-6">
+      {/* Draft recovery prompt */}
+      <DraftRecoveryPrompt
+        draft={recoverableDraft}
+        formLabel="Stock Count"
+        savedSummary={
+          recoverableDraft
+            ? `${recoverableDraft.countedRows.length} product(s) counted${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+            : undefined
+        }
+        onRestore={() => {
+          applyDraft(recoverableDraft!);
+          setRecoverableDraft(null);
+          toast.success("Draft restored — continue where you left off.");
+        }}
+        onDiscard={() => {
+          countDraft.discardDraft();
+          setRecoverableDraft(null);
+          toast.info("Draft discarded.");
+        }}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

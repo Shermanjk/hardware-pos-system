@@ -1,26 +1,35 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+    Dialog, DialogContent,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog, DialogContent,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { getInventoryLogs, submitStockAdjustment } from "@/shared/api/inventoryApi";
 import {
-  SlidersHorizontal, Search, ScanLine, Package, AlertCircle,
-  CheckCircle2, Flame, PackageX, Clock4, RotateCcw, X,
-} from "lucide-react";
-import { toast } from "sonner";
-import {
-  lookupProduct, type ProductRecord,
+    lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
-import { submitStockAdjustment, getInventoryLogs } from "@/shared/api/inventoryApi";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import { formatQuantity } from "@/shared/utils/quantityFormat";
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clock4,
+    Flame,
+    Package,
+    PackageX,
+    RotateCcw,
+    ScanLine,
+    Search,
+    SlidersHorizontal,
+    X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 // ─── Adjustment type config ───────────────────────────────────────────────────
 const ADJUSTMENT_TYPES = [
@@ -49,6 +58,15 @@ interface AdjustmentModalProps {
   onSaved: () => void;
 }
 
+// ─── Draft type ───────────────────────────────────────────────────────────────
+interface AdjustmentDraft {
+  selectedProduct: ProductRecord | null;
+  adjType: string;
+  qty: string;
+  reason: string;
+  savedAt: string;
+}
+
 function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentModalProps) {
   const [searchInput, setSearchInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -65,14 +83,39 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   const [searchLoading, setSearchLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Draft recovery ────────────────────────────────────────────────────────
+  const adjDraft = useDraftRecovery<AdjustmentDraft>(DRAFT_KEYS.CLERK_STOCK_ADJUSTMENT);
+  const [recoverableDraft, setRecoverableDraft] = useState<AdjustmentDraft | null>(null);
+
   useEffect(() => {
     if (open) {
-      setSelectedProduct(prefillProduct || null);
-      setAdjType(""); setQty(""); setReason("");
+      // Check for a recoverable draft only when the modal first opens
+      const draft = adjDraft.getRecoverableDraft();
+      if (draft && (draft.selectedProduct || draft.adjType || draft.qty)) {
+        setRecoverableDraft(draft);
+        // Pre-fill from draft — user will confirm via prompt
+        setSelectedProduct(draft.selectedProduct || prefillProduct || null);
+        setAdjType(draft.adjType || "");
+        setQty(draft.qty || "");
+        setReason(draft.reason || "");
+      } else {
+        setSelectedProduct(prefillProduct || null);
+        setAdjType(""); setQty(""); setReason("");
+      }
       setErrors({}); setLookupError("");
       setSearchInput(""); setBarcodeInput(""); setSearchResults([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, prefillProduct]);
+
+  // Auto-save draft whenever form fields change
+  useEffect(() => {
+    if (!open) return;
+    if (selectedProduct || adjType || qty) {
+      adjDraft.saveDraft({ selectedProduct, adjType, qty, reason, savedAt: new Date().toISOString() });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedProduct, adjType, qty, reason]);
 
   // BUG-13 FIX: Debounced API search instead of filtering allProducts client-side
   useEffect(() => {
@@ -147,6 +190,8 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
         reason,
       });
       toast.success(`Adjustment saved — ${selectedProduct!.product_name} updated to ${previewQty} ${selectedProduct!.unit}`);
+      // ── Clear draft — adjustment committed to DB ──────────────────────────
+      adjDraft.commitDraft();
       onClose();
       onSaved();
     } catch (err) {
@@ -162,6 +207,23 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
 
   return (
     <>
+      {/* Draft recovery prompt for stock adjustment */}
+      <DraftRecoveryPrompt
+        draft={recoverableDraft}
+        formLabel="Stock Adjustment"
+        savedSummary={
+          recoverableDraft
+            ? `${recoverableDraft.selectedProduct?.product_name ?? ""}${recoverableDraft.adjType ? ` · ${recoverableDraft.adjType}` : ""}${recoverableDraft.qty ? ` · Qty: ${recoverableDraft.qty}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+            : undefined
+        }
+        onRestore={() => setRecoverableDraft(null)}
+        onDiscard={() => {
+          adjDraft.discardDraft();
+          setSelectedProduct(prefillProduct || null);
+          setAdjType(""); setQty(""); setReason("");
+          setRecoverableDraft(null);
+        }}
+      />
       <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); } }}>
         <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] flex flex-col">
 

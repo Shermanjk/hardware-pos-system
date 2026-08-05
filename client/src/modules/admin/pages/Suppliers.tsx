@@ -1,18 +1,28 @@
-import { useState, useEffect } from "react";
-import {
-  Plus, Edit2, Trash2, Search, X, AlertCircle,
-  RefreshCw, Truck, Phone, Mail, MapPin, Package, User,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog, DialogContent,
+    DialogTitle
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getSuppliers, createSupplier, updateSupplier, deleteSupplier } from "@/shared/api/productsApi";
 import type { Supplier } from "@/shared/api/productsApi";
+import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from "@/shared/api/productsApi";
 import axios from "axios";
+import {
+    AlertCircle,
+    Edit2,
+    Mail, MapPin, Package,
+    Phone,
+    Plus,
+    RefreshCw,
+    Search,
+    Trash2,
+    Truck,
+    User,
+    X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 // ─── Extended type with product_count ─────────────────────────────────────────
 interface SupplierRecord extends Supplier {
@@ -68,18 +78,44 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
   const [errors,    setErrors]    = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
+  // ── Draft recovery (add mode only) ───────────────────────────────────────
+  const supplierDraft = useDraftRecovery<{ form: ReturnType<typeof emptyForm>; savedAt: string }>(DRAFT_KEYS.ADMIN_SUPPLIER_ADD);
+  const [recoverableDraft, setRecoverableDraft] = useState<{ form: ReturnType<typeof emptyForm>; savedAt: string } | null>(null);
+
   useEffect(() => {
     if (!open) return;
-    setForm({
-      supplier_name:  initial?.supplier_name  ?? "",
-      contact_person: initial?.contact_person ?? "",
-      contact_number: initial?.contact_number ?? "",
-      email:          initial?.email          ?? "",
-      address:        initial?.address        ?? "",
-      status:         (initial?.status as "Active" | "Inactive") ?? "Active",
-    });
+    if (mode === "edit" && initial) {
+      setForm({
+        supplier_name:  initial.supplier_name  ?? "",
+        contact_person: initial.contact_person ?? "",
+        contact_number: initial.contact_number ?? "",
+        email:          initial.email          ?? "",
+        address:        initial.address        ?? "",
+        status:         (initial.status as "Active" | "Inactive") ?? "Active",
+      });
+      setRecoverableDraft(null);
+    } else if (mode === "add") {
+      const draft = supplierDraft.getRecoverableDraft();
+      if (draft?.form?.supplier_name) {
+        setForm(draft.form);
+        setRecoverableDraft(draft);
+      } else {
+        setForm(emptyForm());
+        setRecoverableDraft(null);
+      }
+    }
     setErrors({});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
+
+  // Auto-save draft for add mode
+  useEffect(() => {
+    if (!open || mode !== "add") return;
+    if (form.supplier_name) {
+      supplierDraft.saveDraft({ form, savedAt: new Date().toISOString() });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, form]);
 
   const set = (key: keyof ReturnType<typeof emptyForm>, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -104,6 +140,8 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
       const raw = mode === "add"
         ? await createSupplier(payload)
         : await updateSupplier(initial!.id, payload);
+      // ── Clear draft on success ──────────────────────────────────────────
+      supplierDraft.commitDraft();
       onSaved({ ...raw, product_count: initial?.product_count ?? 0 } as SupplierRecord);
       onClose();
     } catch (err) {
@@ -117,6 +155,25 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
   const isAdd = mode === "add";
 
   return (
+    <>
+      {/* Draft recovery prompt — add mode only */}
+      {mode === "add" && (
+        <DraftRecoveryPrompt
+          draft={recoverableDraft}
+          formLabel="Add Supplier"
+          savedSummary={
+            recoverableDraft
+              ? `${recoverableDraft.form.supplier_name}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+              : undefined
+          }
+          onRestore={() => setRecoverableDraft(null)}
+          onDiscard={() => {
+            supplierDraft.discardDraft();
+            setForm(emptyForm());
+            setRecoverableDraft(null);
+          }}
+        />
+      )}
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{isAdd ? "Add New Supplier" : "Edit Supplier"}</DialogTitle>
@@ -218,6 +275,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 

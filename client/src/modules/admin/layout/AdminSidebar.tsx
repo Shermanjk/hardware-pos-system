@@ -13,7 +13,8 @@ import {
     ShieldCheck,
     TrendingUp,
     Truck,
-    Users
+    Users,
+    Wallet,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -62,6 +63,7 @@ const navStructure: (NavItem | NavGroup)[] = [
     ],
   } as NavGroup,
   { icon: BarChart3, label: "Reports",  href: "/reports" },
+  { icon: Wallet,    label: "Cash Reconciliation", href: "/cash-reconciliation" },
   { icon: Settings,  label: "Settings", href: "/settings" },
 ];
 

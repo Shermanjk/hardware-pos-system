@@ -138,6 +138,7 @@ export async function getSaleByInvoice(invoiceNumber: string): Promise<Sale> {
 export async function searchSales(params: {
   invoice_number?: string;
   customer_name?: string;
+  cashier_id?: number;
   date_from?: string;
   date_to?: string;
   return_status?: string;

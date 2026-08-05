@@ -1,4 +1,5 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { getMySession } from "@/shared/api/cashReconciliationApi";
 import httpClient from "@/shared/api/httpClient";
 import { getProduct } from "@/shared/api/productsApi";
 import { getMyPendingReturns } from "@/shared/api/returnsApi";
@@ -6,15 +7,18 @@ import { createSale, generateClientTransactionId, markReceiptPrinted, type Creat
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { discardSuspendedSale, getSuspendedSales, suspendSale, type SuspendedSale as SuspendedSaleApi } from "@/shared/api/suspendedSalesApi";
 import { getMyVoidRequests } from "@/shared/api/voidApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
-import { ChevronDown, Clock, LogOut, User, WifiOff } from "lucide-react";
+import { ChevronDown, Clock, LogOut, PowerOff, User, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import CartPanel from "../components/CartPanel";
 import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
 import CustomerPanel from "../components/CustomerPanel";
 import DiscountApprovalModal from "../components/DiscountApprovalModal";
+import EndShiftModal from "../components/EndShiftModal";
 import type { HeldOrder } from "../components/HeldOrdersPanel";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
 import PaymentPanel from "../components/PaymentPanel";
@@ -29,6 +33,15 @@ import { printSaleReceipt } from "../utils/receipt";
 // ─── Polling constants ────────────────────────────────────────────────────────
 const HEALTH_POLL_MS   = 15_000; // check server reachability every 15 s
 const PENDING_POLL_MS  = 60_000; // refresh pending returns/voids every 60 s
+
+// ─── Draft type ───────────────────────────────────────────────────────────────
+interface CashierDraft {
+  cartItems: CartItem[];
+  cashTendered: string;
+  customerInfo: CustomerInfo;
+  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
+  savedAt: string;
+}
 
 // ─── mergeReturns ─────────────────────────────────────────────────────────────
 // Merge a freshly-polled list with the in-memory list.
@@ -71,6 +84,19 @@ function LiveClock() {
 
 export default function Cashier() {
   const { logout, user } = useAuth();
+
+  // ── Draft recovery ────────────────────────────────────────────────────────
+  const cartDraft = useDraftRecovery<CashierDraft>(DRAFT_KEYS.CASHIER_CART);
+  const [recoverableDraft, setRecoverableDraft] = useState<CashierDraft | null>(null);
+
+  // Check for a recoverable draft once on mount.
+  useEffect(() => {
+    const draft = cartDraft.getRecoverableDraft();
+    if (draft && Array.isArray(draft.cartItems) && draft.cartItems.length > 0) {
+      setRecoverableDraft(draft);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     store_name: "", facebook: "", contact_number: "", address: "",
     currency: "PHP", vat_rate: 0, business_license: "", registered_taxpayer_name: "",
@@ -145,11 +171,32 @@ export default function Cashier() {
   // without a stale closure.
   useEffect(() => { discountRequestIdRef.current = discountRequestId; }, [discountRequestId]);
 
+  // ── Auto-save cart draft after every change ───────────────────────────────
+  // Runs only when there is something worth saving (non-empty cart).
+  // Cleared by commitDraft() on successful payment or discardDraft() on discard.
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      cartDraft.saveDraft({
+        cartItems,
+        cashTendered,
+        customerInfo,
+        selectedDiscount,
+        savedAt: new Date().toISOString(),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItems, cashTendered, customerInfo, selectedDiscount]);
+
   // ── Void state ────────────────────────────────────────────────────────────
   const [showVoidDialog, setShowVoidDialog]         = useState(false);
   const [showVoidRequests, setShowVoidRequests]     = useState(false);
   const [latestVoidDecision, setLatestVoidDecision] = useState<VoidDecisionNotification | null>(null);
   const [pendingVoidRequestsCount, setPendingVoidRequestsCount] = useState(0);
+
+  // ── End Shift modal ───────────────────────────────────────────────────────
+  const [showEndShift, setShowEndShift]       = useState(false);
+  const [hasOpenSession, setHasOpenSession]   = useState(false);
+  const [sessionChecked, setSessionChecked]   = useState(false); // true once initial check completes
 
   // ── Suspended sales ───────────────────────────────────────────────────────
   const [suspendedSales, setSuspendedSales]     = useState<SuspendedSaleApi[]>([]);
@@ -277,6 +324,25 @@ export default function Cashier() {
   }, []);
   useEffect(() => { loadSuspendedSales(); }, [loadSuspendedSales]);
 
+  // ── Check for open shift session on mount ─────────────────────────────────
+  // If no open session found, automatically prompt the cashier to start a shift.
+  useEffect(() => {
+    getMySession()
+      .then((s) => {
+        const isOpen = !!s;
+        setHasOpenSession(isOpen);
+        setSessionChecked(true);
+        if (!isOpen) {
+          // Small delay so the POS UI renders before the modal appears
+          setTimeout(() => setShowEndShift(true), 600);
+        }
+      })
+      .catch(() => {
+        setHasOpenSession(false);
+        setSessionChecked(true);
+      });
+  }, []);
+
   const handleHold = useCallback(async () => {
     if (cartItems.length === 0) return;
     try {
@@ -355,6 +421,12 @@ export default function Cashier() {
   // Core payment handler — accepts an optional override for discountRequestId
   // so it can be called immediately after approval without waiting for setState.
   const handleProcessPaymentWithRequest = async (overrideRequestId?: number) => {
+    // Hard block — no shift session means no transactions
+    if (!hasOpenSession) {
+      toast.error("Start your shift before processing transactions.");
+      setShowEndShift(true);
+      return;
+    }
     const effectiveDiscountRequestId = overrideRequestId ?? discountRequestId;
     if (cartItems.length === 0 || cashCents < finalTotalCents || !customerInfo.name.trim()) return;
 
@@ -413,6 +485,9 @@ export default function Cashier() {
       clearCart();
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
 
+      // ── Clear draft — transaction is now committed to the DB ──────────────
+      cartDraft.commitDraft();
+
       let receiptPrinted = false;
       try {
         printSaleReceipt({ 
@@ -453,8 +528,38 @@ export default function Cashier() {
 
   const today = new Date().toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 
+  // ── Draft recovery handlers ───────────────────────────────────────────────
+  const handleRestoreDraft = () => {
+    if (!recoverableDraft) return;
+    setCartItems(recoverableDraft.cartItems);
+    setCashTendered(recoverableDraft.cashTendered || "");
+    setCustomerInfo(recoverableDraft.customerInfo || { name: "", address: "", tin: "", businessStyle: "" });
+    setSelectedDiscount(recoverableDraft.selectedDiscount || null);
+    setDiscountRequestId(null); // approval must be re-obtained
+    setRecoverableDraft(null);
+    toast.success("Draft restored — continue where you left off.");
+  };
+
+  const handleDiscardDraft = () => {
+    cartDraft.discardDraft();
+    setRecoverableDraft(null);
+    toast.info("Draft discarded.");
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-100 overflow-hidden">
+      {/* Draft recovery prompt */}
+      <DraftRecoveryPrompt
+        draft={recoverableDraft}
+        formLabel="Shopping Cart"
+        savedSummary={
+          recoverableDraft
+            ? `${recoverableDraft.cartItems.length} item(s)${recoverableDraft.customerInfo?.name ? ` · Customer: ${recoverableDraft.customerInfo.name}` : ""}${recoverableDraft.selectedDiscount ? ` · Discount: ${recoverableDraft.selectedDiscount.name}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+            : undefined
+        }
+        onRestore={handleRestoreDraft}
+        onDiscard={handleDiscardDraft}
+      />
       {/* Header */}
       <header className="h-14 shrink-0 bg-white border-b-2 border-gray-300 px-6 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-6">
@@ -503,6 +608,14 @@ export default function Cashier() {
                 <p className="text-xs text-gray-400">Cashier</p>
               </div>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="gap-2 text-amber-600 hover:text-amber-700 font-medium"
+                onClick={() => setShowEndShift(true)}
+              >
+                <PowerOff className="h-4 w-4" />
+                {hasOpenSession ? "End Shift" : "Start Shift"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem className="text-red-600 gap-2" onClick={logout}>
                 <LogOut className="h-4 w-4" />Logout
               </DropdownMenuItem>
@@ -512,12 +625,25 @@ export default function Cashier() {
       </header>
 
       {/* ── Offline banner ─────────────────────────────────────────────────── */}
-      {/* Full-width red banner below header. Clearly visible without blocking  */}
-      {/* the POS UI. Payment button is also disabled via the isOffline prop.   */}
       {isOffline && (
         <div className="shrink-0 bg-red-600 text-white text-sm font-semibold text-center py-2 px-4 flex items-center justify-center gap-2 z-10">
           <WifiOff className="h-4 w-4" />
           Server Unreachable — Transactions Unavailable. Waiting to reconnect…
+        </div>
+      )}
+
+      {/* ── No-shift banner ────────────────────────────────────────────────── */}
+      {/* Shown after session check completes and no open session exists.       */}
+      {sessionChecked && !hasOpenSession && (
+        <div className="shrink-0 bg-amber-500 text-white text-sm font-semibold text-center py-2 px-4 flex items-center justify-center gap-2 z-10">
+          <PowerOff className="h-4 w-4" />
+          No active shift — please start your shift before processing transactions.
+          <button
+            onClick={() => setShowEndShift(true)}
+            className="ml-2 underline underline-offset-2 hover:text-amber-100 transition-colors font-bold"
+          >
+            Start Shift
+          </button>
         </div>
       )}
 
@@ -538,6 +664,7 @@ export default function Cashier() {
           searchTimeoutRef={searchTimeout}
           selectedDiscount={selectedDiscount}
           setSelectedDiscount={setSelectedDiscount}
+          noShift={sessionChecked && !hasOpenSession}
         />
         <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} />
         <PaymentPanel
@@ -546,6 +673,7 @@ export default function Cashier() {
           cashTendered={cashTendered} setCashTendered={setCashTendered}
           cartLength={cartItems.length} customerName={customerInfo.name}
           isProcessing={isProcessing} isOffline={isOffline}
+          noShift={sessionChecked && !hasOpenSession}
           pendingApproval={showDiscountApprovalModal}
           onProcessPayment={handleProcessPayment}
           onHold={handleHold}
@@ -602,6 +730,13 @@ export default function Cashier() {
         totalAmount={totalCents}
         onApproved={handleDiscountApproved}
         onRejected={handleDiscountRejected}
+      />
+
+      <EndShiftModal
+        open={showEndShift}
+        onClose={() => setShowEndShift(false)}
+        onShiftOpened={() => setHasOpenSession(true)}
+        onShiftClosed={() => setHasOpenSession(false)}
       />
 
     </div>

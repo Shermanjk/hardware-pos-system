@@ -12,6 +12,7 @@ import { ThemeProvider } from "./shared/contexts/ThemeContext";
 
 // Admin pages
 import AuthorizationHistory from "./modules/admin/pages/AuthorizationHistory";
+import CashReconciliation from "./modules/admin/pages/CashReconciliation";
 import Categories from "./modules/admin/pages/Categories";
 import CommodityPrices from "./modules/admin/pages/CommodityPrices";
 import Dashboard from "./modules/admin/pages/Dashboard";
@@ -78,6 +79,7 @@ function AdminRouter() {
         <Route path="/requests"        component={Requests}       />
         <Route path="/discounts"       component={DiscountManagement} />
         <Route path="/authorization-history" component={AuthorizationHistory} />
+        <Route path="/cash-reconciliation"   component={CashReconciliation} />
         <Route path="/404"             component={NotFound}       />
         <Route component={NotFound} />
       </Switch>

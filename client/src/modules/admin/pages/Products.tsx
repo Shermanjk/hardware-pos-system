@@ -1,21 +1,35 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import JsBarcode from "jsbarcode";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Barcode, Search, Edit2, Trash2, Eye, RefreshCw, AlertCircle, X, Package, ScanLine, Wand2, Printer } from "lucide-react";
-import {
-  getProducts, getNextBarcode, createProduct, updateProduct, deleteProduct,
-  getCategories, getSuppliers, getUnits, deriveStatus,
-} from "@/shared/api/productsApi";
 import type {
-  ProductRecord, Category, Supplier, Unit,
-  CreateProductPayload, UpdateProductPayload, StockStatus, TaxType, PricingType, ProductUsage,
+    Category,
+    CreateProductPayload,
+    PricingType,
+    ProductRecord,
+    ProductUsage,
+    StockStatus,
+    Supplier,
+    TaxType,
+    Unit,
+    UpdateProductPayload,
 } from "@/shared/api/productsApi";
+import {
+    createProduct,
+    deleteProduct,
+    deriveStatus,
+    getCategories,
+    getNextBarcode,
+    getProducts,
+    getSuppliers, getUnits,
+    updateProduct,
+} from "@/shared/api/productsApi";
+import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import JsBarcode from "jsbarcode";
+import { AlertCircle, Barcode, Edit2, Eye, Package, Plus, Printer, RefreshCw, ScanLine, Search, Trash2, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -253,16 +267,41 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
   const [generatingBC,   setGeneratingBC]   = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Draft recovery (only for "add" mode — edit has the DB record as fallback) ──
+  const draftKey = mode === "add" ? DRAFT_KEYS.ADMIN_PRODUCT_ADD : DRAFT_KEYS.ADMIN_PRODUCT_EDIT;
+  const productDraft = useDraftRecovery<{ form: ProductForm; savedAt: string }>(draftKey);
+  const [recoverableDraft, setRecoverableDraft] = useState<{ form: ProductForm; savedAt: string } | null>(null);
+
   useEffect(() => {
     if (!open) return;
     if (mode === "edit" && initial) {
       setForm(formFromRecord(initial));
-    } else {
-      setForm(emptyForm());
+      setRecoverableDraft(null);
+    } else if (mode === "add") {
+      // Check for a recoverable draft before resetting to empty
+      const draft = productDraft.getRecoverableDraft();
+      if (draft?.form && draft.form.product_name) {
+        // Pre-fill with draft and show recovery prompt
+        setForm(draft.form);
+        setRecoverableDraft(draft);
+      } else {
+        setForm(emptyForm());
+        setRecoverableDraft(null);
+      }
     }
     setErrors({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
+
+  // Auto-save form draft on every field change (add mode only)
+  useEffect(() => {
+    if (!open || mode !== "add") return;
+    // Only save if the user has typed something meaningful
+    if (form.product_name || form.barcode) {
+      productDraft.saveDraft({ form, savedAt: new Date().toISOString() });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, form]);
 
   const set = (key: keyof ProductForm, value: unknown) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -321,6 +360,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
       const saved = mode === "add"
         ? await createProduct(payload)
         : await updateProduct(initial!.id, payload as UpdateProductPayload);
+      // ── Clear draft — product committed to DB ─────────────────────────────
+      productDraft.commitDraft();
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -333,6 +374,25 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
   const isStore = form.barcode_source === "store";
 
   return (
+    <>
+      {/* Draft recovery prompt — add mode only */}
+      {mode === "add" && (
+        <DraftRecoveryPrompt
+          draft={recoverableDraft}
+          formLabel="Add Product"
+          savedSummary={
+            recoverableDraft
+              ? `${recoverableDraft.form.product_name || "Untitled"}${recoverableDraft.form.barcode ? ` · ${recoverableDraft.form.barcode}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+              : undefined
+          }
+          onRestore={() => setRecoverableDraft(null)}
+          onDiscard={() => {
+            productDraft.discardDraft();
+            setForm(emptyForm());
+            setRecoverableDraft(null);
+          }}
+        />
+      )}
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
@@ -703,6 +763,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 

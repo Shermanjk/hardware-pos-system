@@ -27,6 +27,8 @@ interface CartPanelProps {
   searchTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
   selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
   setSelectedDiscount: React.Dispatch<React.SetStateAction<{ id: number; name: string; percentage: number; requiresApproval: boolean } | null>>;
+  /** When true, scanning/searching is blocked until a shift is started. */
+  noShift?: boolean;
 }
 
 interface Discount {
@@ -45,6 +47,7 @@ export default function CartPanel({
   showDropdown, setShowDropdown,
   barcodeRef, searchTimeoutRef,
   selectedDiscount, setSelectedDiscount,
+  noShift = false,
 }: CartPanelProps) {
 
   const [discounts, setDiscounts] = useState<Discount[]>([]);
@@ -219,13 +222,14 @@ export default function CartPanel({
           <Input
             ref={barcodeRef}
             value={barcodeInput}
-            onChange={(e) => handleBarcodeChange(e.target.value)}
+            onChange={(e) => { if (!noShift) handleBarcodeChange(e.target.value); }}
             onKeyDown={handleKeyDown}
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
             onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-            placeholder="Scan barcode or type product name…"
-            className="pl-9 h-11 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            autoFocus
+            placeholder={noShift ? "Start your shift to begin scanning…" : "Scan barcode or type product name…"}
+            disabled={noShift}
+            className="pl-9 h-11 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+            autoFocus={!noShift}
           />
           {showDropdown && searchResults.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">

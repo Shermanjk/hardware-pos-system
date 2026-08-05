@@ -14,6 +14,8 @@ interface PaymentPanelProps {
   isProcessing: boolean;
   /** When true the server is unreachable — payment button is disabled. */
   isOffline: boolean;
+  /** When true no shift session is open — all transaction actions are blocked. */
+  noShift?: boolean;
   /** When true a discount approval request is pending — payment button shows waiting state. */
   pendingApproval?: boolean;
   onProcessPayment: () => void;
@@ -37,6 +39,7 @@ export default function PaymentPanel({
   subtotalCents, taxCents, totalCents, taxRate,
   cashTendered, setCashTendered,
   cartLength, customerName, isProcessing, isOffline,
+  noShift = false,
   pendingApproval = false,
   onProcessPayment, onHold, onHoldOrders, onReturn, onPendingReturns, onVoid, onVoidRequests,
   pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
@@ -129,12 +132,14 @@ export default function PaymentPanel({
       <div className="flex-1 flex flex-col justify-end gap-2">
         <Button
           className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
-          disabled={cartLength === 0 || cashCents < finalTotalCents || !customerName.trim() || isProcessing || isOffline || pendingApproval}
+          disabled={noShift || cartLength === 0 || cashCents < finalTotalCents || !customerName.trim() || isProcessing || isOffline || pendingApproval}
           onClick={onProcessPayment}
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center">₱</span>}
           {isProcessing
             ? "Processing..."
+            : noShift
+            ? "Start Shift to Transact"
             : isOffline
             ? "Server Unreachable"
             : pendingApproval
@@ -151,14 +156,15 @@ export default function PaymentPanel({
               variant="outline"
               className="relative h-10 text-sm rounded-xl gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHold}
-              disabled={cartLength === 0 || !customerName.trim()}
+              disabled={noShift || cartLength === 0 || !customerName.trim()}
             >
               <PauseCircle className="h-4 w-4" /> Hold
             </Button>
             <Button
               variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHoldOrders}
+              disabled={noShift}
             >
               <PauseCircle className="h-4 w-4" /> Held Transactions
               {pendingHeldOrdersCount > 0 && (
@@ -169,12 +175,11 @@ export default function PaymentPanel({
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {/* BUG-08 FIX: Return button opens pending-returns panel when approved returns exist,
-                otherwise opens the new-return submission panel. */}
             <Button
               variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={hasApprovedReturns ? onPendingReturns : onReturn}
+              disabled={noShift}
             >
               <RotateCcw className="h-4 w-4" /> {hasApprovedReturns ? "Process Return" : "Return"}
               {pendingReturnsCount > 0 && (
@@ -185,8 +190,9 @@ export default function PaymentPanel({
             </Button>
             <Button
               variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+              className="relative h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onVoidRequests}
+              disabled={noShift}
             >
               <Ban className="h-4 w-4" /> Void Requests
               {pendingVoidRequestsCount > 0 && (
@@ -196,7 +202,12 @@ export default function PaymentPanel({
               )}
             </Button>
           </div>
-          {cartLength > 0 && !customerName.trim() && (
+          {noShift && (
+            <p className="text-xs text-center text-amber-600 font-semibold">
+              You must <span className="underline">Start Shift</span> before processing transactions.
+            </p>
+          )}
+          {!noShift && cartLength > 0 && !customerName.trim() && (
             <p className="text-xs text-center text-amber-600">
               Fill in <span className="font-semibold">Sold To</span> to proceed
             </p>

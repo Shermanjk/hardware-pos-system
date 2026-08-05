@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit2, RotateCcw, Lock, Eye, EyeOff, Copy, Printer, AlertCircle, CheckCircle2, X, UserPlus, UserCog, KeyRound, ShieldOff } from "lucide-react";
-import { getUsers, createUser, updateUser, resetPassword, deactivateUser } from "@/shared/api/usersApi";
-import type { UserRecord, CreateUserPayload, UpdateUserPayload } from "@/shared/api/usersApi";
+import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "@/shared/api/usersApi";
+import { createUser, deactivateUser, getUsers, resetPassword, updateUser } from "@/shared/api/usersApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
+import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, ShieldOff, UserCog, UserPlus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+const DRAFT_KEY_CREATE_USER = "admin-user-create";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,10 +140,40 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [createdUsername, setCreatedUsername] = useState("");
 
+  // ── Draft recovery ────────────────────────────────────────────────────────
+  interface UserCreateDraft { fullName: string; username: string; employeeId: string; role: string; status: string; savedAt: string; }
+  const userDraft = useDraftRecovery<UserCreateDraft>(DRAFT_KEY_CREATE_USER);
+  const [recoverableDraft, setRecoverableDraft] = useState<UserCreateDraft | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const draft = userDraft.getRecoverableDraft();
+    if (draft?.fullName || draft?.username) {
+      setFullName(draft.fullName || "");
+      setUsername(draft.username || "");
+      setEmployeeId(draft.employeeId || "");
+      setRole((draft.role as any) || "Cashier");
+      setStatus((draft.status as any) || "Active");
+      setRecoverableDraft(draft);
+    }
+    setErrors({}); setTempPassword(null); setCreatedUsername("");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Auto-save draft
+  useEffect(() => {
+    if (!open) return;
+    if (fullName || username) {
+      userDraft.saveDraft({ fullName, username, employeeId, role, status, savedAt: new Date().toISOString() });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fullName, username, employeeId, role, status]);
+
   const reset = () => {
     setFullName(""); setUsername(""); setEmployeeId("");
     setRole("Cashier"); setStatus("Active");
     setErrors({}); setTempPassword(null); setCreatedUsername("");
+    userDraft.discardDraft();
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -155,6 +189,8 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
     setIsLoading(true);
     try {
       const data = await createUser(payload);
+      // ── Clear draft — user committed to DB ────────────────────────────────
+      userDraft.commitDraft();
       setTempPassword(data.tempPassword);
       setCreatedUsername(data.user.username);
       onCreated(data.user);
@@ -166,6 +202,23 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
   };
 
   return (
+    <>
+      <DraftRecoveryPrompt
+        draft={recoverableDraft}
+        formLabel="Add New User"
+        savedSummary={
+          recoverableDraft
+            ? `${recoverableDraft.fullName || ""}${recoverableDraft.username ? ` · @${recoverableDraft.username}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
+            : undefined
+        }
+        onRestore={() => setRecoverableDraft(null)}
+        onDiscard={() => {
+          userDraft.discardDraft();
+          setFullName(""); setUsername(""); setEmployeeId("");
+          setRole("Cashier"); setStatus("Active");
+          setRecoverableDraft(null);
+        }}
+      />
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">{tempPassword ? "Account Created" : "Add New User"}</DialogTitle>
@@ -270,6 +323,7 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 

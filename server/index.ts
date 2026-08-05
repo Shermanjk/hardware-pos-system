@@ -9,6 +9,7 @@ import auditLogsRoutes from "./routes/auditLogs.js";
 import authRoutes from "./routes/auth.js";
 import authorizationHistoryRoutes from "./routes/authorizationHistory.js";
 import backupRoutes from "./routes/backup.js";
+import cashReconciliationRoutes from "./routes/cashReconciliation.js";
 import categoriesRoutes from "./routes/categories.js";
 import commodityPricesRoutes from "./routes/commodityPrices.js";
 import dashboardRoutes from "./routes/dashboard.js";
@@ -72,6 +73,7 @@ async function startServer() {
   app.use("/api/discounts", discountsRoutes);
   app.use("/api/discount-approvals", discountApprovalsRoutes);
   app.use("/api/authorization-history", authorizationHistoryRoutes);
+  app.use("/api/cash-reconciliation", cashReconciliationRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   // When bundled to server-dist/index.js, static files are at ../dist/public

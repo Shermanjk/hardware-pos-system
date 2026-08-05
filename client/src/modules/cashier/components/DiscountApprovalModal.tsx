@@ -496,8 +496,8 @@ export default function DiscountApprovalModal({
           {/* Remote form footer */}
           {status === "idle" && method === "remote" && (
             <div className="flex gap-2 w-full">
-              <Button variant="outline" onClick={() => setMethod(null)} className="flex-1">
-                ← Back
+              <Button variant="outline" onClick={onClose} className="flex-1">
+                Cancel
               </Button>
               <Button
                 onClick={handleSendToAdmin}
@@ -513,8 +513,8 @@ export default function DiscountApprovalModal({
           {/* Local override footer */}
           {status === "idle" && method === "local" && (
             <div className="flex gap-2 w-full">
-              <Button variant="outline" onClick={() => setMethod(null)} className="flex-1">
-                ← Back
+              <Button variant="outline" onClick={onClose} className="flex-1">
+                Cancel
               </Button>
               <Button
                 onClick={handleLocalOverride}

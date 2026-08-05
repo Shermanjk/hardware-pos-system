@@ -1,17 +1,23 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Search, RefreshCw, X, AlertCircle, ShoppingCart,
-  Eye, Calendar, ChevronDown, ChevronUp, Receipt,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { searchSales, getSaleByInvoice } from "@/shared/api/salesApi";
-import type { SaleSummary, Sale } from "@/shared/api/salesApi";
-import axios from "axios";
+import { getCashiers, type CashierOption } from "@/shared/api/cashReconciliationApi";
+import type { Sale, SaleSummary } from "@/shared/api/salesApi";
+import { getSaleByInvoice, searchSales } from "@/shared/api/salesApi";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import axios from "axios";
+import {
+    AlertCircle,
+    Calendar, ChevronDown, ChevronUp,
+    Eye,
+    Receipt,
+    Search,
+    ShoppingCart,
+    X
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -197,9 +203,14 @@ export default function Sales() {
   const [loadError,  setLoadError]  = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Cashier list for dropdown
+  const [cashiers, setCashiers] = useState<CashierOption[]>([]);
+  useEffect(() => { getCashiers().then(setCashiers).catch(() => {}); }, []);
+
   // Filters
   const [invoice,      setInvoice]      = useState("");
   const [customer,     setCustomer]     = useState("");
+  const [cashierId,    setCashierId]    = useState("__all__");
   const [dateFrom,     setDateFrom]     = useState("");
   const [dateTo,       setDateTo]       = useState("");
   const [returnStatus, setReturnStatus] = useState("all");
@@ -211,6 +222,18 @@ export default function Sales() {
   // Summary stats (computed from loaded results)
   const totalRevenue = sales.filter((s) => s.void_status !== "voided").reduce((s, r) => s + Number(r.total_amount) - Number(r.total_refunded || 0), 0);
 
+  // Per-cashier totals (only meaningful when no cashier filter is active)
+  const cashierTotals = sales
+    .filter((s) => s.void_status !== "voided")
+    .reduce<Record<string, { name: string; total: number; count: number }>>((acc, s) => {
+      const key = String(s.cashier_id ?? s.cashier_name);
+      if (!acc[key]) acc[key] = { name: s.cashier_name, total: 0, count: 0 };
+      acc[key].total += Number(s.total_amount) - Number((s as any).total_refunded || 0);
+      acc[key].count += 1;
+      return acc;
+    }, {});
+  const cashierTotalsList = Object.values(cashierTotals).sort((a, b) => b.total - a.total);
+
   // Default date range to today
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -221,6 +244,7 @@ export default function Sales() {
   const load = useCallback(async (params: {
     invoice_number?: string;
     customer_name?: string;
+    cashier_id?: number;
     date_from?: string;
     date_to?: string;
     return_status?: string;
@@ -243,6 +267,7 @@ export default function Sales() {
     load({
       invoice_number: invoice.trim() || undefined,
       customer_name:  customer.trim() || undefined,
+      cashier_id:     cashierId !== "__all__" ? Number(cashierId) : undefined,
       date_from:      dateFrom || undefined,
       date_to:        dateTo   || undefined,
       return_status:  returnStatus !== "all" ? returnStatus : undefined,
@@ -250,7 +275,7 @@ export default function Sales() {
   };
 
   const handleClear = () => {
-    setInvoice(""); setCustomer(""); setReturnStatus("all");
+    setInvoice(""); setCustomer(""); setCashierId("__all__"); setReturnStatus("all");
     const today = new Date().toISOString().split("T")[0];
     setDateFrom(today); setDateTo(today);
     setSales([]); setHasSearched(false); setLoadError(null);
@@ -288,6 +313,46 @@ export default function Sales() {
         </div>
       )}
 
+      {/* Per-cashier breakdown — only when all cashiers shown and more than one cashier */}
+      {hasSearched && !isLoading && cashierId === "__all__" && cashierTotalsList.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <User className="h-4 w-4 text-gray-400" />
+            <span className="text-sm font-semibold text-gray-700">Sales by Cashier</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {cashierTotalsList.map((c, i) => {
+              const pct = totalRevenue > 0 ? (c.total / totalRevenue) * 100 : 0;
+              return (
+                <div key={c.name} className="px-5 py-3 flex items-center gap-4">
+                  <span className="w-5 text-xs font-bold text-gray-400 tabular-nums">{i + 1}</span>
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                    <User className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{c.name}</p>
+                    <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-gray-900 tabular-nums">{fmt(c.total)}</p>
+                    <p className="text-xs text-gray-400">{c.count} sale{c.count !== 1 ? "s" : ""} · {pct.toFixed(1)}%</p>
+                  </div>
+                  <button
+                    onClick={() => { setCashierId(String(cashiers.find(x => x.full_name === c.name)?.id ?? "__all__")); }}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                    title="Filter by this cashier"
+                  >
+                    View only
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <button
@@ -303,11 +368,28 @@ export default function Sales() {
 
         {showFilters && (
           <form onSubmit={handleSearch} className="px-5 pb-5 pt-1 space-y-4 border-t border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              {/* Cashier dropdown — primary filter */}
+              <div className="xl:col-span-2">
+                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Cashier</Label>
+                <Select value={cashierId} onValueChange={setCashierId}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All Cashiers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Cashiers</SelectItem>
+                    {cashiers.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.full_name}{c.employee_id ? ` (${c.employee_id})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Invoice No.</Label>
                 <Input value={invoice} onChange={(e) => setInvoice(e.target.value)}
-                  placeholder="e.g. INV-20250120-0001" className="h-9 text-sm" />
+                  placeholder="INV-20250120-0001" className="h-9 text-sm" />
               </div>
               <div>
                 <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Customer Name</Label>
@@ -330,8 +412,9 @@ export default function Sales() {
                     className="h-9 text-sm pl-8" />
                 </div>
               </div>
-              <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Return Status</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-40">
                 <Select value={returnStatus} onValueChange={setReturnStatus}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="All" />
@@ -343,8 +426,6 @@ export default function Sales() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
               <Button type="submit" disabled={isLoading}
                 className="bg-blue-600 hover:bg-blue-700 text-white h-9 px-5 text-sm gap-2">
                 {isLoading ? <Spinner className="text-white" /> : <Search className="h-4 w-4" />}
