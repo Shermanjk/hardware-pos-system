@@ -242,17 +242,17 @@ export default function SystemUpdate() {
                 </div>
               )}
 
-      step === "installing" && (
-        <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
-          <div className="flex-1">
-            <p className="font-medium text-blue-900">Installing update…</p>
-            <p className="text-sm text-blue-700">
-              Running database migrations and preparing restart. Please do not close the app.
-            </p>
-          </div>
-        </div>
-      )
+              {step === "installing" && (
+                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-medium text-blue-900">Installing update…</p>
+                    <p className="text-sm text-blue-700">
+                      Running database migrations and preparing restart. Please do not close the app.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {step !== "installing" && step !== "restarting" && updateRequired && (
                 <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
