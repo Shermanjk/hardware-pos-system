@@ -96,7 +96,10 @@ export async function getMigrationHistory(
 }
 
 /**
- * Execute a single migration
+ * Execute a single migration.
+ * Opens a dedicated connection with multipleStatements enabled so migration
+ * files can contain batches of statements (SET, PREPARE, EXECUTE, DDL, etc.)
+ * without needing special escaping.
  */
 async function executeMigration(
   migration: MigrationFile,
@@ -105,14 +108,28 @@ async function executeMigration(
 ): Promise<{ success: boolean; error?: string }> {
   const startTime = new Date();
 
+  // Create a one-off connection with multipleStatements so that migration
+  // files containing SET / PREPARE / EXECUTE blocks (and semicolon-separated
+  // DDL batches) execute correctly. The shared pool deliberately omits this
+  // flag to prevent SQL-injection via user-supplied multi-statement queries.
+  const mysql = (await import("mysql2/promise")).default;
+
+  // Read env vars directly (already validated at startup)
+  const singleConn = await mysql.createConnection({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    multipleStatements: true,
+    connectTimeout: 30_000,
+  });
+
   try {
-    // Read migration SQL
     const sql = fs.readFileSync(migration.path, "utf-8");
 
-    // Execute migration
-    await pool.query(sql);
+    await singleConn.query(sql);
 
-    // Record success
     const executionTime = new Date();
     await pool.execute(
       `INSERT INTO migration_history 
@@ -127,7 +144,6 @@ async function executeMigration(
       ]
     );
 
-    // Update system_version
     await pool.execute(
       `UPDATE system_version 
        SET database_version = ?, updated_at = NOW() 
@@ -146,7 +162,6 @@ async function executeMigration(
       error
     );
 
-    // Record failure
     const executionTime = new Date();
     await pool.execute(
       `INSERT INTO migration_history 
@@ -165,6 +180,8 @@ async function executeMigration(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  } finally {
+    await singleConn.end();
   }
 }
 
