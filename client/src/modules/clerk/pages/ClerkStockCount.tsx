@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdjustmentReason, createAdjustmentRequest, getInventory, getInventoryLogs } from "@/shared/api/inventoryApi";
 import { createStockCountRequest } from "@/shared/api/requestsApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import {
     AlertTriangle,

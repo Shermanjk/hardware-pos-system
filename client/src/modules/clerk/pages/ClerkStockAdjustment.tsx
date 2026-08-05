@@ -14,6 +14,8 @@ import { getInventoryLogs, submitStockAdjustment } from "@/shared/api/inventoryA
 import {
     lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantity } from "@/shared/utils/quantityFormat";
 import {
     AlertCircle,

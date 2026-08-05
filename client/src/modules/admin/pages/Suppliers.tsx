@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Supplier } from "@/shared/api/productsApi";
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from "@/shared/api/productsApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
 import {
     AlertCircle,

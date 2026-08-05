@@ -25,10 +25,11 @@ import {
     getSuppliers, getUnits,
     updateProduct,
 } from "@/shared/api/productsApi";
+import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
-import JsBarcode from "jsbarcode";
-import { AlertCircle, Barcode, Edit2, Eye, Package, Plus, Printer, RefreshCw, ScanLine, Search, Trash2, Wand2, X } from "lucide-react";
+import { AlertCircle, Edit2, Eye, Package, Plus, RefreshCw, ScanLine, Search, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,70 +64,6 @@ function statusBadge(status: StockStatus) {
 
 function Spinner({ className = "" }: { className?: string }) {
   return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
-}
-
-// ─── Barcode print helpers ────────────────────────────────────────────────────
-
-/** Generate an SVG barcode string for a given code using JsBarcode */
-function generateBarcodeSVG(code: string): string {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  JsBarcode(svg, code, {
-    format: "CODE128",
-    width: 2,
-    height: 60,
-    displayValue: false,
-    margin: 0,
-  });
-  return svg.outerHTML;
-}
-
-/** Build the HTML for a single barcode label — bars + code only */
-function buildLabelHTML(product: ProductRecord): string {
-  const svg = generateBarcodeSVG(product.barcode);
-  const header = product.barcode_source === "store"
-    ? `<div class="store-name">Isra Hardware</div>`
-    : "";
-  return `
-    <div class="label">
-      ${header}
-      ${svg}
-      <div class="code">${product.barcode}</div>
-    </div>`;
-}
-
-const LABEL_STYLES = `
-  body { font-family: monospace; margin: 0; padding: 8px; background: #fff; }
-  .label { display: inline-block; padding: 6px 10px; margin: 4px;
-           text-align: center; vertical-align: top; }
-  .label svg { display: block; margin: 0 auto; }
-  .store-name { font-family: sans-serif; font-size: 11px; font-weight: 700;
-                letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }
-  .code { font-size: 11px; margin-top: 2px; letter-spacing: 1px; }
-  @media print { body { padding: 0; margin: 0; } }
-`;
-
-function printBarcode(product: ProductRecord) {
-  const w = window.open("", "_blank", "width=320,height=280");
-  if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head><title>${product.barcode}</title>
-    <style>${LABEL_STYLES}</style></head><body>
-    ${buildLabelHTML(product)}
-    <script>window.onload=function(){window.print();window.close();}<\/script>
-  </body></html>`);
-  w.document.close();
-}
-
-function printBarcodeList(products: ProductRecord[]) {
-  if (products.length === 0) return;
-  const w = window.open("", "_blank", "width=700,height=600");
-  if (!w) return;
-  const labels = products.map(buildLabelHTML).join("");
-  w.document.write(`<!DOCTYPE html><html><head><title>Barcodes</title>
-    <style>${LABEL_STYLES}</style></head><body>
-    ${labels}
-    <script>window.onload=function(){window.print();window.close();}<\/script>
-  </body></html>`);
-  w.document.close();
 }
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -193,58 +130,6 @@ function validateForm(form: ProductForm): Record<string, string> {
                                  e.reorder_level = "Reorder level must be 0 or greater.";
   }
   return e;
-}
-
-// ─── Print Barcode Label Dialog ───────────────────────────────────────────────
-
-function PrintLabelDialog({ product, onClose }: { product: ProductRecord | null; onClose: () => void }) {
-  if (!product) return null;
-  return (
-    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Print Barcode Label</DialogTitle>
-        {/* Blue header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-blue-400 rounded-t-lg">
-          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-            <Printer className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-white">Print Barcode Label</h2>
-            <p className="text-xs text-blue-100 mt-0.5">Product saved successfully</p>
-          </div>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          {/* Product info card */}
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            <p className="font-semibold text-gray-900 text-sm">{product.product_name}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="font-mono text-sm font-bold text-gray-800">{product.barcode}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                product.barcode_source === "store"
-                  ? "bg-purple-100 text-purple-700"
-                  : "bg-blue-100 text-blue-700"
-              }`}>
-                {product.barcode_source === "store" ? "Store Barcode" : "Manufacturer Barcode"}
-              </span>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600">
-            Would you like to print a barcode label for this product now?
-          </p>
-        </div>
-
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Skip</Button>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-            onClick={() => { printBarcode(product); onClose(); }}>
-            <Printer className="h-4 w-4" /> Print Label
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 // ─── ProductFormModal ─────────────────────────────────────────────────────────
@@ -893,9 +778,6 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => printBarcode(product)}>
-            <Barcode className="h-4 w-4" /> Print Barcode
-          </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>Close</Button>
             <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { onClose(); onEdit(product); }}>
@@ -1004,7 +886,6 @@ export default function Products() {
   const [editTarget,   setEditTarget]   = useState<ProductRecord | null>(null);
   const [viewTarget,   setViewTarget]   = useState<ProductRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
-  const [printTarget,  setPrintTarget]  = useState<ProductRecord | null>(null);
 
   const [bannerToast, setBannerToast] = useState<{ msg: string; type: "success" | "info" } | null>(null);
   const showToast = (msg: string, type: "success" | "info" = "success") => {
@@ -1055,7 +936,6 @@ export default function Products() {
       return exists ? prev.map((p) => p.id === product.id ? product : p) : [product, ...prev];
     });
     showToast(`${product.product_name} saved successfully.`);
-    if (product.barcode_source === "store") setPrintTarget(product);
   };
 
   const handleDeleted = (id: number, soft: boolean) => {
@@ -1093,10 +973,6 @@ export default function Products() {
           <p className="text-sm text-gray-500 mt-0.5">Manage your product catalog</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100 h-9 text-sm"
-            onClick={() => printBarcodeList(products)} disabled={products.length === 0}>
-            <Barcode className="h-4 w-4" /> Print Barcodes
-          </Button>
           <Button variant="outline" size="sm" className="h-9 w-9 p-0 border-gray-300 text-gray-600 hover:bg-gray-100"
             onClick={() => loadProducts(search)} disabled={isLoading} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -1283,10 +1159,6 @@ export default function Products() {
                             className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
                             <Edit2 className="h-4 w-4" />
                           </button>
-                          <button title="Print barcode" onClick={() => printBarcode(product)}
-                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors">
-                            <Barcode className="h-4 w-4" />
-                          </button>
                           <button title="Remove" onClick={() => setDeleteTarget(product)}
                             className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                             <Trash2 className="h-4 w-4" />
@@ -1316,7 +1188,6 @@ export default function Products() {
         suppliers={suppliers} units={units} onClose={() => setEditTarget(null)} onSaved={handleSaved} />
       <ViewProductModal product={viewTarget} onClose={() => setViewTarget(null)} onEdit={(p) => setEditTarget(p)} />
       <DeleteDialog product={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={handleDeleted} />
-      <PrintLabelDialog product={printTarget} onClose={() => setPrintTarget(null)} />
     </div>
   );
 }

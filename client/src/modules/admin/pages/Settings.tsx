@@ -1,20 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
+import type { StoreSettings } from "@/shared/api/settingsApi";
 import { getSettings, updateSettings } from "@/shared/api/settingsApi";
 import { changePassword } from "@/shared/api/usersApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { saveToken } from "@/shared/utils/auth";
-import type { StoreSettings } from "@/shared/api/settingsApi";
 import axios from "axios";
-import SystemUpdate from "./SystemUpdate";
+import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Pencil, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import BackupSettings from "./BackupSettings";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import SystemUpdate from "./SystemUpdate";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -1,43 +1,43 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
-  Search,
-  ScanLine,
-  Eye,
-  Printer,
-  Package,
-  X,
-  Boxes,
-  Tag,
-  Truck,
-  Hash,
-  Layers,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
+import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import {
+    AlertTriangle,
+    Boxes,
+    CheckCircle2,
+    Eye,
+    Hash,
+    Layers,
+    Package,
+    Printer,
+    RefreshCw,
+    ScanLine,
+    Search,
+    Tag,
+    Truck,
+    X,
+    XCircle,
 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getProducts, getCategories, getSuppliers, lookupProduct, deriveStatus, type ProductRecord } from "@/shared/api/productsApi";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
 
 const PAGE_SIZE = 10;
 
@@ -165,10 +165,64 @@ interface BarcodePrintModalProps {
 
 function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
   const [labelCount, setLabelCount] = useState(1);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!svgRef.current || !product?.barcode) return;
+    try {
+      JsBarcode(svgRef.current, product.barcode, {
+        format: "CODE128",
+        displayValue: false,
+        height: 48,
+        margin: 2,
+        background: "transparent",
+      });
+    } catch { /* invalid barcode */ }
+  }, [product?.barcode]);
 
   const handlePrint = () => {
-    window.print();
-    toast.success(`Printed ${labelCount} label(s) for "${product?.product_name}"`);
+    if (!product) return;
+    const clampedCount = Math.max(1, Math.min(100, labelCount));
+
+    const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    try {
+      JsBarcode(svgEl, product.barcode, {
+        format: "CODE128",
+        displayValue: false,
+        height: 40,
+        margin: 2,
+        background: "#ffffff",
+      });
+    } catch {
+      toast.error("Invalid barcode — cannot print");
+      return;
+    }
+    const svgHTML = svgEl.outerHTML;
+    const label = `
+      <div class="label">
+        <div>${svgHTML}</div>
+        <div class="code">${product.barcode}</div>
+      </div>`;
+
+    const w = window.open("", "_blank", "width=600,height=400");
+    if (!w) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
+    w.document.write(`<!DOCTYPE html><html><head><title>${product.barcode}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #fff; font-family: monospace; padding: 4px; }
+        .label { display: inline-flex; flex-direction: column; align-items: center;
+                 width: 50mm; height: 30mm; padding: 1mm;
+                 page-break-inside: avoid; overflow: hidden; }
+        .label svg { display: block; width: 100%; height: auto; }
+        .code { font-size: 6pt; letter-spacing: 1px; margin-top: 1px; text-align: center; }
+        @media print { @page { margin: 4mm; } body { padding: 0; } }
+      </style></head><body>
+      ${Array.from({ length: clampedCount }).map(() => label).join("")}
+      <script>window.onload=function(){window.print();window.close();}<\/script>
+    </body></html>`);
+    w.document.close();
+
+    toast.success(`Printed ${clampedCount} label${clampedCount !== 1 ? "s" : ""} for "${product.product_name}"`);
     onClose();
   };
 
@@ -188,22 +242,10 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Barcode display */}
-          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg text-center print:border-solid">
-            <p className="text-xs text-gray-500 mb-2">{product.product_name}</p>
-            {/* Visual barcode bars */}
-            <div className="flex items-end justify-center gap-px h-12 mb-2">
-              {product.barcode.split("").map((char, i) => (
-                <div
-                  key={i}
-                  className="bg-gray-900"
-                  style={{
-                    width: `${(char.charCodeAt(0) % 2 === 0) ? 2 : 1}px`,
-                    height: `${40 + (char.charCodeAt(0) % 20)}%`,
-                  }}
-                />
-              ))}
-            </div>
+          {/* Barcode preview */}
+          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center gap-2">
+            <p className="text-xs text-gray-500">{product.product_name}</p>
+            <svg ref={svgRef} />
             <p className="font-mono text-sm font-bold tracking-widest text-gray-900">
               {product.barcode}
             </p>
