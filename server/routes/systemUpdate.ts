@@ -169,7 +169,14 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
       },
     });
 
-    // Step 6: Trigger Electron restart
+    // Step 6: Exit maintenance now — the update succeeded. The restart will
+    // bring up a fresh process anyway, but exiting here means that if the
+    // restart signal is delayed or missed, the server is not left permanently
+    // locked out of writes.
+    keepMaintenance = false;
+    maintenanceService.exit();
+
+    // Step 7: Trigger Electron restart
     await triggerElectronRestart();
 
     res.status(200).json({
@@ -184,6 +191,19 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
   } finally {
     if (!keepMaintenance) maintenanceService.exit();
   }
+});
+
+// ─── POST /api/system-update/reset-maintenance ───────────────────────────────
+// Emergency exit from maintenance mode. Only use this if the server got stuck
+// in maintenance after a failed or interrupted install.
+router.post("/reset-maintenance", authenticate, requireRole("Admin"), (req: Request, res: Response) => {
+  const wasMaintenance = maintenanceService.isMaintenanceMode();
+  if (wasMaintenance) {
+    maintenanceService.exit();
+  }
+  res.status(200).json({
+    message: wasMaintenance ? "Maintenance mode cleared" : "System was not in maintenance mode",
+  });
 });
 
 // ─── GET /api/system-update/migration-history ────────────────────────────────

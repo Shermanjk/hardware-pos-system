@@ -149,6 +149,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Remove legacy localStorage token if present
     try { localStorage.removeItem("pos_token"); } catch { /* ignore */ }
 
+    // After an update restart, the install flow saves the token to localStorage
+    // under a special key so the admin stays logged in. Restore it once, then
+    // delete it so normal closes still require re-login.
+    try {
+      const persistedToken = localStorage.getItem("pos_token_persist_restart");
+      if (persistedToken) {
+        sessionStorage.setItem("pos_token", persistedToken);
+        localStorage.removeItem("pos_token_persist_restart");
+      }
+    } catch { /* ignore */ }
+
     const stored = loadToken();
     if (stored) {
       const decoded = getUserFromToken(stored);

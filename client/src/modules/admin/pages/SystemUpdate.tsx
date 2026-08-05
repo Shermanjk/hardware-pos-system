@@ -1,20 +1,20 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import { loadToken } from "@/shared/utils/auth";
 import axios from "axios";
 import {
-  CheckCircle,
-  Clock,
-  Download,
-  RefreshCw,
-  Upload
+    CheckCircle,
+    Clock,
+    Download,
+    RefreshCw,
+    Upload
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -113,15 +113,33 @@ export default function SystemUpdate() {
       await axios.post("/api/system-update/install", {}, { headers: authHeaders() });
       setStep("restarting");
       toast.success("Update installed. The system will restart now…");
+
+      // Persist the session token across the restart so the user doesn't have
+      // to re-login. AuthContext will restore it from localStorage on relaunch.
+      const token = sessionStorage.getItem("pos_token");
+      if (token) {
+        localStorage.setItem("pos_token_persist_restart", token);
+      }
+
       // Give Electron a moment to detect the restart flag, then reload as fallback
       setTimeout(() => {
         window.location.reload();
       }, 4000);
     } catch (error: any) {
       console.error("Failed to install update:", error);
+      const status = error.response?.status;
       const message = error.response?.data?.message || "Failed to install update";
-      toast.error(message);
-      setStep("ready"); // Go back to ready so they can retry
+
+      if (status === 409) {
+        // Maintenance mode stuck from a previous interrupted install — auto-reset
+        toast.error("System was stuck in maintenance mode. Resetting — please try again.");
+        try {
+          await axios.post("/api/system-update/reset-maintenance", {}, { headers: authHeaders() });
+        } catch { /* ignore reset errors */ }
+      } else {
+        toast.error(message);
+      }
+      setStep("ready");
     }
   };
 
@@ -224,17 +242,17 @@ export default function SystemUpdate() {
                 </div>
               )}
 
-              {step === "installing" && (
-                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
-                  <div>
-                    <p className="font-medium text-blue-900">Installing update…</p>
-                    <p className="text-sm text-blue-700">
-                      Running database migrations and preparing restart. Please do not close the app.
-                    </p>
-                  </div>
-                </div>
-              )}
+      step === "installing" && (
+        <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium text-blue-900">Installing update…</p>
+            <p className="text-sm text-blue-700">
+              Running database migrations and preparing restart. Please do not close the app.
+            </p>
+          </div>
+        </div>
+      )
 
               {step !== "installing" && step !== "restarting" && updateRequired && (
                 <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
