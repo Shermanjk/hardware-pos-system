@@ -49,16 +49,19 @@ export function getUserFromToken(token: string | null): AuthUser | null {
 }
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
+// sessionStorage is intentionally used here instead of localStorage so that
+// closing the browser tab, window, or Electron app always clears the session.
+// Every fresh launch requires the user to log in again.
 export function saveToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 export function loadToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 }
 
 // ─── Role → default redirect path ────────────────────────────────────────────

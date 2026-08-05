@@ -1,25 +1,25 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from "react";
-import { useLocation } from "wouter";
 import { loginRequest } from "@/shared/api/authApi";
 import httpClient from "@/shared/api/httpClient";
-import { toast } from "sonner";
 import {
-  type AuthUser,
-  saveToken,
-  loadToken,
-  clearToken,
-  getUserFromToken,
-  getRedirectPath,
-  decodeTokenExpiry,
+    clearToken,
+    decodeTokenExpiry,
+    getRedirectPath,
+    getUserFromToken,
+    loadToken,
+    saveToken,
+    type AuthUser,
 } from "@/shared/utils/auth";
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
+import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 
@@ -141,8 +141,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Keep the ref in sync so doRenew can call scheduleRenewal without a cycle
   scheduleRenewalRef.current = scheduleRenewal;
 
-  // ── On mount: rehydrate from localStorage ────────────────────────────────
+  // ── On mount: rehydrate from sessionStorage ──────────────────────────────
+  // sessionStorage is cleared when the tab/window/Electron app closes, so
+  // every fresh launch starts unauthenticated. We also clear any legacy
+  // localStorage token left over from before this change.
   useEffect(() => {
+    // Remove legacy localStorage token if present
+    try { localStorage.removeItem("pos_token"); } catch { /* ignore */ }
+
     const stored = loadToken();
     if (stored) {
       const decoded = getUserFromToken(stored);
