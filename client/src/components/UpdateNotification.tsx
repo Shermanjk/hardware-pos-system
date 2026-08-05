@@ -15,6 +15,11 @@ export function UpdateNotification() {
   useEffect(() => {
     // Get current version from package.json (injected during build)
     const currentVersion = import.meta.env.VITE_APP_VERSION || "1.0.0";
+
+    // If the user already clicked "Refresh Now" this session, don't re-show
+    if (sessionStorage.getItem("update_notification_dismissed") === currentVersion) {
+      return;
+    }
     
     // Poll every 30 seconds to check for updates
     const checkForUpdates = async () => {
@@ -45,10 +50,16 @@ export function UpdateNotification() {
   }, []);
 
   const handleRefresh = () => {
+    // Mark as dismissed for this session so the poll doesn't re-show it
+    // immediately after the page reloads (before the new build is served)
+    const currentVersion = import.meta.env.VITE_APP_VERSION || "1.0.0";
+    sessionStorage.setItem("update_notification_dismissed", currentVersion);
     window.location.reload();
   };
 
   const handleDismiss = () => {
+    const currentVersion = import.meta.env.VITE_APP_VERSION || "1.0.0";
+    sessionStorage.setItem("update_notification_dismissed", currentVersion);
     setShowNotification(false);
   };
 
