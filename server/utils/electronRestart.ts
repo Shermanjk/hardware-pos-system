@@ -1,41 +1,54 @@
-/**
- * Signal Electron main process to restart the application
- * This is called from the backend after a successful update installation
- */
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-export async function triggerElectronRestart(): Promise<void> {
-  try {
-    // In Electron, we can use IPC or a simple HTTP endpoint
-    // For now, we'll use a simple approach: write a flag file that Electron watches
-    const fs = await import("fs");
-    const path = await import("path");
-    
-    const flagPath = path.resolve(process.cwd(), ".restart-flag");
-    fs.writeFileSync(flagPath, "restart");
-    
-    console.log("[electronRestart] Restart flag created");
-  } catch (error) {
-    console.error("[electronRestart] Failed to create restart flag:", error);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/**
+ * Resolve the project root regardless of whether the server is running from
+ * the source tree (server/utils/ → ../../) or from server-dist (server-dist/ → ../).
+ *
+ * We walk up until we find a directory that contains electron/main.cjs, which
+ * is always present in the repo and is never moved during a build. That gives
+ * us the same root path that electron/main.cjs uses for its __dirname/../
+ * flag-file watch.
+ */
+function resolveProjectRoot(): string {
+  // From server/utils/ (dev)  : ../../
+  // From server-dist/  (prod) : ../
+  const candidates = [
+    path.resolve(__dirname, "../../"),  // dev: POS System/
+    path.resolve(__dirname, "../"),     // prod: POS System/  (server-dist is one level deep)
+    process.cwd(),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "electron", "main.cjs"))) {
+      return candidate;
+    }
   }
+
+  // Fallback: use cwd
+  return process.cwd();
 }
 
 /**
- * Alternative: Use HTTP endpoint if Electron exposes one
+ * Signal Electron main process to restart the application by writing a flag
+ * file that electron/main.cjs watches with fs.watchFile.
+ *
+ * The flag is written to <project-root>/.restart-flag, which is the same path
+ * that electron/main.cjs monitors.
  */
-export async function triggerRestartViaHttp(): Promise<void> {
+export async function triggerElectronRestart(): Promise<void> {
+  const projectRoot = resolveProjectRoot();
+  const flagPath = path.join(projectRoot, ".restart-flag");
+
   try {
-    const response = await fetch("http://localhost:3001/api/electron/restart", {
-      method: "POST",
-    });
-    
-    if (response.ok) {
-      console.log("[electronRestart] Restart signal sent via HTTP");
-    } else {
-      console.error("[electronRestart] Failed to send restart signal via HTTP");
-    }
+    fs.writeFileSync(flagPath, new Date().toISOString());
+    console.log(`[electronRestart] Restart flag written to ${flagPath}`);
   } catch (error) {
-    console.error("[electronRestart] HTTP restart failed:", error);
-    // Fallback to flag file method
-    await triggerElectronRestart();
+    console.error("[electronRestart] Failed to create restart flag:", error);
+    throw error;
   }
 }

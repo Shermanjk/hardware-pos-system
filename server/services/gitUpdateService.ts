@@ -50,7 +50,38 @@ function getRepositoryPath(): string {
   return path.resolve(process.env.UPDATE_REPOSITORY_PATH || process.cwd());
 }
 
-/** Pull only fast-forward commits, never merging local changes during an update. */
+/**
+ * Fetch remote refs without modifying the working tree. Returns whether
+ * commits are available that haven't been merged yet.
+ */
+export async function checkForUpdates(): Promise<{ hasUpdates: boolean; output: string }> {
+  const repositoryPath = getRepositoryPath();
+  if (!fs.existsSync(path.join(repositoryPath, ".git"))) {
+    throw new Error(`Update repository is unavailable at ${repositoryPath}`);
+  }
+
+  // Fetch silently — do not touch the working tree
+  const fetchResult = await runGit(["fetch", "--quiet"], repositoryPath);
+
+  // Compare HEAD with its remote tracking branch
+  let behind = 0;
+  try {
+    const revResult = await runGit(["rev-list", "--count", "HEAD..@{u}"], repositoryPath);
+    behind = parseInt(revResult.stdout.trim(), 10) || 0;
+  } catch {
+    // No upstream set — treat as no update available
+    behind = 0;
+  }
+
+  const output = `${fetchResult.stdout}\n${fetchResult.stderr}`.trim();
+  return { hasUpdates: behind > 0, output };
+}
+
+/**
+ * Pull only fast-forward commits, never merging local changes during an update.
+ * After this call config/version.json in the working tree reflects the new version
+ * so versionService.getVersionStatus() will report updateAvailable correctly.
+ */
 export async function pullApplicationUpdate(): Promise<{ changed: boolean; output: string }> {
   const repositoryPath = getRepositoryPath();
   if (!fs.existsSync(path.join(repositoryPath, ".git"))) {
@@ -62,7 +93,27 @@ export async function pullApplicationUpdate(): Promise<{ changed: boolean; outpu
   return { changed: !/already up to date/i.test(output), output };
 }
 
-/** Install lockfile-pinned dependencies and regenerate the client/server bundle. */
+/**
+ * Write a marker file so that the next Electron launch knows it needs to
+ * rebuild before starting the server. This avoids trying to rebuild while
+ * the server is already running (which can fail on Windows due to file locks).
+ */
+export function scheduleRebuildOnRestart(): void {
+  const repositoryPath = getRepositoryPath();
+  const rebuildFlagPath = path.join(repositoryPath, ".rebuild-needed");
+  try {
+    fs.writeFileSync(rebuildFlagPath, new Date().toISOString());
+    console.log("[gitUpdateService] Rebuild-on-restart flag written");
+  } catch (error) {
+    console.error("[gitUpdateService] Failed to write rebuild flag:", error);
+  }
+}
+
+/**
+ * Install lockfile-pinned dependencies and regenerate the client/server bundle.
+ * Call this from the Electron startup sequence BEFORE spawning the server, not
+ * while the server is already running.
+ */
 export async function buildApplicationUpdate(): Promise<void> {
   const repositoryPath = getRepositoryPath();
   if (!fs.existsSync(path.join(repositoryPath, "package.json"))) {

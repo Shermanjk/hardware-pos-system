@@ -37,17 +37,39 @@ function compareVersions(left: string, right: string): number {
 }
 
 /**
- * Read version.json from config directory
+ * Read version.json from config directory.
+ *
+ * Priority order:
+ *  1. The git-working-tree source (repo-root/config/version.json) — this is
+ *     updated immediately after a `git pull`, so the server can detect a new
+ *     version without requiring a rebuild first.
+ *  2. The compiled copy (server-dist/config/version.json) — present in
+ *     production when the source tree is not co-located.
  */
 export function readVersionFile(): VersionInfo | null {
-  try {
-    const versionPath = path.resolve(__dirname, "../../config/version.json");
-    const versionContent = fs.readFileSync(versionPath, "utf-8");
-    return JSON.parse(versionContent) as VersionInfo;
-  } catch (error) {
-    console.error("[versionService] Failed to read version.json:", error);
-    return null;
+  // Candidate paths from most-preferred to least-preferred.
+  const candidates = [
+    // 1. Source tree root (works in dev and in production when the repo lives
+    //    next to server-dist, as is the case for the git-based deployment).
+    path.resolve(__dirname, "../../config/version.json"),
+    // 2. Built copy inside server-dist (fallback for packaged builds where the
+    //    source tree may not be present).
+    path.resolve(__dirname, "../config/version.json"),
+  ];
+
+  for (const versionPath of candidates) {
+    try {
+      if (fs.existsSync(versionPath)) {
+        const versionContent = fs.readFileSync(versionPath, "utf-8");
+        return JSON.parse(versionContent) as VersionInfo;
+      }
+    } catch {
+      // Try next candidate
+    }
   }
+
+  console.error("[versionService] version.json not found in any expected location");
+  return null;
 }
 
 /**

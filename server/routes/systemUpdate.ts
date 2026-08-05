@@ -4,7 +4,7 @@ import { requireRole } from "../middleware/requireRole.js";
 import {
     createBackup,
 } from "../services/backupService.js";
-import { buildApplicationUpdate, pullApplicationUpdate } from "../services/gitUpdateService.js";
+import { checkForUpdates, pullApplicationUpdate, scheduleRebuildOnRestart } from "../services/gitUpdateService.js";
 import { maintenanceService } from "../services/maintenanceService.js";
 import {
     executePendingMigrations,
@@ -37,7 +37,7 @@ router.get("/check", async (req: Request, res: Response) => {
     const clientVersion = req.headers["x-client-version"] as string;
     
     // If client version differs from installed version, an update was installed
-    const updateInstalled = clientVersion && clientVersion !== status.installedVersion;
+    const updateInstalled = !!(clientVersion && clientVersion !== status.installedVersion);
     
     res.status(200).json({
       installedVersion: status.installedVersion,
@@ -49,15 +49,38 @@ router.get("/check", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/system-update/fetch ───────────────────────────────────────────
+// Check for available updates by running git fetch + comparing commits.
+// Does NOT modify the working tree — safe to call at any time.
+router.post("/fetch", requireRole("Admin"), async (req: Request, res: Response) => {
+  try {
+    const fetchResult = await checkForUpdates();
+    const versionStatus = await getVersionStatus();
+    res.status(200).json({
+      message: fetchResult.hasUpdates ? "Updates are available" : "Already up to date",
+      hasUpdates: fetchResult.hasUpdates,
+      ...versionStatus,
+    });
+  } catch (error) {
+    console.error("[systemUpdate/fetch] Error:", error);
+    res.status(500).json({ message: "Failed to check for updates" });
+  }
+});
+
 // ─── POST /api/system-update/pull ────────────────────────────────────────────
-// Pull latest changes from remote repository
+// Pull latest changes from remote repository (git pull --ff-only).
+// After this, config/version.json in the working tree is up-to-date so
+// GET /version will reflect the new downloaded version immediately.
 router.post("/pull", requireRole("Admin"), async (req: Request, res: Response) => {
   try {
     const pullResult = await pullApplicationUpdate();
+    // Re-read version status after pull so the response includes the new versions
+    const versionStatus = await getVersionStatus();
     res.status(200).json({
-      message: "Git pull completed",
+      message: pullResult.changed ? "Updates downloaded successfully" : "Already up to date",
       changed: pullResult.changed,
       output: pullResult.output,
+      ...versionStatus,
     });
   } catch (error) {
     console.error("[systemUpdate/pull] Error:", error);
@@ -122,11 +145,13 @@ router.post("/install", requireRole("Admin"), async (req: Request, res: Response
       });
     }
 
-    // Step 3: Install the lockfile-pinned dependencies and rebuild server-dist
-    // and the web client. The existing shortcut continues to launch this folder.
-    await buildApplicationUpdate();
+    // Step 3: Schedule a rebuild on the next Electron launch.
+    // We do NOT rebuild here (the server is currently running from those files
+    // and Windows locks them). Electron will detect the flag, run `pnpm build`,
+    // and only then start the new server process.
+    scheduleRebuildOnRestart();
 
-    // Step 4: Update installed version
+    // Step 4: Update installed version in the database.
     // The database version is advanced by each successful forward-only
     // migration. Keep it unchanged when this release has no DB migration.
     await updateInstalledVersion(versionStatus.downloadedVersion, versionStatus.downloadedDatabaseVersion);
