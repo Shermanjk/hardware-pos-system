@@ -52,7 +52,7 @@ router.get("/check", async (req: Request, res: Response) => {
 // ─── POST /api/system-update/fetch ───────────────────────────────────────────
 // Check for available updates by running git fetch + comparing commits.
 // Does NOT modify the working tree — safe to call at any time.
-router.post("/fetch", requireRole("Admin"), async (req: Request, res: Response) => {
+router.post("/fetch", authenticate, requireRole("Admin"), async (req: Request, res: Response) => {
   try {
     const fetchResult = await checkForUpdates();
     const versionStatus = await getVersionStatus();
@@ -71,7 +71,7 @@ router.post("/fetch", requireRole("Admin"), async (req: Request, res: Response) 
 // Pull latest changes from remote repository (git pull --ff-only).
 // After this, config/version.json in the working tree is up-to-date so
 // GET /version will reflect the new downloaded version immediately.
-router.post("/pull", requireRole("Admin"), async (req: Request, res: Response) => {
+router.post("/pull", authenticate, requireRole("Admin"), async (req: Request, res: Response) => {
   try {
     const pullResult = await pullApplicationUpdate();
     // Re-read version status after pull so the response includes the new versions
@@ -89,7 +89,7 @@ router.post("/pull", requireRole("Admin"), async (req: Request, res: Response) =
 });
 
 // ─── POST /api/system-update/install ──────────────────────────────────────────
-router.post("/install", requireRole("Admin"), async (req: Request, res: Response) => {
+router.post("/install", authenticate, requireRole("Admin"), async (req: Request, res: Response) => {
   if (!maintenanceService.enter()) {
     return res.status(409).json({ message: "An update or maintenance operation is already in progress" });
   }

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface UpdateCheckResponse {
   installedVersion: string;
@@ -31,8 +31,8 @@ export function UpdateNotification() {
             setInstalledVersion(data.installedVersion);
           }
         }
-      } catch (error) {
-        // Silently fail - don't spam console with network errors
+      } catch {
+        // Silently fail — don't spam console with network errors
       }
     };
 
@@ -48,11 +48,15 @@ export function UpdateNotification() {
     window.location.reload();
   };
 
+  const handleDismiss = () => {
+    setShowNotification(false);
+  };
+
   if (!showNotification) return null;
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-md">
-      <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+      <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800 pr-10">
         <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
         <AlertTitle className="text-blue-900 dark:text-blue-100">
           Update Available
@@ -69,6 +73,14 @@ export function UpdateNotification() {
             </Button>
           </div>
         </AlertDescription>
+        {/* Dismiss button */}
+        <button
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 text-blue-400 hover:text-blue-700 dark:text-blue-500 dark:hover:text-blue-300 transition-colors"
+          aria-label="Dismiss notification"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </Alert>
     </div>
   );
