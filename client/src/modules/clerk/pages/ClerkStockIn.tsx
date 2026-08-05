@@ -280,6 +280,8 @@ function CommodityPurchaseCard({
   // NEW: deducted_quantity is physical weight (e.g., 3 kg), NOT price per unit
   const [deductedQty,     setDeductedQty]      = useState("");
   const [sellerName,       setSellerName]       = useState("");
+  const [sellerAddress,    setSellerAddress]    = useState("");
+  const [sellerContact,    setSellerContact]    = useState("");
   const [remarks,          setRemarks]          = useState("");
 
   const [saving,           setSaving]           = useState(false);
@@ -319,8 +321,9 @@ function CommodityPurchaseCard({
         product_id:       product.id,
         supplier_id:      supplierId ? parseInt(supplierId) : null,
         seller_name:      sellerName.trim() || null,
+        seller_address:   sellerAddress.trim() || null,
+        seller_contact:   sellerContact.trim() || null,
         quantity:         q,
-        // NEW: Use deducted_quantity (physical weight) instead of deduction_per_unit (price)
         deducted_quantity: d,
         transaction_date: deliveryDate,
         remarks:          remarks.trim() || null,
@@ -424,6 +427,24 @@ function CommodityPurchaseCard({
                 placeholder="Quality notes…"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
+                className="h-9 border-gray-300"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Seller Address <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input
+                placeholder="e.g. Brgy. San Jose, Butuan City"
+                value={sellerAddress}
+                onChange={(e) => setSellerAddress(e.target.value)}
+                className="h-9 border-gray-300"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Seller Contact No. <span className="text-gray-400 font-normal">(optional)</span></Label>
+              <Input
+                placeholder="e.g. 09XX-XXX-XXXX"
+                value={sellerContact}
+                onChange={(e) => setSellerContact(e.target.value)}
                 className="h-9 border-gray-300"
               />
             </div>

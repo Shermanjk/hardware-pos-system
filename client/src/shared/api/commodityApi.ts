@@ -39,6 +39,9 @@ export interface CommodityPurchase {
   product_name: string;
   barcode: string;
   seller: string;
+  seller_name: string | null;
+  seller_address: string | null;
+  seller_contact: string | null;
   quantity: number;
   unit_name: string;
   reference_price: number;
@@ -89,6 +92,8 @@ export interface RecordPurchasePayload {
   product_id: number;
   supplier_id?: number | null;
   seller_name?: string | null;
+  seller_address?: string | null;
+  seller_contact?: string | null;
   quantity: number;
   deducted_quantity?: number;
   deduction_per_unit?: number;

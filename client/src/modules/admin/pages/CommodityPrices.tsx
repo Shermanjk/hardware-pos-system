@@ -1,20 +1,32 @@
-import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
-  TrendingUp, History, RefreshCw, AlertCircle, X, Edit2, Clock,
-  CheckCircle2, XCircle,
-} from "lucide-react";
-import axios from "axios";
-import { toast } from "sonner";
-import {
-  getCommodityProducts, getPriceHistory, setPrice,
-  getPurchaseHistory, getPendingCommodityPurchases,
-  approveCommodityPurchase, rejectCommodityPurchase,
-  type CommodityProduct, type CommodityPriceRecord, type CommodityPurchase,
+    approveCommodityPurchase,
+    getCommodityProducts,
+    getPendingCommodityPurchases,
+    getPriceHistory,
+    getPurchaseHistory,
+    rejectCommodityPurchase,
+    setPrice,
+    type CommodityPriceRecord,
+    type CommodityProduct,
+    type CommodityPurchase,
 } from "@/shared/api/commodityApi";
+import axios from "axios";
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    Edit2,
+    History, RefreshCw,
+    TrendingUp,
+    X,
+    XCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,7 +160,7 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-amber-100 text-amber-800">
-                  {["Date", "Product", "Seller", "Qty Received", "Deducted", "Payable", "Ref. Price", "Gross", "Deduction", "Final Amount", "Submitted By", "Actions"].map((h) => (
+                  {["Date", "Product", "Seller", "Address", "Contact", "Qty Received", "Deducted", "Payable", "Ref. Price", "Gross", "Deduction", "Final Amount", "Submitted By", "Actions"].map((h) => (
                     <th key={h} className="py-3 px-3 font-semibold text-xs uppercase tracking-wide text-left">{h}</th>
                   ))}
                 </tr>
@@ -162,6 +174,12 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
                       <p className="font-mono text-xs text-gray-400">{p.barcode}</p>
                     </td>
                     <td className="py-3 px-3 text-xs text-gray-600">{p.seller || "—"}</td>
+                    <td className="py-3 px-3 text-xs text-gray-500 max-w-[140px]">
+                      {(p as any).seller_address || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="py-3 px-3 text-xs text-gray-500 whitespace-nowrap">
+                      {(p as any).seller_contact || <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="py-3 px-3 text-right font-bold text-gray-900 tabular-nums">
                       {Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}
                     </td>
@@ -248,6 +266,18 @@ function PendingApprovalsSection({ refreshKey, onRefresh }: { refreshKey: number
                     <span className="text-xs text-gray-500">Seller</span>
                     <span className="text-xs font-medium text-gray-700">{p.seller || "—"}</span>
                   </div>
+                  {(p as any).seller_address && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs text-gray-500 shrink-0">Address</span>
+                      <span className="text-xs text-gray-700 text-right">{(p as any).seller_address}</span>
+                    </div>
+                  )}
+                  {(p as any).seller_contact && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Contact</span>
+                      <span className="text-xs text-gray-700 font-mono">{(p as any).seller_contact}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500">Qty Received</span>
                     <span className="text-xs font-semibold text-gray-900">{Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}</span>
@@ -742,8 +772,8 @@ function MarketBasedWithTabs({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-800 text-white">
-                    {["Date", "Product", "Seller", "Qty Rec", "Ded", "Payable", "Ref.Price", "Gross", "Ded.Amt", "FinalAmt", "Status", "Pmt", "By"].map((h, i) => (
-                      <th key={h} className={`py-3 px-2 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i >= 3 && i <= 9 ? "text-right" : i >= 11 ? "text-center" : "text-left"}`}>{h}</th>
+                    {["Date", "Product", "Seller", "Address", "Contact", "Qty Rec", "Ded", "Payable", "Ref.Price", "Gross", "Ded.Amt", "FinalAmt", "Status", "Pmt", "By"].map((h, i) => (
+                      <th key={h} className={`py-3 px-2 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i >= 5 && i <= 11 ? "text-right" : i >= 13 ? "text-center" : "text-left"}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -760,6 +790,12 @@ function MarketBasedWithTabs({
                         <p className="font-mono text-xs text-gray-400">{p.barcode}</p>
                       </td>
                       <td className="py-3 px-3 text-xs text-gray-600">{p.seller}</td>
+                      <td className="py-3 px-3 text-xs text-gray-500 max-w-[120px] truncate" title={(p as any).seller_address || ""}>
+                        {(p as any).seller_address || <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="py-3 px-3 text-xs text-gray-500 whitespace-nowrap font-mono">
+                        {(p as any).seller_contact || <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="py-3 px-3 text-right font-bold text-gray-900 tabular-nums">
                         {Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}
                       </td>
@@ -870,6 +906,14 @@ function MarketBasedWithTabs({
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${selectedPurchase.payment_status === "PAID" ? "bg-green-100 text-green-700" : selectedPurchase.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>{selectedPurchase.payment_status}</span>
                   </div>
                   <div><span className="text-gray-500 text-xs block mb-0.5">Seller</span><span className="font-medium">{selectedPurchase.seller || "—"}</span></div>
+                  <div className="col-span-2">
+                    <span className="text-gray-500 text-xs block mb-0.5">Seller Address</span>
+                    <span className="font-medium text-sm">{selectedPurchase.seller_address || <span className="text-gray-400 font-normal">—</span>}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 text-xs block mb-0.5">Seller Contact</span>
+                    <span className="font-medium font-mono">{selectedPurchase.seller_contact || <span className="text-gray-400 font-normal">—</span>}</span>
+                  </div>
                   <div><span className="text-gray-500 text-xs block mb-0.5">Date</span><span className="font-medium">{fmtDateOnly(selectedPurchase.transaction_date)}</span></div>
                   <div><span className="text-gray-500 text-xs block mb-0.5">Submitted By</span><span className="font-medium">{selectedPurchase.prepared_by_name || "—"}</span></div>
                   {selectedPurchase.approved_by_name && <div><span className="text-gray-500 text-xs block mb-0.5">Approved By</span><span className="font-medium">{selectedPurchase.approved_by_name}</span></div>}

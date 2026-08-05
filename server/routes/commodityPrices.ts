@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
@@ -42,6 +42,8 @@ const purchaseSchema = z.object({
   product_id:         z.number().int().positive(),
   supplier_id:        z.number().int().positive().optional().nullable(),
   seller_name:        z.string().max(150).optional().nullable(),
+  seller_address:     z.string().max(500).optional().nullable(),
+  seller_contact:     z.string().max(100).optional().nullable(),
   quantity:           z.number().positive("Quantity must be greater than 0"),
   // NEW: deducted_quantity replaces deduction_per_unit
   // This is the physical quantity to deduct (e.g., 3 kg)
@@ -256,6 +258,8 @@ router.post("/purchase", async (req: Request, res: Response) => {
     product_id, supplier_id, seller_name,
     quantity, deducted_quantity, deduction_per_unit, transaction_date, remarks,
   } = parsed.data;
+  const seller_address = parsed.data.seller_address?.trim() || null;
+  const seller_contact = parsed.data.seller_contact?.trim() || null;
 
   // Determine which deduction model to use:
   // - If deducted_quantity > 0, use new model (physical quantity deduction)
@@ -377,7 +381,8 @@ router.post("/purchase", async (req: Request, res: Response) => {
     // Include all new columns for physical quantity deduction model
     const [purchaseResult] = await conn.execute<any>(`
       INSERT INTO commodity_purchases
-        (product_id, supplier_id, seller_name, quantity, unit_id, unit_name,
+        (product_id, supplier_id, seller_name, seller_address, seller_contact,
+         quantity, unit_id, unit_name,
          reference_price, 
          deducted_quantity, payable_quantity, deduction_amount,
          deduction_per_unit, final_unit_price,
@@ -385,30 +390,30 @@ router.post("/purchase", async (req: Request, res: Response) => {
          payment_status,
          status, prepared_by,
          remarks, recorded_by, transaction_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       product_id,
       supplier_id ?? null,
       seller_name?.trim() || null,
+      seller_address,
+      seller_contact,
       quantity,
       unit.id,
       unit.unit_name,
       reference_price,
-      // New columns for physical quantity deduction
       effectiveDeductedQty,
       payable_quantity,
       deduction_amount,
-      // Legacy columns for backwards compatibility
       useNewModel ? 0 : legacyDeductionPerUnit,
       final_unit_price,
       gross_amount,
       total_deduction,
       final_amount,
-      "UNPAID", // payment_status starts as UNPAID
-      purchaseStatus, // PENDING_APPROVAL
-      req.user!.id, // prepared_by = Clerk who submitted
+      "UNPAID",
+      purchaseStatus,
+      req.user!.id,
       remarks?.trim() || null,
-      req.user!.id, // recorded_by
+      req.user!.id,
       transaction_date,
     ]);
 
@@ -487,6 +492,8 @@ router.get("/purchases/pending", async (req: Request, res: Response) => {
         p.product_name,
         p.barcode,
         cp.seller_name,
+        cp.seller_address,
+        cp.seller_contact,
         cp.quantity,
         cp.unit_name,
         cp.reference_price,
@@ -555,6 +562,8 @@ router.get("/purchases/approved", async (req: Request, res: Response) => {
         p.product_name,
         p.barcode,
         cp.seller_name,
+        cp.seller_address,
+        cp.seller_contact,
         cp.quantity,
         cp.unit_name,
         cp.reference_price,
@@ -839,6 +848,9 @@ router.get("/purchases", async (req: Request, res: Response) => {
         p.product_name,
         p.barcode,
         COALESCE(s.supplier_name, cp.seller_name, '—') AS seller,
+        cp.seller_name,
+        cp.seller_address,
+        cp.seller_contact,
         cp.quantity,
         cp.unit_name,
         cp.reference_price,
@@ -959,7 +971,6 @@ router.post("/purchases/:id/approve", async (req: Request, res: Response) => {
           approved_at = NOW(),
           payment_status = 'PAID',
           amount_paid = ?,
-          balance_due = 0,
           paid_at = NOW(),
           paid_by = ?
       WHERE id = ?
