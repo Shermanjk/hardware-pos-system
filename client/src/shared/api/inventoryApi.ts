@@ -231,6 +231,28 @@ export async function rejectAdjustmentRequest(
   return res.data;
 }
 
+export async function localOverrideAdjustmentRequest(
+  id: number,
+  payload: { username: string; password: string }
+): Promise<{ message: string; new_quantity: number; reference: string; admin_name: string; admin_id: number }> {
+  const res = await httpClient.post(
+    `/api/market-based-adjustments/requests/${id}/local-override`,
+    payload
+  );
+  return res.data;
+}
+
+export async function authorizeAdjustmentRequest(
+  adjustmentPayload: CreateAdjustmentRequestPayload,
+  credentials: { username: string; password: string }
+): Promise<{ message: string; id: number; reference: string; new_quantity: number; admin_name: string; admin_id: number }> {
+  const res = await httpClient.post(
+    "/api/market-based-adjustments/requests/authorize",
+    { ...adjustmentPayload, ...credentials }
+  );
+  return res.data;
+}
+
 export async function getAdjustmentHistory(
   filters: {
     product_id?: number;

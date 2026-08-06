@@ -1,9 +1,9 @@
+import bcrypt from "bcryptjs";
 import { Request, Response, Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-
 const router = Router();
 router.use(authenticate);
 
@@ -619,6 +619,184 @@ router.get("/purchases/approved", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/commodity-prices/purchases/authorize — Create + immediately approve ─
+// Single atomic endpoint: creates the purchase record AND approves it in one
+// transaction. Used for local manager override so the record NEVER appears as
+// PENDING_APPROVAL on the admin terminal.
+const authorizeSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+router.post("/purchases/authorize", async (req: Request, res: Response) => {
+  // Validate manager credentials first (before touching purchase data)
+  const credParsed = authorizeSchema.safeParse(req.body);
+  if (!credParsed.success) {
+    res.status(400).json({ message: credParsed.error.issues[0]?.message ?? "Invalid request." });
+    return;
+  }
+
+  // Validate purchase payload using the same schema
+  const purchaseParsed = purchaseSchema.safeParse(req.body);
+  if (!purchaseParsed.success) {
+    res.status(422).json({ errors: purchaseParsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
+    return;
+  }
+
+  const { username, password } = credParsed.data;
+  const {
+    product_id, supplier_id, seller_name,
+    quantity, deducted_quantity, deduction_per_unit, transaction_date, remarks,
+  } = purchaseParsed.data;
+  const seller_address = purchaseParsed.data.seller_address?.trim() || null;
+  const seller_contact = purchaseParsed.data.seller_contact?.trim() || null;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── 1. Verify manager credentials ────────────────────────────────────────
+    const [userRows] = await conn.execute<any[]>(
+      `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+      [username]
+    );
+    const manager = userRows[0];
+    if (!manager || manager.status !== "Active") {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+    if (!passwordMatch) {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    if (manager.role !== "Admin") {
+      await conn.rollback();
+      res.status(403).json({ message: "Only an Admin can authorize purchase requests." });
+      return;
+    }
+
+    // ── 2. Fetch and validate product ────────────────────────────────────────
+    const [productRows] = await conn.execute<any[]>(
+      "SELECT id, product_name, pricing_type, unit_id, quantity AS current_qty FROM products WHERE id = ? FOR UPDATE",
+      [product_id]
+    );
+    if (productRows.length === 0) { await conn.rollback(); res.status(404).json({ message: "Product not found." }); return; }
+    const product = productRows[0];
+    if (product.pricing_type !== "MARKET_BASED") { await conn.rollback(); res.status(422).json({ message: "This product is not configured as MARKET_BASED." }); return; }
+
+    const [priceRows] = await conn.execute<any[]>(
+      "SELECT price_per_unit FROM commodity_prices WHERE product_id = ? ORDER BY effective_from DESC LIMIT 1",
+      [product_id]
+    );
+    if (priceRows.length === 0) { await conn.rollback(); res.status(422).json({ message: "No reference price has been set for this product." }); return; }
+    const reference_price = Number(priceRows[0].price_per_unit);
+
+    const [unitRows] = await conn.execute<any[]>(
+      "SELECT id, unit_name, abbreviation FROM units WHERE id = ? LIMIT 1",
+      [product.unit_id]
+    );
+    const unit = unitRows[0] ?? { id: product.unit_id, unit_name: "unit", abbreviation: "unit" };
+
+    // ── 3. Calculate amounts ──────────────────────────────────────────────────
+    const useNewModel = deducted_quantity > 0;
+    const effectiveDeductedQty = useNewModel ? deducted_quantity : 0;
+    const legacyDeductionPerUnit = deduction_per_unit || 0;
+    const qtyReceived = Math.max(0, Number(quantity));
+
+    let payable_quantity: number, deduction_amount: number, gross_amount: number;
+    let final_amount: number, final_unit_price: number, total_deduction: number;
+
+    if (useNewModel) {
+      if (effectiveDeductedQty > qtyReceived) { await conn.rollback(); res.status(422).json({ message: "Deducted quantity cannot exceed quantity received." }); return; }
+      payable_quantity = Math.round((qtyReceived - effectiveDeductedQty) * 10000) / 10000;
+      deduction_amount = Math.round(effectiveDeductedQty * reference_price * 10000) / 10000;
+      gross_amount     = Math.round(qtyReceived * reference_price * 10000) / 10000;
+      final_amount     = Math.round(payable_quantity * reference_price * 10000) / 10000;
+      final_unit_price = reference_price;
+      total_deduction  = deduction_amount;
+    } else {
+      const deduction = Math.max(0, legacyDeductionPerUnit);
+      if (deduction > reference_price) { await conn.rollback(); res.status(422).json({ message: "Deduction per unit cannot exceed the reference price." }); return; }
+      payable_quantity = qtyReceived;
+      deduction_amount = 0;
+      final_unit_price  = Math.round((reference_price - deduction) * 10000) / 10000;
+      gross_amount      = Math.round(qtyReceived * reference_price * 10000) / 10000;
+      total_deduction   = Math.round(qtyReceived * deduction * 10000) / 10000;
+      final_amount      = Math.round(qtyReceived * final_unit_price * 10000) / 10000;
+    }
+
+    // ── 4. Insert purchase record directly as APPROVED ────────────────────────
+    const [purchaseResult] = await conn.execute<any>(`
+      INSERT INTO commodity_purchases
+        (product_id, supplier_id, seller_name, seller_address, seller_contact,
+         quantity, unit_id, unit_name,
+         reference_price,
+         deducted_quantity, payable_quantity, deduction_amount,
+         deduction_per_unit, final_unit_price,
+         gross_amount, total_deduction, final_amount,
+         payment_status,
+         status, prepared_by, approved_by, approved_at,
+         amount_paid, paid_at, paid_by,
+         remarks, recorded_by, transaction_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?, ?, ?, ?)
+    `, [
+      product_id, supplier_id ?? null, seller_name?.trim() || null, seller_address, seller_contact,
+      quantity, unit.id, unit.unit_name, reference_price,
+      effectiveDeductedQty, payable_quantity, deduction_amount,
+      useNewModel ? 0 : legacyDeductionPerUnit, final_unit_price,
+      gross_amount, total_deduction, final_amount,
+      "PAID", "APPROVED",
+      req.user!.id, manager.id,
+      final_amount, manager.id,
+      remarks?.trim() || null, req.user!.id, transaction_date,
+    ]);
+
+    const purchaseId: number = purchaseResult.insertId;
+
+    // ── 5. Update product inventory ───────────────────────────────────────────
+    const newQty = Math.round((Number(product.current_qty) + payable_quantity) * 1000) / 1000;
+    await conn.execute("UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?", [newQty, product_id]);
+    await conn.execute(`
+      INSERT INTO inventory_logs
+        (product_id, transaction_type, action, quantity_change, quantity, remaining_stock,
+         reference, commodity_purchase_id, user_id)
+      VALUES (?, 'Stock In', 'Commodity Purchase Approved', ?, ?, ?, ?, ?, ?)
+    `, [product_id, payable_quantity, product.current_qty, newQty, `CP-${purchaseId}`, purchaseId, manager.id]);
+
+    await conn.commit();
+
+    // ── 6. Audit logs ─────────────────────────────────────────────────────────
+    await logAuditEvent({
+      action: "COMMODITY_PURCHASE_SUBMITTED",
+      performedById: req.user!.id, performedByUsername: req.user!.username,
+      entityType: "commodity_purchases", entityId: purchaseId,
+      newValues: { product_id, product_name: product.product_name, quantity, reference_price, deducted_quantity: effectiveDeductedQty, payable_quantity, final_amount, status: "APPROVED" },
+    });
+    await logAuditEvent({
+      action: "COMMODITY_PURCHASE_APPROVED_LOCAL_OVERRIDE",
+      performedById: manager.id, performedByUsername: manager.username,
+      entityType: "commodity_purchases", entityId: purchaseId,
+      newValues: { product_name: product.product_name, quantity_added: payable_quantity, new_stock_quantity: newQty, override_method: "local_manager_override", clerk_id: req.user!.id, clerk_username: req.user!.username },
+    });
+
+    res.status(201).json({
+      message: "Purchase authorized and inventory updated.",
+      id: purchaseId, status: "APPROVED", new_stock_quantity: newQty,
+      admin_name: manager.full_name ?? manager.username, admin_id: manager.id,
+      payable_quantity, final_amount,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[commodity/POST /purchases/authorize] Error:", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  } finally {
+    conn.release();
+  }
+});
+
 // ─── POST /api/commodity-prices/purchases/:id/payment — record a payment ──────
 // Records a payment event against an APPROVED commodity purchase.
 // CASHIER only. Backend recalculates payment_status from total payments vs final_amount.
@@ -1120,6 +1298,152 @@ router.post("/purchases/:id/reject", async (req: Request, res: Response) => {
   } catch (err) {
     await conn.rollback();
     console.error("[commodity/POST /purchases/:id/reject]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── POST /api/commodity-prices/purchases/:id/local-override — Clerk Terminal ─
+// Verifies admin credentials on the spot, then approves the commodity purchase
+// immediately — identical logic to /purchases/:id/approve.
+const localOverrideSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+router.post("/purchases/:id/local-override", async (req: Request, res: Response) => {
+  const purchaseId = parseInt(req.params.id, 10);
+  if (isNaN(purchaseId)) { res.status(400).json({ message: "Invalid purchase ID." }); return; }
+
+  const parsed = localOverrideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+    return;
+  }
+
+  const { username, password } = parsed.data;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── 1. Verify manager credentials ────────────────────────────────────────
+    const [userRows] = await conn.execute<any[]>(
+      `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+      [username]
+    );
+    const manager = userRows[0];
+    if (!manager || manager.status !== "Active") {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+    if (!passwordMatch) {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    if (manager.role !== "Admin") {
+      await conn.rollback();
+      res.status(403).json({ message: "Only an Admin can authorize purchase requests." });
+      return;
+    }
+
+    // ── 2. Lock purchase row ──────────────────────────────────────────────────
+    const [purchaseRows] = await conn.execute<any[]>(
+      "SELECT id, status, product_id, quantity, payable_quantity, deducted_quantity, prepared_by, final_amount FROM commodity_purchases WHERE id = ? FOR UPDATE",
+      [purchaseId]
+    );
+    if (purchaseRows.length === 0) {
+      await conn.rollback();
+      res.status(404).json({ message: "Purchase not found." });
+      return;
+    }
+    const purchase = purchaseRows[0];
+
+    if (purchase.status !== "PENDING_APPROVAL") {
+      await conn.rollback();
+      res.status(422).json({ message: `Cannot approve. Current status: ${purchase.status}` });
+      return;
+    }
+
+    // Prevent self-approval — admin cannot approve a record they submitted
+    if (purchase.prepared_by === manager.id) {
+      await conn.rollback();
+      res.status(403).json({ message: "You cannot approve your own purchase request." });
+      return;
+    }
+
+    // ── 3. Lock product row ───────────────────────────────────────────────────
+    const [productRows] = await conn.execute<any[]>(
+      "SELECT id, product_name, quantity AS current_qty FROM products WHERE id = ? FOR UPDATE",
+      [purchase.product_id]
+    );
+    if (productRows.length === 0) {
+      await conn.rollback();
+      res.status(404).json({ message: "Product not found." });
+      return;
+    }
+    const product = productRows[0];
+
+    // ── 4. Approve — identical to /purchases/:id/approve ─────────────────────
+    const finalAmount = Number(purchase.final_amount);
+    await conn.execute(`
+      UPDATE commodity_purchases
+      SET status = 'APPROVED', approved_by = ?, approved_at = NOW(),
+          payment_status = 'PAID', amount_paid = ?, paid_at = NOW(), paid_by = ?
+      WHERE id = ?
+    `, [manager.id, finalAmount, manager.id, purchaseId]);
+
+    const payableQty = Number(purchase.payable_quantity ?? null) > 0 && Number(purchase.payable_quantity) <= Number(purchase.quantity)
+      ? Number(purchase.payable_quantity)
+      : Number(purchase.quantity);
+    const newQty = Math.round((Number(product.current_qty) + payableQty) * 1000) / 1000;
+    await conn.execute(
+      "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
+      [newQty, purchase.product_id]
+    );
+
+    await conn.execute(`
+      INSERT INTO inventory_logs
+        (product_id, transaction_type, action, quantity_change, quantity, remaining_stock,
+         reference, commodity_purchase_id, user_id)
+      VALUES (?, 'Stock In', 'Commodity Purchase Approved', ?, ?, ?, ?, ?, ?)
+    `, [purchase.product_id, payableQty, product.current_qty, newQty, `CP-${purchaseId}`, purchaseId, manager.id]);
+
+    await conn.commit();
+
+    // ── 5. Audit log ──────────────────────────────────────────────────────────
+    await logAuditEvent({
+      action: "COMMODITY_PURCHASE_APPROVED_LOCAL_OVERRIDE",
+      performedById: manager.id,
+      performedByUsername: manager.username,
+      entityType: "commodity_purchases",
+      entityId: purchaseId,
+      newValues: {
+        product_id: purchase.product_id,
+        product_name: product.product_name,
+        quantity_added: payableQty,
+        new_stock_quantity: newQty,
+        override_method: "local_manager_override",
+        clerk_id: req.user!.id,
+        clerk_username: req.user!.username,
+      },
+    });
+
+    res.status(200).json({
+      message: "Purchase approved via manager override. Inventory updated.",
+      id: purchaseId,
+      status: "APPROVED",
+      new_stock_quantity: newQty,
+      admin_name: manager.full_name ?? manager.username,
+      admin_id: manager.id,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[commodity/POST /purchases/:id/local-override] Error:", err);
     res.status(500).json({ message: "An unexpected error occurred." });
   } finally {
     conn.release();

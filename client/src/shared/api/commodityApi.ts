@@ -236,6 +236,28 @@ export async function rejectCommodityPurchase(
   return res.data;
 }
 
+export async function localOverrideCommodityPurchase(
+  purchaseId: number,
+  payload: { username: string; password: string }
+): Promise<{ message: string; id: number; status: string; new_stock_quantity: number; admin_name: string; admin_id: number }> {
+  const res = await httpClient.post(
+    `/api/commodity-prices/purchases/${purchaseId}/local-override`,
+    payload
+  );
+  return res.data;
+}
+
+export async function authorizeCommodityPurchase(
+  purchasePayload: RecordPurchasePayload,
+  credentials: { username: string; password: string }
+): Promise<{ message: string; id: number; status: string; new_stock_quantity: number; admin_name: string; admin_id: number; payable_quantity: number; final_amount: number }> {
+  const res = await httpClient.post(
+    "/api/commodity-prices/purchases/authorize",
+    { ...purchasePayload, ...credentials }
+  );
+  return res.data;
+}
+
 // Legacy alias
 export const recordPurchase = submitCommodityPurchase;
 

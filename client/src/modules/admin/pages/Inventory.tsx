@@ -1,17 +1,32 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Search, RefreshCw, AlertCircle, X, Package,
-  Boxes, AlertTriangle, TrendingDown, CheckCircle2, History,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  getInventory, getInventorySummary, getInventoryLogs,
-  type InventoryItem, type InventorySummary, type InventoryLog, type StockStatusFilter,
+    getInventory,
+    getInventoryLogs,
+    getInventorySummary,
+    type InventoryItem,
+    type InventoryLog,
+    type InventorySummary,
+    type StockStatusFilter,
 } from "@/shared/api/inventoryApi";
-import { getCategories, type Category, deriveStatus } from "@/shared/api/productsApi";
+import { deriveStatus, getCategories, type Category } from "@/shared/api/productsApi";
+import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
-import { formatQuantity, formatQuantityParts } from "@/shared/utils/quantityFormat";
+import {
+    AlertCircle,
+    AlertTriangle,
+    Boxes,
+    CheckCircle2,
+    Eye,
+    History,
+    Package,
+    RefreshCw,
+    Search,
+    TrendingDown,
+    X
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -95,7 +110,7 @@ function SummaryCards({ summary, loading }: { summary: InventorySummary | null; 
 // ─── Stock Table ──────────────────────────────────────────────────────────────
 
 function StockTable({
-  items, loading, error, onRetry, onSelectProduct, selectedProductId,
+  items, loading, error, onRetry, onSelectProduct, selectedProductId, onViewDetails,
 }: {
   items: InventoryItem[];
   loading: boolean;
@@ -103,6 +118,7 @@ function StockTable({
   onRetry: () => void;
   onSelectProduct: (id: number | null) => void;
   selectedProductId: number | null;
+  onViewDetails: (item: InventoryItem) => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -125,7 +141,7 @@ function StockTable({
               <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Damaged</th>
               <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
               <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Last Updated</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Logs</th>
+              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -187,16 +203,25 @@ function StockTable({
                   </td>
                   <td className="py-3.5 px-5 text-center">{statusBadge(st)}</td>
                   <td className="py-3.5 px-5 text-xs text-gray-400">{fmtRelative(item.updated_at)}</td>
-                  <td className="py-3.5 px-5 text-center">
-                    <button
-                      onClick={() => onSelectProduct(isSelected ? null : item.id)}
-                      className={`h-7 w-7 rounded-lg flex items-center justify-center mx-auto transition-colors ${
-                        isSelected ? "bg-blue-600 text-white" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                      }`}
-                      title="View movement logs"
-                    >
-                      <History className="h-4 w-4" />
-                    </button>
+                  <td className="py-3.5 px-5">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => onViewDetails(item)}
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="View product details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => onSelectProduct(isSelected ? null : item.id)}
+                        className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${
+                          isSelected ? "bg-blue-600 text-white" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                        }`}
+                        title="View movement logs"
+                      >
+                        <History className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -302,6 +327,232 @@ function MovementLog({ productId, productName, onClose }: {
   );
 }
 
+// ─── Product Details Modal ────────────────────────────────────────────────────
+
+function ProductDetailsModal({ item, onClose }: {
+  item: InventoryItem | null;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  const status = deriveStatus(item.quantity, item.reorder_level);
+  const quantityParts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
+
+  return (
+    <Dialog open={!!item} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Product Details - {item.product_name}</DialogTitle>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 rounded-t-lg shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold text-white truncate">{item.product_name}</h2>
+            <p className="text-xs text-blue-100 mt-0.5">Complete Product Information</p>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+          {/* Identification Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Identification</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-1">Barcode</p>
+                <p className="text-sm font-mono font-semibold text-gray-900 bg-white px-3 py-2 rounded border border-gray-200">
+                  {item.barcode}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Product Information Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Product Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Category</p>
+                  <span className="inline-block text-xs font-semibold text-gray-700 bg-white px-3 py-1.5 rounded-full border border-gray-200">
+                    {item.category}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Supplier</p>
+                  <p className="text-sm font-medium text-gray-900">{item.supplier || "—"}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Unit</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {item.unit} ({item.unit_abbreviation})
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Unit Type</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {item.unit_type || "Other"}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-1">Quantity Type</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {item.quantity_type === "WEIGHTED" ? "Weighted (Variable)" : "Whole Unit"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing & Classification Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Pricing Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              {item.pricing_type === "MARKET_BASED" ? (
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">Pricing Type</p>
+                  <span className="inline-block text-sm font-semibold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
+                    Market-Based Pricing
+                  </span>
+                  <p className="text-xs text-gray-500 mt-3">
+                    This product uses market-based pricing. Prices are managed separately in the Commodity Prices module.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-1">Cost Price</p>
+                    <p className="text-base font-bold text-gray-900 tabular-nums">
+                      ₱{Number(item.cost_price).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-1">Selling Price</p>
+                    <p className="text-base font-bold text-emerald-600 tabular-nums">
+                      ₱{Number(item.selling_price).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500 font-medium mb-1">Markup</p>
+                    <p className="text-sm font-semibold text-blue-600 tabular-nums">
+                      {Number(item.cost_price) > 0
+                        ? `${(((Number(item.selling_price) - Number(item.cost_price)) / Number(item.cost_price)) * 100).toFixed(2)}%`
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Stock Information Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Stock Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Current Stock</p>
+                  <div className="flex items-baseline gap-1">
+                    <p className={`text-2xl font-bold tabular-nums ${
+                      item.quantity === 0 ? "text-red-600" :
+                      item.quantity <= item.reorder_level ? "text-amber-600" : "text-gray-900"
+                    }`}>
+                      {quantityParts.number}
+                    </p>
+                    {quantityParts.unit && (
+                      <span className="text-sm text-gray-500 font-medium">{quantityParts.unit}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Reorder Level</p>
+                  <p className="text-2xl font-bold text-gray-700 tabular-nums">{item.reorder_level}</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Damaged Stock</p>
+                  <p className={`text-2xl font-bold tabular-nums ${
+                    item.damaged_stock > 0 ? "text-red-600" : "text-gray-300"
+                  }`}>
+                    {item.damaged_stock}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-500 font-medium">Stock Status</p>
+                {statusBadge(status)}
+              </div>
+            </div>
+          </div>
+
+          {/* Value Information */}
+          {item.pricing_type !== "MARKET_BASED" && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-4 w-1 bg-blue-600 rounded-full" />
+                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Inventory Value</h3>
+              </div>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Total Cost Value</p>
+                  <p className="text-lg font-bold text-gray-900 tabular-nums">
+                    ₱{(item.quantity * Number(item.cost_price)).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Total Retail Value</p>
+                  <p className="text-lg font-bold text-emerald-600 tabular-nums">
+                    ₱{(item.quantity * Number(item.selling_price)).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Timestamps Section */}
+          {item.updated_at && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-4 w-1 bg-blue-600 rounded-full" />
+                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Last Updated</h3>
+              </div>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                <p className="text-sm text-gray-700">{fmtDate(item.updated_at)}</p>
+                <p className="text-xs text-gray-500 mt-1">{fmtRelative(item.updated_at)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <Button onClick={onClose} variant="outline" className="border-gray-300">
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Inventory() {
@@ -319,6 +570,7 @@ export default function Inventory() {
 
   const [selectedProductId,   setSelectedProductId]   = useState<number | null>(null);
   const [selectedProductName, setSelectedProductName] = useState<string | undefined>();
+  const [detailsItem,         setDetailsItem]         = useState<InventoryItem | null>(null);
 
   // Load categories for filter dropdown
   useEffect(() => {
@@ -465,6 +717,7 @@ export default function Inventory() {
         onRetry={() => loadItems(search)}
         onSelectProduct={handleSelectProduct}
         selectedProductId={selectedProductId}
+        onViewDetails={(item) => setDetailsItem(item)}
       />
 
       {/* Movement log (shown when a product row is selected) */}
@@ -472,6 +725,12 @@ export default function Inventory() {
         productId={selectedProductId}
         productName={selectedProductName}
         onClose={() => setSelectedProductId(null)}
+      />
+
+      {/* Product details modal */}
+      <ProductDetailsModal
+        item={detailsItem}
+        onClose={() => setDetailsItem(null)}
       />
     </div>
   );

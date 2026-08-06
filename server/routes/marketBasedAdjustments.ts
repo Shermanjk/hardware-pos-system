@@ -1,4 +1,5 @@
-import { Router, Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import { Request, Response, Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
@@ -579,6 +580,256 @@ router.get("/pending-count", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[marketBasedAdjustments/GET /pending-count]", err);
     res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
+// ─── POST /api/market-based-adjustments/requests/authorize — Create + approve ─
+// Single atomic endpoint: creates the adjustment request AND approves it in one
+// transaction. Used for local manager override so the record NEVER appears as
+// PENDING_APPROVAL on the admin terminal.
+const authorizeAdjustmentSchema = z.object({
+  username:          z.string().min(1, "Username is required"),
+  password:          z.string().min(1, "Password is required"),
+  product_id:        z.number().int().positive(),
+  system_quantity:   z.number().min(0),
+  physical_quantity: z.number().min(0),
+  reason: z.enum([
+    "Drying/Moisture Loss", "Spillage", "Theft", "Processing Loss",
+    "Handling Loss", "Warehouse Damage", "Inventory Miscount", "Other"
+  ]),
+  remarks: z.string().max(500).optional().nullable(),
+}).refine((d) => !(d.reason === "Other" && (!d.remarks || !d.remarks.trim())), {
+  message: "Remarks are required when reason is 'Other'",
+  path: ["remarks"],
+});
+
+router.post("/requests/authorize", async (req: Request, res: Response) => {
+  const parsed = authorizeAdjustmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(422).json({ errors: parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? "general"), message: i.message })) });
+    return;
+  }
+
+  const { username, password, product_id, system_quantity, physical_quantity, reason, remarks } = parsed.data;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── 1. Verify manager credentials ────────────────────────────────────────
+    const [userRows] = await conn.execute<any[]>(
+      `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+      [username]
+    );
+    const manager = userRows[0];
+    if (!manager || manager.status !== "Active") { await conn.rollback(); res.status(401).json({ message: "Invalid credentials." }); return; }
+    const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+    if (!passwordMatch) { await conn.rollback(); res.status(401).json({ message: "Invalid credentials." }); return; }
+    if (manager.role !== "Admin") { await conn.rollback(); res.status(403).json({ message: "Only an Admin can authorize adjustment requests." }); return; }
+
+    // ── 2. Validate product ───────────────────────────────────────────────────
+    const [productRows] = await conn.execute<any[]>(
+      `SELECT id, product_name, pricing_type, status, quantity FROM products WHERE id = ? FOR UPDATE`,
+      [product_id]
+    );
+    if (productRows.length === 0) { await conn.rollback(); res.status(404).json({ message: "Product not found." }); return; }
+    const product = productRows[0];
+    if (product.pricing_type !== "MARKET_BASED") { await conn.rollback(); res.status(422).json({ message: "Only Market-Based products require adjustment requests." }); return; }
+    if (product.status !== "Active") { await conn.rollback(); res.status(422).json({ message: "Product is not active." }); return; }
+
+    // ── 3. Generate reference number ──────────────────────────────────────────
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const [seqRows] = await conn.execute<any[]>(
+      `SELECT id, current_number FROM invoice_sequences WHERE prefix = 'MBAR' LIMIT 1 FOR UPDATE`
+    );
+    if (!seqRows[0]) { await conn.rollback(); res.status(500).json({ message: "MBAR sequence not found." }); return; }
+    const nextSeq = (seqRows[0].current_number as number) + 1;
+    await conn.execute(`UPDATE invoice_sequences SET current_number = ?, updated_at = NOW() WHERE id = ?`, [nextSeq, seqRows[0].id]);
+    const reference = `MBAR-${dateStr}-${String(nextSeq).padStart(6, "0")}`;
+    const difference = physical_quantity - system_quantity;
+
+    // ── 4. Insert adjustment request directly as APPROVED ────────────────────
+    const [result] = await conn.execute<any>(
+      `INSERT INTO market_based_adjustment_requests
+         (product_id, system_quantity, physical_quantity, difference, reason, remarks,
+          prepared_by, reference, status, approved_by, approved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, NOW())`,
+      [product_id, system_quantity, physical_quantity, difference, reason, remarks?.trim() || null, req.user!.id, reference, manager.id]
+    );
+    const requestId = result.insertId;
+
+    // ── 5. Apply inventory change ─────────────────────────────────────────────
+    const newQuantity = Number(physical_quantity);
+    await conn.execute("UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?", [newQuantity, product.id]);
+    await conn.execute(`
+      INSERT INTO inventory_logs
+        (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
+      VALUES (?, 'Adjustment', 'Market-Based Adjustment', ?, ?, ?, ?, ?)
+    `, [product_id, difference, product.quantity, newQuantity, reference, manager.id]);
+
+    await conn.commit();
+
+    // ── 6. Audit logs ─────────────────────────────────────────────────────────
+    await logAuditEvent({
+      action: "MBAR_ADJUSTMENT_REQUESTED",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username,
+      entityType: "market_based_adjustment_requests",
+      entityId: requestId,
+      newValues: { product_id, product_name: product.product_name, system_quantity, physical_quantity, difference, reason, reference },
+    });
+    await logAuditEvent({
+      action: "MBAR_ADJUSTMENT_APPROVED",
+      performedById: manager.id,
+      performedByUsername: manager.username,
+      entityType: "market_based_adjustment_requests",
+      entityId: requestId,
+      newValues: { new_quantity: newQuantity, approved_by: manager.username, override_method: "local_manager_override", clerk_id: req.user!.id },
+    });
+
+    res.status(201).json({
+      message: "Adjustment authorized and inventory updated.",
+      id: requestId,
+      reference,
+      new_quantity: newQuantity,
+      admin_name: manager.full_name ?? manager.username,
+      admin_id: manager.id,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[marketBasedAdjustments/POST /requests/authorize] Error:", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── POST /api/market-based-adjustments/requests/:id/local-override ──────────
+// Verifies admin credentials on the spot, then approves the adjustment request
+// immediately — identical logic to /requests/:id/approve.
+const localOverrideSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+router.post("/requests/:id/local-override", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ message: "Invalid request ID." }); return; }
+
+  const parsed = localOverrideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+    return;
+  }
+
+  const { username, password } = parsed.data;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // ── 1. Verify manager credentials ────────────────────────────────────────
+    const [userRows] = await conn.execute<any[]>(
+      `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+      [username]
+    );
+    const manager = userRows[0];
+    if (!manager || manager.status !== "Active") {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+    if (!passwordMatch) {
+      await conn.rollback();
+      res.status(401).json({ message: "Invalid credentials." });
+      return;
+    }
+    if (manager.role !== "Admin") {
+      await conn.rollback();
+      res.status(403).json({ message: "Only an Admin can authorize adjustment requests." });
+      return;
+    }
+
+    // ── 2. Load and lock the adjustment request ───────────────────────────────
+    const [requestRows] = await conn.execute<any[]>(
+      `SELECT * FROM market_based_adjustment_requests WHERE id = ? FOR UPDATE`,
+      [id]
+    );
+    if (requestRows.length === 0) {
+      await conn.rollback();
+      res.status(404).json({ message: "Adjustment request not found." });
+      return;
+    }
+    const request = requestRows[0];
+
+    if (request.status !== "PENDING_APPROVAL") {
+      await conn.rollback();
+      res.status(422).json({ message: "Request can only be approved when in PENDING_APPROVAL status." });
+      return;
+    }
+
+    // ── 3. Lock product and apply adjustment ──────────────────────────────────
+    const [productRows] = await conn.execute<any[]>(
+      `SELECT id, quantity, product_name FROM products WHERE id = ? FOR UPDATE`,
+      [request.product_id]
+    );
+    if (productRows.length === 0) {
+      await conn.rollback();
+      res.status(404).json({ message: "Product not found." });
+      return;
+    }
+    const product = productRows[0];
+    const newQuantity = Number(request.physical_quantity);
+
+    await conn.execute(
+      "UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?",
+      [newQuantity, product.id]
+    );
+
+    await conn.execute(`
+      INSERT INTO inventory_logs
+        (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
+      VALUES (?, 'Adjustment', 'Market-Based Adjustment', ?, ?, ?, ?, ?)
+    `, [request.product_id, request.difference, product.quantity, newQuantity, request.reference, manager.id]);
+
+    await conn.execute(
+      `UPDATE market_based_adjustment_requests SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?`,
+      [manager.id, id]
+    );
+
+    await conn.commit();
+
+    // ── 4. Audit log ──────────────────────────────────────────────────────────
+    await logAuditEvent({
+      action: "MBAR_ADJUSTMENT_APPROVED",
+      performedById: manager.id,
+      performedByUsername: manager.username,
+      entityType: "market_based_adjustment_requests",
+      entityId: id,
+      previousValues: { system_quantity: request.system_quantity, physical_quantity: request.physical_quantity, difference: request.difference },
+      newValues: {
+        new_quantity: newQuantity,
+        approved_by: manager.username,
+        override_method: "local_manager_override",
+        clerk_id: req.user!.id,
+        clerk_username: req.user!.username,
+      },
+    });
+
+    res.status(200).json({
+      message: "Adjustment approved via manager override. Inventory updated.",
+      new_quantity: newQuantity,
+      reference: request.reference,
+      admin_name: manager.full_name ?? manager.username,
+      admin_id: manager.id,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[marketBasedAdjustments/POST /requests/:id/local-override] Error:", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  } finally {
+    conn.release();
   }
 });
 

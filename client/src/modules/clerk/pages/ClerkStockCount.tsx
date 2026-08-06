@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdjustmentReason, createAdjustmentRequest, getInventory, getInventoryLogs } from "@/shared/api/inventoryApi";
+import { AdjustmentReason, getInventory, getInventoryLogs, type CreateAdjustmentRequestPayload } from "@/shared/api/inventoryApi";
 import { createStockCountRequest } from "@/shared/api/requestsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
@@ -168,6 +168,15 @@ export default function ClerkStockCount() {
     new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
   );
 
+  // Auth modal — shown after market-based adjustment requests are submitted
+  // When multiple market-based rows exist, we authorise them one at a time (queue)
+  const [authQueue, setAuthQueue] = useState<Array<{
+    payload: CreateAdjustmentRequestPayload;
+    summary: { label: string; value: string }[];
+  }>>([]);
+  const [authQueueIndex, setAuthQueueIndex] = useState(0);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   // ── Draft recovery ──────────────────────────────────────────────────────────
   const countDraft = useDraftRecovery<StockCountDraft>(DRAFT_KEYS.CLERK_STOCK_COUNT);
   const [recoverableDraft, setRecoverableDraft] = useState<StockCountDraft | null>(null);
@@ -316,17 +325,29 @@ export default function ClerkStockCount() {
 
       // Process Market-Based products with approval workflow
       if (marketBasedRows.length > 0) {
-        await Promise.all(
-          marketBasedRows.map((row) =>
-            createAdjustmentRequest({
+        // Build auth queue with payloads — requests are created lazily in the modal
+        const queue = marketBasedRows.map((row) => {
+          const diff = parseFloat(row.physicalCount) - Number(row.systemQty);
+          return {
+            payload: {
               product_id: row.productId,
               system_quantity: Number(row.systemQty),
               physical_quantity: parseFloat(row.physicalCount),
               reason: row.reason || "",
               remarks: row.remarks.trim() || undefined,
-            })
-          )
-        );
+            } as CreateAdjustmentRequestPayload,
+            summary: [
+              { label: "Product", value: row.productName },
+              { label: "System Qty", value: String(row.systemQty) },
+              { label: "Physical Qty", value: row.physicalCount },
+              { label: "Difference", value: diff >= 0 ? `+${diff}` : String(diff) },
+              { label: "Reason", value: row.reason ?? "" },
+            ],
+          };
+        });
+        setAuthQueue(queue);
+        setAuthQueueIndex(0);
+        setAuthModalOpen(true);
       }
 
       toast.success(
@@ -729,6 +750,42 @@ export default function ClerkStockCount() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Admin auth modal — shown after market-based requests are submitted */}
+      {/* If there are multiple requests, the clerk authorises them one at a time */}
+      {authQueue.length > 0 && (
+        <ClerkAuthModal
+          open={authModalOpen}
+          onClose={() => {
+            // Advance to next item in queue, or close if done
+            const next = authQueueIndex + 1;
+            if (next < authQueue.length) {
+              setAuthQueueIndex(next);
+            } else {
+              setAuthModalOpen(false);
+              setAuthQueue([]);
+              setAuthQueueIndex(0);
+            }
+          }}
+          requestType="market_adjustment"
+          createPayload={{ type: "market_adjustment", payload: authQueue[authQueueIndex]?.payload }}
+          title={`Authorize Adjustment${authQueue.length > 1 ? ` (${authQueueIndex + 1} of ${authQueue.length})` : ""}`}
+          summary={authQueue[authQueueIndex]?.summary ?? []}
+          onRequestCreated={() => {
+            // Request created — nothing extra needed, modal handles the flow
+          }}
+          onApproved={(_adminName) => {
+            const next = authQueueIndex + 1;
+            if (next < authQueue.length) {
+              setAuthQueueIndex(next);
+            } else {
+              setAuthModalOpen(false);
+              setAuthQueue([]);
+              setAuthQueueIndex(0);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

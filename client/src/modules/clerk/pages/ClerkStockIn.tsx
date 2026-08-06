@@ -2,51 +2,51 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  getCurrentPrice,
-  getPurchaseHistory,
-  submitCommodityPurchase,
-  type CommodityCurrentPrice, type CommodityPurchase,
+    getCurrentPrice,
+    getPurchaseHistory,
+    type CommodityCurrentPrice, type CommodityPurchase
 } from "@/shared/api/commodityApi";
 import {
-  getInventoryLogs,
-  submitStockIn,
-  type InventoryLog,
-  type StockInSource,
+    getInventoryLogs,
+    submitStockIn,
+    type InventoryLog,
+    type StockInSource,
 } from "@/shared/api/inventoryApi";
 import {
-  getSuppliers,
-  lookupProduct,
-  type CashierProduct,
-  type Supplier,
+    getSuppliers,
+    lookupProduct,
+    type CashierProduct,
+    type Supplier,
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantity } from "@/shared/utils/quantityFormat";
 import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Edit2,
-  FileText,
-  History,
-  Loader2,
-  Package,
-  PackagePlus,
-  Plus,
-  RefreshCw,
-  ScanLine, Search, Trash2,
-  TrendingUp,
-  Truck,
-  X,
-  XCircle,
+    AlertCircle,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    Edit2,
+    FileText,
+    History,
+    Loader2,
+    Package,
+    PackagePlus,
+    Plus,
+    RefreshCw,
+    ScanLine, Search, Trash2,
+    TrendingUp,
+    Truck,
+    X,
+    XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import ClerkAuthModal from "../components/ClerkAuthModal";
 
 type HistoryTabType = "stockin" | "commodity";
 
@@ -286,6 +286,13 @@ function CommodityPurchaseCard({
 
   const [saving,           setSaving]           = useState(false);
 
+  // Auth modal — shown after the clerk clicks "Submit for Approval"
+  // The actual request is only created when the clerk picks a method
+  const [authModalOpen,    setAuthModalOpen]    = useState(false);
+  const [pendingPurchaseId, setPendingPurchaseId] = useState<number | null>(null);
+  const [pendingAuthPayload, setPendingAuthPayload] = useState<any>(null);
+  const [pendingAuthSummary, setPendingAuthSummary] = useState<{ label: string; value: string }[]>([]);
+
   useEffect(() => {
     setPriceLoading(true);
     setPriceError("");
@@ -310,35 +317,37 @@ function CommodityPurchaseCard({
     if (!currentPrice) return;
     const q = parseFloat(qty);
     if (isNaN(q) || q <= 0) { toast.error("Quantity must be greater than 0."); return; }
-    // NEW: deducted_quantity is physical weight, not price per unit
     const d = parseFloat(deductedQty) || 0;
     if (d < 0) { toast.error("Deducted quantity cannot be negative."); return; }
-    // Validate: deducted quantity cannot exceed quantity received
     if (d > q) { toast.error(`Deducted quantity (${d}) cannot exceed Quantity Received (${q}).`); return; }
-    setSaving(true);
-    try {
-      const result = await submitCommodityPurchase({
-        product_id:       product.id,
-        supplier_id:      supplierId ? parseInt(supplierId) : null,
-        seller_name:      sellerName.trim() || null,
-        seller_address:   sellerAddress.trim() || null,
-        seller_contact:   sellerContact.trim() || null,
-        quantity:         q,
-        deducted_quantity: d,
-        transaction_date: deliveryDate,
-        remarks:          remarks.trim() || null,
-      });
-      toast.success(
-        `${product.product_name}: ${q} ${product.unit_abbreviation} submitted for approval. ` +
-        `Payable: ${result.payable_quantity} ${product.unit_abbreviation} = ₱${result.final_amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`
-      );
-      onRefreshLogs();
-      onDone();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Failed to submit purchase.");
-    } finally {
-      setSaving(false);
-    }
+
+    // Don't submit to the server yet — just collect the payload and show the auth modal
+    // The request will only be created when the clerk actively picks a method
+    const payload = {
+      product_id:        product.id,
+      supplier_id:       supplierId ? parseInt(supplierId) : null,
+      seller_name:       sellerName.trim() || null,
+      seller_address:    sellerAddress.trim() || null,
+      seller_contact:    sellerContact.trim() || null,
+      quantity:          q,
+      deducted_quantity: d,
+      transaction_date:  deliveryDate,
+      remarks:           remarks.trim() || null,
+    };
+
+    const payableQtyPreview = Math.max(0, q - d);
+    const finalAmtPreview = payableQtyPreview * (currentPrice ? Number(currentPrice.price_per_unit) : 0);
+
+    setPendingPurchaseId(null);
+    setPendingAuthPayload(payload);
+    setPendingAuthSummary([
+      { label: "Product", value: product.product_name },
+      { label: "Qty Received", value: `${q} ${product.unit_abbreviation}` },
+      ...(d > 0 ? [{ label: "Deducted Qty", value: `${d} ${product.unit_abbreviation}` }] : []),
+      { label: "Payable Qty", value: `${payableQtyPreview} ${product.unit_abbreviation}` },
+      { label: "Est. Amount", value: `₱${finalAmtPreview.toLocaleString("en-PH", { minimumFractionDigits: 2 })}` },
+    ]);
+    setAuthModalOpen(true);
   };
 
   return (
@@ -527,6 +536,33 @@ function CommodityPurchaseCard({
           <X className="h-3.5 w-3.5" /> Cancel
         </Button>
       )}
+
+      {/* Admin auth modal — shown when clerk clicks "Submit for Approval"
+          The request is only created when the clerk picks a method */}
+      <ClerkAuthModal
+        open={authModalOpen}
+        onClose={() => {
+          setAuthModalOpen(false);
+          // If they cancelled without choosing, just close — nothing was submitted
+          if (!pendingPurchaseId) return;
+          onDone();
+        }}
+        requestType="commodity_purchase"
+        createPayload={pendingAuthPayload ? { type: "commodity_purchase", payload: pendingAuthPayload } : null}
+        existingRequestId={pendingPurchaseId}
+        title="Authorize Commodity Purchase"
+        summary={pendingAuthSummary}
+        onRequestCreated={(id) => {
+          setPendingPurchaseId(id);
+          onRefreshLogs();
+          toast.success(`${product.product_name} submitted for approval.`);
+        }}
+        onApproved={(_adminName) => {
+          setAuthModalOpen(false);
+          onRefreshLogs();
+          onDone();
+        }}
+      />
     </div>
   );
 }

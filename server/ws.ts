@@ -1,6 +1,6 @@
-import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
 import jwt from "jsonwebtoken";
+import { WebSocket, WebSocketServer } from "ws";
 import type { AuthPayload } from "./middleware/authenticate.js";
 
 export interface ReturnRequestNotification {
