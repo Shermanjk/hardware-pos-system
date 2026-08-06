@@ -192,6 +192,7 @@ export default function Cashier() {
   const [showVoidRequests, setShowVoidRequests]     = useState(false);
   const [latestVoidDecision, setLatestVoidDecision] = useState<VoidDecisionNotification | null>(null);
   const [pendingVoidRequestsCount, setPendingVoidRequestsCount] = useState(0);
+  const [unreadVoidCount, setUnreadVoidCount] = useState(0);
 
   // ── End Shift modal ───────────────────────────────────────────────────────
   const [showEndShift, setShowEndShift]       = useState(false);
@@ -254,7 +255,10 @@ export default function Cashier() {
     // If the fetch failed, retain last known list — no state update.
 
     if (voidsResult.status === "fulfilled") {
-      setPendingVoidRequestsCount(voidsResult.value.length);
+      const newCount = voidsResult.value.length;
+      setPendingVoidRequestsCount(newCount);
+      // Only increment unread count if there are NEW void requests
+      setUnreadVoidCount((prev) => Math.max(prev, newCount));
     }
   }, []);
 
@@ -297,6 +301,8 @@ export default function Cashier() {
   useVoidDecisions((n: VoidDecisionNotification) => {
     setLatestVoidDecision(n);
     setShowVoidRequests(true);
+    // Increment unread count when a new decision arrives
+    setUnreadVoidCount((prev) => prev + 1);
     if (n.decision === "approved")
       toast.success(`Void Approved — ${n.invoice_number}`, { description: `${fmt(n.total_amount)} · Approved by ${n.admin_name}. Inventory restored.`, duration: 10000 });
     else
@@ -690,7 +696,7 @@ export default function Cashier() {
           hasApprovedReturns={heldReturns.some(
             (r) => r.decision === "waiting_for_cashier" || r.decision === "approved"
           )}
-          pendingVoidRequestsCount={pendingVoidRequestsCount}
+          pendingVoidRequestsCount={unreadVoidCount}
           pendingHeldOrdersCount={heldOrders.length}
         />
       </div>
@@ -721,6 +727,7 @@ export default function Cashier() {
         show={showVoidRequests} onClose={() => setShowVoidRequests(false)}
         newDecision={latestVoidDecision}
         onRequestVoid={() => setShowVoidDialog(true)}
+        onViewed={() => setUnreadVoidCount(0)}
       />
       <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
       <DiscountApprovalModal

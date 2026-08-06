@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { X, RefreshCw, ChevronRight, ChevronLeft, CheckCircle2, XCircle, Clock, Ban } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getMyVoidRequests, type MyVoidRequest } from "@/shared/api/voidApi";
 import type { VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
-import { Button } from "@/components/ui/button";
+import { Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, RefreshCw, X, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 interface Props {
   show: boolean;
@@ -10,6 +10,8 @@ interface Props {
   /** Called by parent when a WS void_decision arrives so the panel can refresh */
   newDecision: VoidDecisionNotification | null;
   onRequestVoid: () => void;
+  /** Called when the panel is opened so the parent can mark requests as "viewed" */
+  onViewed?: () => void;
 }
 
 function fmt(n: number) {
@@ -140,7 +142,7 @@ function DetailView({ req, onBack }: { req: MyVoidRequest; onBack: () => void })
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
-export default function CashierVoidRequestsPanel({ show, onClose, newDecision, onRequestVoid }: Props) {
+export default function CashierVoidRequestsPanel({ show, onClose, newDecision, onRequestVoid, onViewed }: Props) {
   const [requests, setRequests] = useState<MyVoidRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<MyVoidRequest | null>(null);
@@ -154,10 +156,15 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision, o
     setLoading(false);
   }, []);
 
-  // Load on open
+  // Load on open and call onViewed to mark as read
   useEffect(() => {
-    if (show) { load(); setDetail(null); }
-  }, [show, load]);
+    if (show) {
+      load();
+      setDetail(null);
+      // Notify parent that the void requests have been viewed
+      if (onViewed) onViewed();
+    }
+  }, [show, load, onViewed]);
 
   // Refresh + update detail when a WS decision arrives
   useEffect(() => {

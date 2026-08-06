@@ -1,12 +1,12 @@
-import { Router, Request, Response } from "express";
-import { z } from "zod";
+import { Request, Response, Router } from "express";
 import { PoolConnection } from "mysql2/promise";
+import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
-import { generateReturnNumber } from "../utils/returnNumber.js";
-import { validateReturnItems, ReturnItemPayload } from "../utils/validateReturn.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { generateReturnNumber } from "../utils/returnNumber.js";
+import { ReturnItemPayload, validateReturnItems } from "../utils/validateReturn.js";
 import { broadcastReturnRequest, sendReturnDecision } from "../ws.js";
 
 const router = Router();
@@ -860,6 +860,180 @@ router.patch(
     } catch (err) {
       await conn.rollback();
       console.error("[PATCH /api/returns/:id/resolve] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
+// ─── POST /:id/local-override — Manager Override on Cashier Terminal ──────────
+// Verifies admin credentials on the spot, then approves the return request
+// with the selected resolution — identical logic to PATCH /:id/approve.
+const localOverrideReturnSchema = z.object({
+  username:        z.string().min(1, "Username is required"),
+  password:        z.string().min(1, "Password is required"),
+  resolution:      z.enum(["refund", "exchange", "store_credit", "rejected"]),
+  exchange_barcode: z.string().optional(),
+  exchange_quantity: z.number().int().positive().optional(),
+  additional_payment: z.number().positive().optional(),
+  refund_difference:  z.number().positive().optional(),
+  rejection_reason:   z.string().optional(),
+});
+
+router.post(
+  "/:id/local-override",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ message: "Invalid return ID." });
+      return;
+    }
+
+    const parsed = localOverrideReturnSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+      return;
+    }
+
+    const { username, password, resolution, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // ── 1. Verify manager credentials ────────────────────────────────────
+      const [userRows] = await conn.execute<any[]>(
+        `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+        [username]
+      );
+      const manager = userRows[0];
+      if (!manager || manager.status !== "Active") {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+      if (!passwordMatch) {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      if (manager.role !== "Admin") {
+        await conn.rollback();
+        res.status(403).json({ message: "Only an Admin can authorize return requests." });
+        return;
+      }
+
+      // ── 2. Load and lock the return request ───────────────────────────────
+      const [rows] = await conn.execute<any[]>(
+        `SELECT id, status, sale_id, item_condition FROM returns WHERE id = ? LIMIT 1 FOR UPDATE`,
+        [id]
+      );
+      const returnRow = rows[0];
+      if (!returnRow) {
+        await conn.rollback();
+        res.status(404).json({ message: "Return not found." });
+        return;
+      }
+      if (returnRow.status !== "pending") {
+        await conn.rollback();
+        res.status(422).json({
+          message: returnRow.status === "waiting_for_cashier" || returnRow.status === "approved"
+            ? "This return request was already approved."
+            : "Only pending returns can be approved.",
+        });
+        return;
+      }
+
+      // ── 3. Validate exchange details if needed ────────────────────────────
+      let exchange_product_id: number | null = null;
+      if (resolution === "exchange") {
+        if (!exchange_barcode || !exchange_quantity) {
+          await conn.rollback();
+          res.status(400).json({ message: "Exchange requires barcode and quantity." });
+          return;
+        }
+        const [productRows] = await conn.execute<any[]>(
+          `SELECT id, quantity FROM products WHERE barcode = ? FOR UPDATE`,
+          [exchange_barcode]
+        );
+        const product = productRows[0];
+        if (!product) {
+          await conn.rollback();
+          res.status(404).json({ message: "Product with this barcode not found." });
+          return;
+        }
+        exchange_product_id = product.id;
+        if (Number(product.quantity) < exchange_quantity) {
+          await conn.rollback();
+          res.status(409).json({ message: "Insufficient stock for exchange product." });
+          return;
+        }
+      }
+
+      if (resolution === "rejected" && !rejection_reason) {
+        await conn.rollback();
+        res.status(400).json({ message: "Rejection requires a reason." });
+        return;
+      }
+
+      // ── 4. Apply the resolution — identical to PATCH /:id/approve ─────────
+      if (resolution === "rejected") {
+        await conn.execute(
+          `UPDATE returns SET status = 'rejected', approved_by = ?, resolved_at = NOW(), return_reason = ?, resolution = 'rejected' WHERE id = ?`,
+          [manager.id, rejection_reason!, id]
+        );
+      } else {
+        await conn.execute(
+          `UPDATE returns SET status = 'waiting_for_cashier', approved_by = ?, resolved_at = NOW(), resolution = ?, exchange_product_id = ?, exchange_quantity = ?, additional_payment = ?, refund_difference = ? WHERE id = ?`,
+          [manager.id, resolution, exchange_product_id ?? null, exchange_quantity ?? null, additional_payment ?? null, refund_difference ?? null, id]
+        );
+      }
+
+      await conn.commit();
+
+      const updated = await fetchReturnSummary(conn, id);
+
+      // ── 5. Audit log ───────────────────────────────────────────────────────
+      await logAuditEvent({
+        action: resolution === "rejected" ? "RETURN_REJECTED_LOCAL_OVERRIDE" : "RETURN_APPROVED_LOCAL_OVERRIDE",
+        performedById: manager.id,
+        performedByUsername: manager.username,
+        entityType: "returns",
+        entityId: id,
+        newValues: {
+          return_number: updated.return_number,
+          invoice_number: updated.invoice_number,
+          resolution,
+          override_method: "local_manager_override",
+          cashier_id: req.user!.id,
+          cashier_username: req.user!.username,
+        },
+      });
+
+      // ── 6. Notify cashier / admin terminals via WebSocket ─────────────────
+      sendReturnDecision({
+        type: "return_decision",
+        id: updated.id,
+        return_number: updated.return_number,
+        invoice_number: updated.invoice_number,
+        customer_name: updated.customer_name,
+        decision: resolution === "rejected" ? "rejected" : "approved",
+        admin_name: updated.admin_name ?? manager.full_name ?? manager.username,
+        cashier_user_id: updated.processed_by,
+      });
+
+      res.status(200).json({
+        ...updated,
+        admin_name: manager.full_name ?? manager.username,
+        admin_id: manager.id,
+      });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[POST /api/returns/:id/local-override] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     } finally {
       conn.release();

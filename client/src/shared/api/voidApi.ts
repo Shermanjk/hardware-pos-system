@@ -85,3 +85,14 @@ export async function rejectVoid(
   );
   return res.data;
 }
+
+export async function localOverrideVoid(
+  voidId: number,
+  payload: { username: string; password: string }
+): Promise<{ message: string; admin_name: string; admin_id: number }> {
+  const res = await httpClient.post<{ message: string; admin_name: string; admin_id: number }>(
+    `/api/sales/voids/${voidId}/local-override`,
+    payload
+  );
+  return res.data;
+}

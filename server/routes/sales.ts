@@ -1,11 +1,12 @@
-import { Router, Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import { Request, Response, Router } from "express";
+import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
-import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-import { sendVoidDecision, broadcastVoidRequest } from "../ws.js";
-import { z } from "zod";
+import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
+import { broadcastVoidRequest, sendVoidDecision } from "../ws.js";
 
 const router = Router();
 
@@ -890,6 +891,161 @@ router.patch(
     } catch (err) {
       await conn.rollback();
       console.error("[PATCH /api/sales/:id/void-reject] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
+// ─── POST /voids/:id/local-override — Manager Override on Cashier Terminal ────
+// Verifies admin credentials on the spot, then executes the void immediately
+// (identical logic to void-approve) without requiring an admin terminal login.
+router.post(
+  "/voids/:id/local-override",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const voidId = Number(req.params.id);
+    if (!Number.isInteger(voidId) || voidId <= 0) {
+      res.status(400).json({ message: "Invalid void request ID." });
+      return;
+    }
+
+    const parsed = z.object({
+      username: z.string().min(1, "Username is required"),
+      password: z.string().min(1, "Password is required"),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+      return;
+    }
+
+    const { username, password } = parsed.data;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // ── 1. Verify manager credentials ────────────────────────────────────
+      const [userRows] = await conn.execute<any[]>(
+        `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+        [username]
+      );
+      const manager = userRows[0];
+      if (!manager || manager.status !== "Active") {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+      if (!passwordMatch) {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      if (manager.role !== "Admin") {
+        await conn.rollback();
+        res.status(403).json({ message: "Only an Admin can authorize void requests." });
+        return;
+      }
+
+      // ── 2. Load and lock the void request ─────────────────────────────────
+      const [rows] = await conn.execute<any[]>(
+        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number
+         FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
+         WHERE sv.id = ? FOR UPDATE`,
+        [voidId]
+      );
+      const voidRow = rows[0];
+      if (!voidRow) {
+        await conn.rollback();
+        res.status(404).json({ message: "Void request not found." });
+        return;
+      }
+      if (voidRow.status !== "pending") {
+        await conn.rollback();
+        res.status(422).json({
+          message: voidRow.status === "approved"
+            ? "This void request was already approved."
+            : "This void request can no longer be approved.",
+        });
+        return;
+      }
+
+      // ── 3. Restore inventory — identical to void-approve ──────────────────
+      const [saleItems] = await conn.execute<any[]>(
+        `SELECT product_id, quantity FROM sale_items WHERE sale_id = ?`,
+        [voidRow.sale_id]
+      );
+      for (const item of saleItems) {
+        await conn.execute(
+          `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+           VALUES (?, 'Adjustment', 'void_restore', ?, ?, ?)`,
+          [item.product_id, item.quantity, voidRow.invoice_number, manager.id]
+        );
+      }
+
+      await conn.execute(
+        `UPDATE sale_voids SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
+        [manager.id, voidId]
+      );
+      await conn.execute(
+        `UPDATE sales SET void_status = 'voided' WHERE id = ?`,
+        [voidRow.sale_id]
+      );
+
+      await conn.commit();
+
+      // ── 4. Audit log ───────────────────────────────────────────────────────
+      await logAuditEvent({
+        action: "SALE_VOIDED_LOCAL_OVERRIDE",
+        performedById: manager.id,
+        performedByUsername: manager.username,
+        entityType: "sales",
+        entityId: voidRow.sale_id,
+        reason: voidRow.reason,
+        newValues: {
+          invoice_number: voidRow.invoice_number,
+          void_request_id: voidId,
+          override_method: "local_manager_override",
+          cashier_id: req.user!.id,
+          cashier_username: req.user!.username,
+        },
+      });
+
+      // ── 5. Notify cashier via WebSocket ───────────────────────────────────
+      const [cashierRow] = await pool.execute<any[]>(
+        `SELECT s.cashier_id, s.total_amount FROM sales s WHERE s.id = ?`,
+        [voidRow.sale_id]
+      );
+      if ((cashierRow as any[])[0]) {
+        const { cashier_id, total_amount } = (cashierRow as any[])[0];
+        sendVoidDecision({
+          type: "void_decision",
+          void_id: voidId,
+          sale_id: voidRow.sale_id,
+          invoice_number: voidRow.invoice_number,
+          total_amount: Number(total_amount),
+          decision: "approved",
+          admin_name: manager.full_name ?? manager.username,
+          rejection_reason: null,
+          cashier_user_id: cashier_id,
+        });
+      }
+
+      res.status(200).json({
+        message: "Void approved via manager override.",
+        admin_name: manager.full_name ?? manager.username,
+        admin_id: manager.id,
+      });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[POST /api/sales/voids/:id/local-override] Error:", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });
     } finally {
       conn.release();

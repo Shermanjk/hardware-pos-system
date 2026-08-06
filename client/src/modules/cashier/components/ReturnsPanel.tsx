@@ -1,15 +1,16 @@
-import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { RotateCcw, Loader2, X, Search, Hourglass, CheckCircle, XCircle } from "lucide-react";
-import { toast } from "sonner";
-import { searchSales, getSaleByInvoice, type SaleSummary, type Sale } from "@/shared/api/salesApi";
-import { createReturn, getReturnById, resolveReturn, getMyPendingReturns, getMyReturnHistory, type Return as ReturnFull } from "@/shared/api/returnsApi";
-import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
-import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import { Input } from "@/components/ui/input";
+import { getMyReturnHistory, getReturnById, resolveReturn, type Return as ReturnFull } from "@/shared/api/returnsApi";
+import { getSaleByInvoice, searchSales, type Sale, type SaleSummary } from "@/shared/api/salesApi";
+import { type StoreSettings } from "@/shared/api/settingsApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
+import { CheckCircle, Hourglass, Loader2, RotateCcw, X, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { HeldReturn } from "./PendingReturnsPanel";
+import ReturnAuthModal from "./ReturnAuthModal";
 
 interface ReturnsPanelProps {
   show: boolean;
@@ -52,6 +53,12 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [returnHistory, setReturnHistory] = useState<ReturnFull[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Auth modal state — shown after return is created
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingReturnPayload, setPendingReturnPayload] = useState<any>(null);
+  const [pendingInvoiceNumber, setPendingInvoiceNumber] = useState("");
+  const [pendingCustomerName, setPendingCustomerName] = useState("");
 
   // Load return history when panel opens
   useEffect(() => {
@@ -132,15 +139,26 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     const itemsToReturn = Object.entries(selectedItems).filter(([, v]) => v.checked).map(([idStr, v]) => {
       const saleItemId = Number(idStr);
       const saleItem = returnSale.items.find((i) => i.id === saleItemId)!;
-      return { sale_item_id: saleItemId, product_id: saleItem.product_id, quantity_returned: v.quantity, unit_price: saleItem.unit_price, _barcode: saleItem.barcode, _barcodeConfirmed: v.barcodeConfirmed, _reason: v.reason };
+      return { sale_item_id: saleItemId, product_id: saleItem.product_id, quantity_returned: v.quantity, unit_price: saleItem.unit_price, _reason: v.reason };
     });
     if (itemsToReturn.length === 0) { setReturnSubmitError("Select at least one item."); return; }
-    setReturnSubmitLoading(true);
-    try {
-      const result = await createReturn({ sale_id: Number(returnSale.id), return_reason: itemsToReturn[0]._reason, item_condition: itemCondition, items: itemsToReturn.map(({ sale_item_id, product_id, quantity_returned, unit_price }) => ({ sale_item_id: Number(sale_item_id), product_id: Number(product_id), quantity_returned, unit_price })) });
-      setSubmittedReturn(result);
-    } catch (err: any) { setReturnSubmitError(err?.response?.data?.message ?? "Failed to submit."); }
-    finally { setReturnSubmitLoading(false); }
+
+    // Don't create the return request yet — just capture the payload and show the auth modal
+    // The request will only be created when the cashier picks a method
+    setPendingReturnPayload({
+      sale_id: Number(returnSale.id),
+      return_reason: itemsToReturn[0]._reason,
+      item_condition: itemCondition,
+      items: itemsToReturn.map(({ sale_item_id, product_id, quantity_returned, unit_price }) => ({
+        sale_item_id: Number(sale_item_id),
+        product_id: Number(product_id),
+        quantity_returned,
+        unit_price,
+      })),
+    });
+    setPendingInvoiceNumber(returnSale.invoice_number);
+    setPendingCustomerName(returnSale.customer_name);
+    setShowAuthModal(true);
   };
 
   const handleFetchForResolution = async (returnId: number) => {
@@ -203,6 +221,12 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
       setShowResolution(false); setResolveData(null); setSubmittedReturn(null); resetPanel(); onClose();
     } catch (err: any) { setResolveError(err?.response?.data?.message ?? "Failed to process."); }
     finally { setResolveLoading(false); }
+  };
+
+  const handleReturnApproved = () => {
+    setShowAuthModal(false);
+    // After approval, user can process the return or park it
+    toast.success("Return approved! You can now process it.");
   };
 
   return (
@@ -561,7 +585,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
                 <p className="text-xs font-mono text-green-700 bg-green-100 rounded px-2 py-1 mt-1">
                   {submittedReturn.return_number}
                 </p>
-                <p className="text-xs text-green-700 mt-1">Wait for admin approval.</p>
+                <p className="text-xs text-green-700 mt-1">Approval requested — check your pending returns list.</p>
               </div>
               <Button className="w-full" onClick={() => handleFetchForResolution(submittedReturn.id)}>
                 Process Return
@@ -629,6 +653,20 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Auth modal — shown immediately after a return is submitted */}
+      <ReturnAuthModal
+        open={showAuthModal}
+        onClose={() => {
+          setShowAuthModal(false);
+          // Auth closed without completion — reset everything
+          resetPanel();
+        }}
+        returnPayload={pendingReturnPayload}
+        invoiceNumber={pendingInvoiceNumber}
+        customerName={pendingCustomerName}
+        onApproved={handleReturnApproved}
+      />
     </>
   );
 }

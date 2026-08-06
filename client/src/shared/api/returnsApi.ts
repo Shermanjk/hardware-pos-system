@@ -143,3 +143,23 @@ export async function getMyReturnHistory(search?: string): Promise<Return[]> {
   });
   return response.data;
 }
+
+export async function localOverrideReturn(
+  returnId: number,
+  payload: {
+    username: string;
+    password: string;
+    resolution: "refund" | "exchange" | "store_credit" | "rejected";
+    exchange_barcode?: string;
+    exchange_quantity?: number;
+    additional_payment?: number;
+    refund_difference?: number;
+    rejection_reason?: string;
+  }
+): Promise<Return & { admin_name: string; admin_id: number }> {
+  const response = await httpClient.post<Return & { admin_name: string; admin_id: number }>(
+    `/api/returns/${returnId}/local-override`,
+    payload
+  );
+  return response.data;
+}
