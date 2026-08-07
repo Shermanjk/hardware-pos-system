@@ -94,25 +94,9 @@ export async function pullApplicationUpdate(): Promise<{ changed: boolean; outpu
 }
 
 /**
- * Write a marker file so that the next Electron launch knows it needs to
- * rebuild before starting the server. This avoids trying to rebuild while
- * the server is already running (which can fail on Windows due to file locks).
- */
-export function scheduleRebuildOnRestart(): void {
-  const repositoryPath = getRepositoryPath();
-  const rebuildFlagPath = path.join(repositoryPath, ".rebuild-needed");
-  try {
-    fs.writeFileSync(rebuildFlagPath, new Date().toISOString());
-    console.log("[gitUpdateService] Rebuild-on-restart flag written");
-  } catch (error) {
-    console.error("[gitUpdateService] Failed to write rebuild flag:", error);
-  }
-}
-
-/**
  * Install lockfile-pinned dependencies and regenerate the client/server bundle.
- * Call this from the Electron startup sequence BEFORE spawning the server, not
- * while the server is already running.
+ * In the browser-based architecture, this is called directly during the update
+ * process before server restart.
  */
 export async function buildApplicationUpdate(): Promise<void> {
   const repositoryPath = getRepositoryPath();

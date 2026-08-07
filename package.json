@@ -10,34 +10,7 @@
     "start": "set NODE_ENV=production && node server-dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
-    "format": "prettier --write .",
-    "electron": "npx --no electron electron/main.cjs",
-    "electron:build": "pnpm build && electron-builder"
-  },
-  "main": "electron/main.cjs",
-  "build": {
-    "appId": "com.israhardware.pos",
-    "productName": "Isra Hardware POS",
-    "files": [
-      ".env",
-      "config/version.json",
-      "config/backup.json",
-      "server-dist/**/*",
-      "electron/**/*",
-      "client/public/**/*"
-    ],
-    "asarUnpack": [
-      ".env",
-      "server-dist/**/*",
-      "client/public/**/*"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -120,8 +93,6 @@
     "add": "^2.0.6",
     "autoprefixer": "^10.4.20",
     "concurrently": "^10.0.3",
-    "electron": "^43.1.1",
-    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "pnpm": "^10.15.1",
     "postcss": "^8.4.47",

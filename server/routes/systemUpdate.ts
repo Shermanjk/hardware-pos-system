@@ -4,7 +4,7 @@ import { requireRole } from "../middleware/requireRole.js";
 import {
     createBackup,
 } from "../services/backupService.js";
-import { checkForUpdates, pullApplicationUpdate, scheduleRebuildOnRestart } from "../services/gitUpdateService.js";
+import { checkForUpdates, pullApplicationUpdate, buildApplicationUpdate } from "../services/gitUpdateService.js";
 import { maintenanceService } from "../services/maintenanceService.js";
 import {
     executePendingMigrations,
@@ -14,7 +14,6 @@ import {
     updateInstalledVersion,
 } from "../services/versionService.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-import { triggerElectronRestart } from "../utils/electronRestart.js";
 
 const router = Router();
 
@@ -145,11 +144,10 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
       });
     }
 
-    // Step 3: Schedule a rebuild on the next Electron launch.
-    // We do NOT rebuild here (the server is currently running from those files
-    // and Windows locks them). Electron will detect the flag, run `pnpm build`,
-    // and only then start the new server process.
-    scheduleRebuildOnRestart();
+    // Step 3: Rebuild the application now that migrations are complete.
+    // In the browser-based architecture, we rebuild before restart since
+    // there's no Electron to handle it on next launch.
+    await buildApplicationUpdate();
 
     // Step 4: Update installed version in the database.
     // The database version is advanced by each successful forward-only
@@ -176,8 +174,12 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
     keepMaintenance = false;
     maintenanceService.exit();
 
-    // Step 7: Trigger Electron restart
-    await triggerElectronRestart();
+    // Step 7: Restart the server process
+    // In the browser-based architecture, we restart the Node.js server directly
+    console.log("[systemUpdate/install] Restarting server process...");
+    setTimeout(() => {
+      process.exit(0); // Exit cleanly - process manager (PM2/supervisor) will restart
+    }, 1000);
 
     res.status(200).json({
       message: "Update installed successfully",
