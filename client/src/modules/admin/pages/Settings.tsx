@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PWAInstallButton } from "@/components/PWAInstallButton";
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { getSettings, updateSettings } from "@/shared/api/settingsApi";
 import { changePassword } from "@/shared/api/usersApi";
@@ -320,6 +321,45 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
   );
 }
 
+// ─── PWA Installation Tab ───────────────────────────────────────────────────────
+
+function PWATab() {
+  const { user } = useAuth();
+
+  // Only show install button to Admin users
+  if (user?.role !== "Admin") {
+    return (
+      <Card className="p-6">
+        <h2 className="text-lg font-display font-bold text-gray-900 mb-4">PWA Installation</h2>
+        <p className="text-sm text-gray-600">
+          PWA installation is only available to administrators.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-lg font-display font-bold text-gray-900 mb-2">PWA Installation</h2>
+      <p className="text-sm text-gray-600 mb-6">
+        Install the POS as a desktop application for a professional, app-like experience.
+      </p>
+      <div className="space-y-4">
+        <PWAInstallButton />
+        <div className="text-xs text-gray-500 mt-4">
+          <p className="font-medium mb-1">Installation Benefits:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Opens without browser tabs or address bar</li>
+            <li>Creates desktop shortcut</li>
+            <li>Works offline for static assets</li>
+            <li>Optimized for kiosk terminals</li>
+          </ul>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Security Tab ─────────────────────────────────────────────────────────────
 
 function SecurityTab() {
@@ -496,10 +536,11 @@ export default function Settings() {
       )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="business">Business</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="pwa-install">PWA Install</TabsTrigger>
           <TabsTrigger value="system-update">System Update</TabsTrigger>
           <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
         </TabsList>
@@ -507,6 +548,7 @@ export default function Settings() {
         <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
         <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
         <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
+        <TabsContent value="pwa-install" className="space-y-6"><PWATab /></TabsContent>
         <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
         <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
       </Tabs>

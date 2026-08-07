@@ -8,6 +8,7 @@ import ErrorBoundary from "./shared/components/ErrorBoundary";
 import PasswordChangeGuard from "./shared/components/PasswordChangeGuard";
 import ProtectedRoute from "./shared/components/ProtectedRoute";
 import { AuthProvider } from "./shared/contexts/AuthContext";
+import { DisplayModeProvider } from "@/shared/contexts/DisplayModeContext";
 import { ThemeProvider } from "./shared/contexts/ThemeContext";
 
 // Admin pages
@@ -134,13 +135,15 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <UpdateNotification />
-            <Router />
-          </TooltipProvider>
-        </AuthProvider>
+        <DisplayModeProvider>
+          <AuthProvider>
+            <TooltipProvider>
+              <Toaster />
+              <UpdateNotification />
+              <Router />
+            </TooltipProvider>
+          </AuthProvider>
+        </DisplayModeProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
