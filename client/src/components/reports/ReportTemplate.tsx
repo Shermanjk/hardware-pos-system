@@ -95,7 +95,7 @@ export default function ReportTemplate({
         <h1 style={{ 
           fontSize: '24px', 
           fontWeight: 'bold', 
-          marginBottom: '8px',
+          marginBottom: '12px',
           margin: 0 
         }}>
           {storeSettings.store_name || 'ISRA HARDWARE TRADING'}
@@ -103,18 +103,34 @@ export default function ReportTemplate({
         <p style={{ margin: '4px 0', fontSize: '11px' }}>
           {storeSettings.address || '—'}
         </p>
-        <p style={{ margin: '4px 0', fontSize: '11px' }}>
-          Contact: {storeSettings.contact_number || '—'}
-        </p>
-        <p style={{ margin: '4px 0', fontSize: '11px' }}>
-          TIN: {storeSettings.tin || '—'}
-        </p>
-        <p style={{ margin: '4px 0', fontSize: '11px' }}>
-          Business Style: {storeSettings.business_license || '—'}
-        </p>
-        <p style={{ margin: '4px 0', fontSize: '11px' }}>
-          VAT Status: {storeSettings.vat_registered ? 'VAT Registered' : 'Non-VAT'}
-        </p>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '20px', 
+          marginTop: '8px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ fontSize: '11px' }}>
+            <span style={{ fontWeight: 'bold' }}>Contact:</span> {storeSettings.contact_number || '—'}
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            <span style={{ fontWeight: 'bold' }}>TIN:</span> {storeSettings.tin || '—'}
+          </div>
+        </div>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '20px', 
+          marginTop: '4px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ fontSize: '11px' }}>
+            <span style={{ fontWeight: 'bold' }}>Business Style:</span> {storeSettings.business_license || '—'}
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            <span style={{ fontWeight: 'bold' }}>VAT Status:</span> {storeSettings.vat_registered ? 'VAT Registered' : 'Non-VAT'}
+          </div>
+        </div>
       </div>
 
       {/* Report Title */}
