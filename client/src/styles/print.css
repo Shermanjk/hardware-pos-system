@@ -1,0 +1,147 @@
+@media print {
+  /* Hide sidebar */
+  .sidebar,
+  aside,
+  nav[class*="sidebar"] {
+    display: none !important;
+  }
+
+  /* Hide navbar */
+  .navbar,
+  header,
+  nav[class*="navbar"],
+  nav[class*="header"] {
+    display: none !important;
+  }
+
+  /* Hide export buttons */
+  .export-buttons,
+  button[class*="export"],
+  .export-button {
+    display: none !important;
+  }
+
+  /* Hide search box */
+  .search-box,
+  input[type="search"],
+  input[placeholder*="search"],
+  .search-input {
+    display: none !important;
+  }
+
+  /* Hide filters */
+  .filter-section,
+  .filters,
+  .filter-container,
+  .date-filters,
+  .quick-date-filters {
+    display: none !important;
+  }
+
+  /* Hide pagination */
+  .pagination,
+  .page-controls,
+  button[class*="page"] {
+    display: none !important;
+  }
+
+  /* Hide other UI elements */
+  .back-button,
+  .action-buttons,
+  .toolbar,
+  .status-bar {
+    display: none !important;
+  }
+
+  /* Show only report container */
+  .report-container,
+  .report-wrapper,
+  .report-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* A4 paper optimization */
+  @page {
+    size: A4;
+    margin: 0.5cm;
+  }
+
+  /* Adjust body for print */
+  body {
+    font-size: 10pt;
+    line-height: 1.2;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Ensure tables print correctly */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  /* Hide empty cells */
+  td:empty,
+  th:empty {
+    display: none;
+  }
+
+  /* Print background colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Remove shadows and borders for print */
+  .shadow-sm,
+  .shadow,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl {
+    box-shadow: none !important;
+  }
+
+  .border,
+  .border-gray-200,
+  .rounded-xl,
+  .rounded-lg {
+    border: 1px solid #ccc !important;
+    border-radius: 0 !important;
+  }
+
+  /* Ensure text is readable */
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-400 {
+    color: #333 !important;
+  }
+
+  /* Hide scrollbars */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Ensure overflow content is visible */
+  .overflow-x-auto,
+  .overflow-y-auto {
+    overflow: visible !important;
+  }
+}

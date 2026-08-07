@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown } from "lucide-react";
-import { useState } from "react";
+import { useState, forwardRef, useImperativeHandle } from "react";
 
 export interface Column {
   key: string;
@@ -15,6 +15,12 @@ export interface SummaryRow {
   values: Record<string, string | number>;
 }
 
+export interface ReportTableRef {
+  getExportData: () => any[];
+  getExportColumns: () => Column[];
+  getSummaryData: () => SummaryRow[];
+}
+
 interface ReportTableProps {
   columns: Column[];
   data: any[];
@@ -26,7 +32,7 @@ interface ReportTableProps {
   onRowClick?: (row: any) => void;
 }
 
-export default function ReportTable({
+export default forwardRef<ReportTableRef, ReportTableProps>(function ReportTable({
   columns,
   data,
   loading = false,
@@ -35,7 +41,7 @@ export default function ReportTable({
   showPagination = true,
   summaryRows = [],
   onRowClick,
-}: ReportTableProps) {
+}, ref) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -94,6 +100,13 @@ export default function ReportTable({
         return "text-left";
     }
   };
+
+  // Expose methods for exports
+  useImperativeHandle(ref, () => ({
+    getExportData: () => sortedData,
+    getExportColumns: () => columns,
+    getSummaryData: () => summaryRows,
+  }));
 
   if (loading) {
     return (
@@ -262,4 +275,4 @@ export default function ReportTable({
       )}
     </div>
   );
-}
+});
