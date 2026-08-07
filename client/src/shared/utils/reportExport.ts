@@ -1,6 +1,3 @@
-import ExcelJS from 'exceljs';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Column, SummaryRow } from '@/components/reports/ReportTable';
 import { StoreSettings } from '@/shared/api/settingsApi';
 
@@ -200,6 +197,9 @@ export async function exportToExcel(exportData: ExportData, reportInfo: ReportIn
     return;
   }
 
+  // Dynamic import to reduce bundle size
+  const ExcelJS = (await import('exceljs')).default;
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Report');
   
@@ -396,13 +396,19 @@ export async function exportToExcel(exportData: ExportData, reportInfo: ReportIn
 }
 
 // PDF Export with professional formatting
-export function exportToPDF(exportData: ExportData, reportInfo: ReportInfo) {
+export async function exportToPDF(exportData: ExportData, reportInfo: ReportInfo) {
   const { data, columns, summaryRows } = exportData;
   
   if (data.length === 0) {
     console.warn('No data to export to PDF');
     return;
   }
+
+  // Dynamic imports to reduce bundle size
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
 
   const doc = new jsPDF({
     orientation: columns.length > 8 ? 'landscape' : 'portrait',
