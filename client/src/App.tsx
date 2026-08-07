@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { UpdateNotification } from "@/components/UpdateNotification";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import AdminLayout from "./modules/admin/layout/AdminLayout";
@@ -150,7 +149,6 @@ function App() {
           <AuthProvider>
             <TooltipProvider>
               <Toaster />
-              <UpdateNotification />
               <Router />
             </TooltipProvider>
           </AuthProvider>

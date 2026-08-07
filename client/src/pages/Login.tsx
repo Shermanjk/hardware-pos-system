@@ -67,7 +67,17 @@ export default function Login() {
   return (
     <div className="min-h-screen flex relative">
       <button
-        onClick={() => window.close()}
+        onClick={() => {
+          // Try multiple methods to close/minimize the window
+          window.close();
+          // Fallback for browsers that block window.close()
+          window.open('', '_self', '');
+          window.close();
+          // If running as PWA, try to exit
+          if ((window.navigator as any).standalone) {
+            window.location.href = 'about:blank';
+          }
+        }}
         className="absolute top-4 right-4 z-50 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
         aria-label="Close application"
       >
