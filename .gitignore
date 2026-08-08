@@ -30,6 +30,10 @@ dist2/*.rpm
 dist2/*.zip
 dist2/*.tar.gz
 dist2/*.asar
+release*/
+electron-build/
+electron-dist/
+dist-electron/
 
 # Environment variables
 .env

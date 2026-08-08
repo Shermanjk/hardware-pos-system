@@ -10,8 +10,10 @@
 
 import axios from "axios";
 import { loadToken, clearToken, TOKEN_KEY } from "@/shared/utils/auth";
+import { API_BASE_URL } from "@/config/api";
 
 const httpClient = axios.create({
+  baseURL: API_BASE_URL,
   timeout: 15_000, // 15 s — prevents requests from hanging indefinitely
 });
 

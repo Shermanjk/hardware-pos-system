@@ -210,62 +210,7 @@ const plugins = [
   tailwindcss(),
   jsxLocPlugin(),
   vitePluginManusDebugCollector(),
-  vitePluginStorageProxy(),
-  VitePWA({
-    registerType: 'autoUpdate',
-    includeAssets: ['icon-192x192.png', 'icon-512x512.png', 'icon-maskable-512x512.png'],
-    manifest: {
-      name: 'Isra Hardware POS',
-      short_name: 'Isra POS',
-      description: 'Hardware Point of Sale System',
-      theme_color: '#2563eb',
-      background_color: '#ffffff',
-      display: 'standalone',
-      orientation: 'landscape',
-      icons: [
-        {
-          src: '/icon-192x192.png',
-          sizes: '192x192',
-          type: 'image/png',
-          purpose: 'any'
-        },
-        {
-          src: '/icon-512x512.png',
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'any'
-        },
-        {
-          src: '/icon-maskable-512x512.png',
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'maskable'
-        }
-      ]
-    },
-    workbox: {
-      globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-      runtimeCaching: [
-        {
-          urlPattern: /^https?.*/,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'isra-pos-http-cache',
-            expiration: {
-              maxEntries: 100,
-              maxAgeSeconds: 86400 // 24 hours
-            }
-          }
-        }
-      ],
-      // Don't cache API or WebSocket requests
-      navigateFallback: null,
-      navigateFallbackDenylist: [/^\/api/, /^\/ws/]
-    },
-    devOptions: {
-      enabled: false // Disable service worker in development
-    }
-  })
+  vitePluginStorageProxy()
 ];
 
 export default defineConfig({
@@ -287,6 +232,9 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    base: '/',
+    assetsDir: 'assets',
+    chunkSizeWarningLimit: 1000
   },
   server: {
     port: 3000,
