@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import fs from "fs";
 import { createServer } from "http";
 import path from "path";
@@ -40,6 +41,13 @@ async function startServer() {
 
   // ─── Body parsing ────────────────────────────────────────────────────────────
   app.use(express.json({ limit: "100kb" }));
+  
+  // ─── CORS ────────────────────────────────────────────────────────────────────
+  app.use(cors({
+    origin: true, // Allow all origins for development
+    credentials: true
+  }));
+  
   app.use(maintenanceGate);
 
   // ─── Health check (unauthenticated liveness probe) ───────────────────────────
