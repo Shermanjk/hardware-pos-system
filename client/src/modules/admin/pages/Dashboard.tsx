@@ -184,7 +184,7 @@ export default function Dashboard() {
     const map = new Map((data?.weekly_sales ?? []).map((r) => [r.sale_date, r]));
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
+      d.setUTCDate(d.getUTCDate() - (6 - i));
       const key  = d.toISOString().slice(0, 10);
       const day  = d.toLocaleDateString("en-PH", { weekday: "short" });
       const row  = map.get(key);
