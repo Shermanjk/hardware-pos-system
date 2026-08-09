@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
     Category,
     CreateProductPayload,
@@ -1075,14 +1076,20 @@ export default function Products() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <tr>
-                  <td colSpan={10} className="py-20 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <Spinner className="text-blue-500" />
-                      <span className="text-sm">Loading products…</span>
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                  </tr>
+                ))
               ) : products.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-20 text-center">

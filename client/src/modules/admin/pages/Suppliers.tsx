@@ -6,6 +6,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Supplier } from "@/shared/api/productsApi";
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
@@ -607,12 +608,17 @@ export default function Suppliers() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <tr><td colSpan={7} className="py-20 text-center">
-                  <div className="flex items-center justify-center gap-2 text-gray-400">
-                    <Spinner className="text-blue-500" />
-                    <span className="text-sm">Loading suppliers…</span>
-                  </div>
-                </td></tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                  </tr>
+                ))
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-3">

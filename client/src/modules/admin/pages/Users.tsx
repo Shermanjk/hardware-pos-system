@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "@/shared/api/usersApi";
 import { createUser, deactivateUser, getUsers, resetPassword, updateUser } from "@/shared/api/usersApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
@@ -704,14 +705,16 @@ export default function Users() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <span className="h-5 w-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-                      <span className="text-sm">Loading users…</span>
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-28" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                  </tr>
+                ))
               ) : users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-20 text-center">

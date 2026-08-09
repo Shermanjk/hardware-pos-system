@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { getSettings, updateSettings } from "@/shared/api/settingsApi";
 import { changePassword } from "@/shared/api/usersApi";
@@ -447,6 +448,7 @@ function SecurityTab() {
 
 export default function Settings() {
   const [settings,  setSettings]  = useState<StoreSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("general");
   const [hasUnsavedBackupChanges, setHasUnsavedBackupChanges] = useState(false);
@@ -455,8 +457,14 @@ export default function Settings() {
 
   useEffect(() => {
     getSettings()
-      .then(setSettings)
-      .catch(() => setLoadError("Failed to load settings. Please refresh the page."));
+      .then((data) => {
+        setSettings(data);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setLoadError("Failed to load settings. Please refresh the page.");
+        setIsLoading(false);
+      });
   }, []);
 
   const handleTabChange = (newTab: string) => {
@@ -496,21 +504,35 @@ export default function Settings() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="business">Business</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="system-update">System Update</TabsTrigger>
-          <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
-        </TabsList>
+      {isLoading ? (
+        <Card className="p-6 space-y-6">
+          <Skeleton className="h-7 w-48" />
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="business">Business</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="system-update">System Update</TabsTrigger>
+            <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
-        <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
-        <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
-        <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
-        <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
-      </Tabs>
+          <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
+          <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
+          <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
+          <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
+          <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
+        </Tabs>
+      )}
 
       {/* Unsaved Changes Dialog */}
       <Dialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>

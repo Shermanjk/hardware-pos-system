@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getCashiers, type CashierOption } from "@/shared/api/cashReconciliationApi";
 import type { Sale, SaleSummary } from "@/shared/api/salesApi";
 import { getSaleByInvoice, searchSales } from "@/shared/api/salesApi";
@@ -15,6 +16,7 @@ import {
     Receipt,
     Search,
     ShoppingCart,
+    User,
     X
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -226,7 +228,7 @@ export default function Sales() {
   const cashierTotals = sales
     .filter((s) => s.void_status !== "voided")
     .reduce<Record<string, { name: string; total: number; count: number }>>((acc, s) => {
-      const key = String(s.cashier_id ?? s.cashier_name);
+      const key = s.cashier_name;
       if (!acc[key]) acc[key] = { name: s.cashier_name, total: 0, count: 0 };
       acc[key].total += Number(s.total_amount) - Number((s as any).total_refunded || 0);
       acc[key].count += 1;
@@ -489,11 +491,16 @@ export default function Sales() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="py-20 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <Spinner className="text-blue-500" /><span className="text-sm">Loading sales…</span>
-                    </div>
-                  </td></tr>
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-28" /></td>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                      <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                    </tr>
+                  ))
                 ) : sales.length === 0 ? (
                   <tr><td colSpan={6} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">

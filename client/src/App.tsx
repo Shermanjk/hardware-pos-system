@@ -7,6 +7,7 @@ import AdminLayout from "./modules/admin/layout/AdminLayout";
 import ErrorBoundary from "./shared/components/ErrorBoundary";
 import PasswordChangeGuard from "./shared/components/PasswordChangeGuard";
 import ProtectedRoute from "./shared/components/ProtectedRoute";
+import PageSkeleton from "./shared/components/PageSkeleton";
 import { AuthProvider } from "./shared/contexts/AuthContext";
 import { DisplayModeProvider } from "@/shared/contexts/DisplayModeContext";
 import { ThemeProvider } from "./shared/contexts/ThemeContext";
@@ -49,7 +50,7 @@ const ClerkStockIn = lazy(() => import("./modules/clerk/pages/ClerkStockIn"));
 
 function ClerkRouter() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+    <Suspense fallback={<PageSkeleton />}>
       <ClerkLayout>
         <Switch>
           <Route path="/clerk/dashboard"        component={ClerkDashboard}       />
@@ -70,7 +71,7 @@ function ClerkRouter() {
 
 function AdminRouter() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+    <Suspense fallback={<PageSkeleton />}>
       <AdminLayout>
         <Switch>
           <Route path="/"                component={Dashboard}      />
@@ -100,7 +101,7 @@ function AdminRouter() {
 
 function Router() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+    <Suspense fallback={<PageSkeleton />}>
       <Switch>
         {/* Public route */}
         <Route path="/login" component={Login} />

@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import httpClient from "@/shared/api/httpClient";
 import { loadToken } from "@/shared/utils/auth";
 import axios from "axios";
@@ -336,7 +337,16 @@ export default function DiscountManagement() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {discountsLoading ? (
-                    <tr><td colSpan={6} className="py-20 text-center text-gray-400">Loading discounts...</td></tr>
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i}>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                      </tr>
+                    ))
                   ) : discounts.length === 0 ? (
                     <tr><td colSpan={6} className="py-16 text-center text-gray-400">No discounts found</td></tr>
                   ) : (
@@ -409,8 +419,42 @@ export default function DiscountManagement() {
           )}
 
           {requestsLoading ? (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-20 text-center text-gray-400">
-              Loading discount requests...
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Skeleton className="w-10 h-10 rounded-lg" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-16" />
+                          <Skeleton className="h-3 w-28" />
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <Skeleton className="h-9 w-24" />
+                      <Skeleton className="h-9 w-20" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : requests.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">

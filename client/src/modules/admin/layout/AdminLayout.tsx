@@ -77,7 +77,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <AdminTopNav onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8 transition-opacity duration-300">
           {children}
         </main>
       </div>

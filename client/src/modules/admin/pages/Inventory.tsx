@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     getInventory,
     getInventoryLogs,
@@ -146,11 +147,19 @@ function StockTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={9} className="py-20 text-center">
-                <div className="flex items-center justify-center gap-2 text-gray-400">
-                  <Spinner className="text-blue-500" /><span className="text-sm">Loading inventory…</span>
-                </div>
-              </td></tr>
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i}>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-32" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-12" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                  <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
+                </tr>
+              ))
             ) : items.length === 0 ? (
               <tr><td colSpan={9} className="py-20 text-center">
                 <div className="flex flex-col items-center gap-2">

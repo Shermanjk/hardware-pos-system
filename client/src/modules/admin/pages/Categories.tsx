@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getCategories, createCategory, updateCategory, deleteCategory,
   getUnits, createUnit, updateUnit, deleteUnit,
@@ -743,11 +744,17 @@ export default function Categories() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">
-          <div className="flex items-center justify-center gap-2 text-gray-400">
-            <Spinner className="text-blue-500" />
-            <span className="text-sm">Loading {activeTab === "categories" ? "categories" : "units"}…</span>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-3">
+              <Skeleton className="h-5 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <div className="flex gap-2 pt-2">
+                <Skeleton className="h-8 w-8" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : activeTab === "categories" && filteredCategories.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">

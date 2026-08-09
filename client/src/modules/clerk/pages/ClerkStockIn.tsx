@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     getCurrentPrice,
     getPurchaseHistory,
@@ -374,8 +375,10 @@ function CommodityPurchaseCard({
 
       {/* Reference price display */}
       {priceLoading ? (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Spinner className="text-amber-500" /> Loading reference price…
+        <div className="p-3 bg-white border border-amber-200 rounded-lg space-y-2">
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-3 w-32" />
         </div>
       ) : priceError ? (
         <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -1191,8 +1194,31 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
       {/* Stock In History Tab */}
       {activeTab === "stockin" && (
         logsLoading ? (
-          <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
-            <Spinner className="text-blue-500" /> Loading history…
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-y border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Qty Added</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Stock</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[160px]">Reference</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-20" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : logs.length === 0 ? (
           <div className="py-10 text-center text-gray-400 text-sm">No stock-in history yet.</div>
@@ -1244,8 +1270,31 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
       {/* Commodity Requests Tab */}
       {activeTab === "commodity" && (
         commodityLoading ? (
-          <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
-            <Spinner className="text-amber-500" /> Loading requests…
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-y border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-24">Qty</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Amount</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Seller</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-3.5 px-4"><Skeleton className="h-4 w-24" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : commodityRequests.length === 0 ? (
           <div className="py-10 text-center text-gray-400 text-sm">No commodity purchase requests yet.</div>
