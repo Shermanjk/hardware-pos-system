@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, AlertCircle, X } from "lucide-react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import axios from "axios";
 
@@ -27,7 +27,6 @@ export default function Login() {
   };
 
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe,   setRememberMe]   = useState(false);
   const [username,     setUsername]     = useState("");
   const [password,     setPassword]     = useState("");
   const [isLoading,    setIsLoading]    = useState(false);
@@ -50,7 +49,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       // Role is determined server-side from the database — no client selection needed
-      await login(username.trim(), password, rememberMe);
+      await login(username.trim(), password, false);
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const message =
@@ -66,23 +65,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex relative">
-      <button
-        onClick={() => {
-          // Try multiple methods to close/minimize the window
-          window.close();
-          // Fallback for browsers that block window.close()
-          window.open('', '_self', '');
-          window.close();
-          // If running as PWA, try to exit
-          if ((window.navigator as any).standalone) {
-            window.location.href = 'about:blank';
-          }
-        }}
-        className="absolute top-4 right-4 z-50 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-        aria-label="Close application"
-      >
-        <X className="h-5 w-5" />
-      </button>
       {/* Left — slideshow */}
       <div className="hidden lg:flex lg:w-1/2 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 p-10">
         <div
@@ -135,13 +117,6 @@ export default function Login() {
               <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
                 <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                 <p className="text-sm text-red-700 flex-1">{error}</p>
-                <button
-                  type="button"
-                  onClick={() => setError(null)}
-                  className="text-red-400 hover:text-red-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
               </div>
             )}
 
@@ -208,20 +183,6 @@ export default function Login() {
               )}
             </div>
 
-            {/* Remember me */}
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                disabled={isLoading}
-                className="border-gray-300"
-              />
-              <label htmlFor="remember" className="text-sm text-gray-600 cursor-pointer">
-                Remember me <span className="text-gray-400">(30 days)</span>
-              </label>
-            </div>
-
             {/* Submit */}
             <Button
               type="submit"
@@ -237,7 +198,7 @@ export default function Login() {
 
           {/* Footer */}
           <div className="mt-8 pt-5 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400">© 2024 Isra Hardware. All rights reserved.</p>
+            <p className="text-xs text-gray-400">© 2026 Isra Hardware. All rights reserved.</p>
           </div>
         </Card>
       </div>
