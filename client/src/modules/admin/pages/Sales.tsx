@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCashiers, type CashierOption } from "@/shared/api/cashReconciliationApi";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import type { Sale, SaleSummary } from "@/shared/api/salesApi";
 import { getSaleByInvoice, searchSales } from "@/shared/api/salesApi";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
@@ -32,10 +33,6 @@ function fmtDate(d: string) {
     year: "numeric", month: "short", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-}
-
-function Spinner({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
 }
 
 function extractError(err: unknown): string {
@@ -92,7 +89,7 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
         <div className="overflow-y-auto flex-1">
           {loading && (
             <div className="py-12 flex items-center justify-center gap-2 text-gray-400 px-6">
-              <Spinner className="text-blue-500" /> Loading sale details…
+              <LoadingSpinner size={16} className="text-blue-500" /> Loading sale details…
             </div>
           )}
 
@@ -430,7 +427,7 @@ export default function Sales() {
               </div>
               <Button type="submit" disabled={isLoading}
                 className="bg-blue-600 hover:bg-blue-700 text-white h-9 px-5 text-sm gap-2">
-                {isLoading ? <Spinner className="text-white" /> : <Search className="h-4 w-4" />}
+                {isLoading ? <LoadingSpinner size={16} className="text-white" /> : <Search className="h-4 w-4" />}
                 {isLoading ? "Searching…" : "Search"}
               </Button>
               {hasSearched && (

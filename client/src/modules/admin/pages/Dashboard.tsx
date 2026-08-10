@@ -13,6 +13,7 @@ import { Link } from "wouter";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 import { getPendingCounts } from "@/shared/api/dashboardApi";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,9 +58,6 @@ function fmtTime(d: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function Spinner({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
-}
 
 function PesoIcon({ className = "" }: { className?: string }) {
   return <span className={`text-lg font-bold ${className}`}>₱</span>;
@@ -261,7 +259,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-500 font-medium">Pending Requests</p>
-                {pendingLoading ? <Spinner className="text-blue-500 mt-1" /> : (
+                {pendingLoading ? <LoadingSpinner size={16} className="text-blue-500 mt-1" /> : (
                   <p className="text-xl font-bold text-gray-900 tabular-nums">
                     {pendingCounts.pending_requests}
                   </p>
@@ -279,7 +277,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 font-medium">Approved Today</p>
-              {pendingLoading ? <Spinner className="text-green-500 mt-1" /> : (
+              {pendingLoading ? <LoadingSpinner size={16} className="text-green-500 mt-1" /> : (
                 <p className="text-xl font-bold text-gray-900 tabular-nums">
                   {pendingCounts.approved_today}
                 </p>
@@ -294,7 +292,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 font-medium">Rejected Today</p>
-              {pendingLoading ? <Spinner className="text-red-500 mt-1" /> : (
+              {pendingLoading ? <LoadingSpinner size={16} className="text-red-500 mt-1" /> : (
                 <p className="text-xl font-bold text-gray-900 tabular-nums">
                   {pendingCounts.rejected_today}
                 </p>
@@ -309,7 +307,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-500 font-medium">Commodity Approvals</p>
-                {pendingLoading ? <Spinner className="text-amber-500 mt-1" /> : (
+                {pendingLoading ? <LoadingSpinner size={16} className="text-amber-500 mt-1" /> : (
                   <p className="text-xl font-bold text-gray-900 tabular-nums">
                     {pendingCounts.pending_commodity_approvals}
                   </p>
@@ -345,7 +343,7 @@ export default function Dashboard() {
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-500 font-medium">Status</p>
             {backupStatus === null ? (
-              <Spinner className="text-blue-500 mt-1" />
+              <LoadingSpinner size={16} className="text-blue-500 mt-1" />
             ) : (
               <p className={`text-sm font-bold ${backupStatus?.exists ? "text-green-700" : "text-red-700"}`}>
                 {backupStatus?.exists ? "Completed" : "Not Yet Created"}

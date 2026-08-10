@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import ClerkSidebar from "./ClerkSidebar";
 import ClerkTopNav from "./ClerkTopNav";
+import PageTransition from "@/shared/components/PageTransition";
 import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
 
 interface ClerkLayoutProps {
@@ -32,8 +33,10 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
         />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <ClerkTopNav onMenuClick={() => setSidebarOpen((v) => !v)} />
-          <main className="flex-1 overflow-y-auto p-6 lg:p-8 transition-opacity duration-300">
-            {children}
+          <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+            <PageTransition>
+              {children}
+            </PageTransition>
           </main>
         </div>
       </div>

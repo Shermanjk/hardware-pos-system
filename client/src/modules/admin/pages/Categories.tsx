@@ -16,6 +16,7 @@ import {
   getUnits, createUnit, updateUnit, deleteUnit,
 } from "@/shared/api/productsApi";
 import type { Category, Unit } from "@/shared/api/productsApi";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import axios from "axios";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -27,12 +28,6 @@ function extractError(err: unknown): string {
     if (body?.errors?.[0]?.message) return body.errors[0].message;
   }
   return "An unexpected error occurred.";
-}
-
-function Spinner({ className = "" }: { className?: string }) {
-  return (
-    <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />
-  );
 }
 
 // ─── Category Form Modal ──────────────────────────────────────────────────────
@@ -134,7 +129,7 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
               {isLoading ? "Saving…" : isAdd ? "Add Category" : "Save Changes"}
             </Button>
           </div>
@@ -352,7 +347,7 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
               {isLoading ? "Saving…" : isAdd ? "Add Unit" : "Save Changes"}
             </Button>
           </div>
@@ -428,7 +423,7 @@ function DeleteDialog({ category, onClose, onDeleted }: DeleteDialogProps) {
             disabled={isLoading}
             className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {isLoading && <Spinner className="text-white" />}
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
             {isLoading ? "Deleting…" : "Delete"}
           </Button>
         </div>
@@ -536,7 +531,7 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
               disabled={isLoading}
               className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
             >
-              {isLoading && <Spinner className="text-white" />}
+              {isLoading && <LoadingSpinner size={16} className="text-white" />}
               {isLoading ? "Marking Inactive…" : "Mark as Inactive"}
             </Button>
           ) : (
@@ -545,7 +540,7 @@ function UnitDeleteDialog({ unit, onClose, onDeleted }: UnitDeleteDialogProps) {
               disabled={isLoading}
               className="bg-red-600 hover:bg-red-700 text-white gap-2"
             >
-              {isLoading && <Spinner className="text-white" />}
+              {isLoading && <LoadingSpinner size={16} className="text-white" />}
               {isLoading ? "Deleting…" : "Delete"}
             </Button>
           )}

@@ -10,6 +10,7 @@ import type { StoreSettings } from "@/shared/api/settingsApi";
 import { getSettings, updateSettings } from "@/shared/api/settingsApi";
 import { changePassword } from "@/shared/api/usersApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { saveToken } from "@/shared/utils/auth";
 import axios from "axios";
 import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Pencil, X } from "lucide-react";
@@ -95,7 +96,7 @@ function EditableField({ label, fieldKey, savedValue, placeholder, onSave }: Edi
             className="w-8 h-8 flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 shrink-0"
           >
             {loading
-              ? <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ? <LoadingSpinner size={14} className="text-white" />
               : <Check className="h-3.5 w-3.5" />}
           </button>
           <button
@@ -436,7 +437,7 @@ function SecurityTab() {
         <p className="text-xs text-gray-400">Minimum 8 characters · uppercase · lowercase · number</p>
 
         <Button type="submit" disabled={isLoading} className="mt-2">
-          {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
+          {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
           {isLoading ? "Updating…" : "Update Password"}
         </Button>
       </form>

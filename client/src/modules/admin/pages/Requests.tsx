@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getPendingRequests, getRequestHistory, approveRequest, approveReturnRequest, rejectRequest, type UnifiedRequest } from "@/shared/api/requestsApi";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { toast } from "sonner";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 
@@ -92,7 +93,7 @@ function RejectDialog({ open, onConfirm, onCancel, loading }: RejectDialogProps)
             onClick={() => onConfirm(reason.trim())}
             className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+            {loading && <LoadingSpinner size={16} className="text-white" />}
             {loading ? "Rejecting…" : "Reject"}
           </Button>
         </div>
@@ -255,7 +256,7 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
             onClick={handleConfirm}
             className="bg-green-600 hover:bg-green-700 text-white gap-2"
           >
-            {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+            {loading && <LoadingSpinner size={16} className="text-white" />}
             {loading ? "Approving…" : "Approve"}
           </Button>
         </div>
@@ -607,7 +608,7 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
               {loading ? (
                 <tr><td colSpan={9} className="py-20 text-center">
                   <div className="flex items-center justify-center gap-2 text-gray-400">
-                    <span className="h-4 w-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                    <LoadingSpinner size={16} className="text-blue-600" />
                     <span className="text-sm">Loading…</span>
                   </div>
                 </td></tr>

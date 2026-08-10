@@ -27,6 +27,7 @@ import {
     updateProduct,
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
@@ -61,10 +62,6 @@ function statusBadge(status: StockStatus) {
       {status}
     </span>
   );
-}
-
-function Spinner({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
 }
 
 // ─── Form types ───────────────────────────────────────────────────────────────
@@ -442,7 +439,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                       className={`bg-gray-100 flex-1 ${errors.barcode ? "border-red-400" : "border-gray-300"}`} />
                     <Button type="button" variant="outline" onClick={handleGenerateBarcode}
                       disabled={isLoading || generatingBC} className="shrink-0 gap-2 border-gray-300">
-                      {generatingBC ? <Spinner className="text-gray-500" /> : <Wand2 className="h-4 w-4" />}
+                      {generatingBC ? <LoadingSpinner size={16} className="text-gray-500" /> : <Wand2 className="h-4 w-4" />}
                       Generate
                     </Button>
                   </div>
@@ -640,7 +637,7 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
             Cancel
           </Button>
           <Button type="submit" disabled={isLoading} className={`px-6 gap-2 ${mode === "add" ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-800 hover:bg-gray-900"}`}>
-            {isLoading && <Spinner className="text-white" />}
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
             {isLoading
               ? (mode === "add" ? "Adding…" : "Saving…")
               : (mode === "add" ? "Add Product" : "Save Changes")}
@@ -858,7 +855,7 @@ function DeleteDialog({ product, onClose, onDeleted }: DeleteDialogProps) {
             disabled={isLoading}
             className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {isLoading && <Spinner className="text-white" />}
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
             {isLoading ? "Removing…" : "Remove"}
           </Button>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AdminSidebar from "./AdminSidebar";
 import AdminTopNav from "./AdminTopNav";
 import DailyBackupReminder from "@/components/DailyBackupReminder";
+import PageTransition from "@/shared/components/PageTransition";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 
@@ -18,7 +19,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   } | null>(null);
 
   useEffect(() => {
-    // Check backup status on mount
+    // Check backup status on mount - deferred to not block initial render
     const checkBackupStatus = async () => {
       try {
         const token = loadToken();
@@ -61,7 +62,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       }
     };
 
-    checkBackupStatus();
+    // Defer backup check to avoid blocking initial render
+    const timeoutId = setTimeout(() => {
+      checkBackupStatus();
+    }, 100);
 
     // Listen for backup creation event to refresh status
     const handleBackupCreated = () => {
@@ -69,7 +73,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
 
     window.addEventListener('backup-created', handleBackupCreated);
-    return () => window.removeEventListener('backup-created', handleBackupCreated);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('backup-created', handleBackupCreated);
+    };
   }, []);
 
   return (
@@ -77,8 +84,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <AdminTopNav onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8 transition-opacity duration-300">
-          {children}
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
       </div>
       <DailyBackupReminder

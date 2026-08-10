@@ -50,20 +50,18 @@ const ClerkStockIn = lazy(() => import("./modules/clerk/pages/ClerkStockIn"));
 
 function ClerkRouter() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <ClerkLayout>
-        <Switch>
-          <Route path="/clerk/dashboard"        component={ClerkDashboard}       />
-          <Route path="/clerk/inventory"        component={ClerkInventory}       />
-          <Route path="/clerk/stock-in"         component={ClerkStockIn}         />
-          <Route path="/clerk/stock-adjustment" component={ClerkStockAdjustment} />
-          <Route path="/clerk/stock-count"      component={ClerkStockCount}      />
-          <Route path="/clerk/barcode-printing" component={ClerkBarcodePrinting} />
-          <Route path="/clerk/low-stock"        component={ClerkLowStock}        />
-          <Route component={NotFound} />
-        </Switch>
-      </ClerkLayout>
-    </Suspense>
+    <ClerkLayout>
+      <Switch>
+        <Route path="/clerk/dashboard"        component={ClerkDashboard}       />
+        <Route path="/clerk/inventory"        component={ClerkInventory}       />
+        <Route path="/clerk/stock-in"         component={ClerkStockIn}         />
+        <Route path="/clerk/stock-adjustment" component={ClerkStockAdjustment} />
+        <Route path="/clerk/stock-count"      component={ClerkStockCount}      />
+        <Route path="/clerk/barcode-printing" component={ClerkBarcodePrinting} />
+        <Route path="/clerk/low-stock"        component={ClerkLowStock}        />
+        <Route component={NotFound} />
+      </Switch>
+    </ClerkLayout>
   );
 }
 
@@ -71,29 +69,27 @@ function ClerkRouter() {
 
 function AdminRouter() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AdminLayout>
-        <Switch>
-          <Route path="/"                component={Dashboard}      />
-          <Route path="/products"        component={Products}       />
-          <Route path="/categories"      component={Categories}     />
-          <Route path="/inventory"       component={Inventory}      />
-          <Route path="/suppliers"       component={Suppliers}      />
-          <Route path="/sales"           component={Sales}          />
-          <Route path="/reports"         component={Reports}        />
-          <Route path="/users"           component={Users}          />
-          <Route path="/settings"        component={Settings}       />
-          <Route path="/commodity-prices" component={CommodityPrices} />
-          <Route path="/external-processing" component={ExternalProcessing} />
-          <Route path="/requests"        component={Requests}       />
-          <Route path="/discounts"       component={DiscountManagement} />
-          <Route path="/authorization-history" component={AuthorizationHistory} />
-          <Route path="/cash-reconciliation"   component={CashReconciliation} />
-          <Route path="/404"             component={NotFound}       />
-          <Route component={NotFound} />
-        </Switch>
-      </AdminLayout>
-    </Suspense>
+    <AdminLayout>
+      <Switch>
+        <Route path="/"                component={Dashboard}      />
+        <Route path="/products"        component={Products}       />
+        <Route path="/categories"      component={Categories}     />
+        <Route path="/inventory"       component={Inventory}      />
+        <Route path="/suppliers"       component={Suppliers}      />
+        <Route path="/sales"           component={Sales}          />
+        <Route path="/reports"         component={Reports}        />
+        <Route path="/users"           component={Users}          />
+        <Route path="/settings"        component={Settings}       />
+        <Route path="/commodity-prices" component={CommodityPrices} />
+        <Route path="/external-processing" component={ExternalProcessing} />
+        <Route path="/requests"        component={Requests}       />
+        <Route path="/discounts"       component={DiscountManagement} />
+        <Route path="/authorization-history" component={AuthorizationHistory} />
+        <Route path="/cash-reconciliation"   component={CashReconciliation} />
+        <Route path="/404"             component={NotFound}       />
+        <Route component={NotFound} />
+      </Switch>
+    </AdminLayout>
   );
 }
 

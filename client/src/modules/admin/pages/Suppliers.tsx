@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Supplier } from "@/shared/api/productsApi";
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
 import {
@@ -41,12 +42,6 @@ function extractError(err: unknown): string {
     if (body?.errors?.[0]?.message) return body.errors[0].message;
   }
   return "An unexpected error occurred.";
-}
-
-function Spinner({ className = "" }: { className?: string }) {
-  return (
-    <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />
-  );
 }
 
 function statusBadge(status?: string) {
@@ -271,7 +266,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {isLoading && <Spinner className="mr-2 text-white" />}
+              {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
               {isLoading ? "Saving…" : isAdd ? "Add Supplier" : "Save Changes"}
             </Button>
           </div>
@@ -345,7 +340,7 @@ function DeleteDialog({ supplier, onClose, onDeleted }: DeleteDialogProps) {
           <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
           <Button onClick={handleConfirm} disabled={isLoading}
             className="bg-red-600 hover:bg-red-700 text-white gap-2">
-            {isLoading && <Spinner className="text-white" />}
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
             {isLoading ? "Deleting…" : "Delete"}
           </Button>
         </div>

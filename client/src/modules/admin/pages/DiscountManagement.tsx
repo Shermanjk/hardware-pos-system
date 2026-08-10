@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import httpClient from "@/shared/api/httpClient";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { loadToken } from "@/shared/utils/auth";
 import axios from "axios";
 import { AlertCircle, Check, Clock, Edit, Plus, RefreshCw, Trash2, X } from "lucide-react";
@@ -303,7 +304,7 @@ export default function DiscountManagement() {
         <TabsContent value="discounts" className="space-y-5 mt-4">
           <div className="flex items-center justify-between">
             <Button variant="outline" onClick={loadDiscounts} disabled={discountsLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${discountsLoading ? "animate-spin" : ""}`} />
+              {discountsLoading ? <LoadingSpinner size={16} className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Refresh
             </Button>
             <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -403,7 +404,7 @@ export default function DiscountManagement() {
               {requests.length > 0 ? `${requests.length} pending request${requests.length !== 1 ? "s" : ""}` : "No pending requests"}
             </p>
             <Button variant="outline" onClick={loadRequests} disabled={requestsLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${requestsLoading ? "animate-spin" : ""}`} />
+              {requestsLoading ? <LoadingSpinner size={16} className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Refresh
             </Button>
           </div>

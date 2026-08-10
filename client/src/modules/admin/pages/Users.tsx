@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "@/shared/api/usersApi";
 import { createUser, deactivateUser, getUsers, resetPassword, updateUser } from "@/shared/api/usersApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
 import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, ShieldOff, UserCog, UserPlus, X } from "lucide-react";
@@ -316,7 +317,7 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
               <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
-                {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
+                {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
                 {isLoading ? "Creating…" : "Save User"}
               </Button>
             </div>
@@ -524,7 +525,7 @@ function ResetPasswordModal({ user, onClose }: ResetPasswordModalProps) {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
               <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
               <Button variant="destructive" onClick={handleConfirm} disabled={isLoading}>
-                {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
+                {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
                 {isLoading ? "Resetting…" : "Reset Password"}
               </Button>
             </div>
@@ -606,7 +607,7 @@ function DeactivateDialog({ user, onClose, onDeactivated }: DeactivateDialogProp
             disabled={isLoading}
             className="bg-red-600 hover:bg-red-700 text-white gap-2"
           >
-            {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
             {isLoading ? "Deactivating…" : "Deactivate"}
           </Button>
         </div>

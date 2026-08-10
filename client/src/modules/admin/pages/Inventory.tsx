@@ -12,6 +12,7 @@ import {
     type StockStatusFilter,
 } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, type Category } from "@/shared/api/productsApi";
+import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
 import {
@@ -30,10 +31,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function Spinner({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin ${className}`} />;
-}
 
 function statusBadge(status: ReturnType<typeof deriveStatus>) {
   const s =
@@ -287,7 +284,7 @@ function MovementLog({ productId, productName, onClose }: {
       <div className="overflow-x-auto max-h-72 overflow-y-auto">
         {loading ? (
           <div className="py-10 text-center flex items-center justify-center gap-2 text-gray-400">
-            <Spinner className="text-blue-500" /><span className="text-sm">Loading…</span>
+            <LoadingSpinner size={16} className="text-blue-500" /><span className="text-sm">Loading…</span>
           </div>
         ) : error ? (
           <p className="py-6 text-center text-sm text-red-600">{error}</p>

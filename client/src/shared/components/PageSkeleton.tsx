@@ -1,5 +1,9 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * Generic page skeleton for initial route loading.
+ * Provides a simple loading state while lazy-loaded chunks are being fetched.
+ */
 export default function PageSkeleton() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
