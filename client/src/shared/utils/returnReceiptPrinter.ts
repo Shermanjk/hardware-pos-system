@@ -24,14 +24,6 @@ export interface ReturnReceiptData {
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
-  const W = 42;
-  const center = (s: string, w = W) => s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
-  const rule = (ch = "=") => ch.repeat(W);
-  const lr = (left: string, right: string, w = W) => {
-    const gap = w - left.length - right.length;
-    return left + (gap > 0 ? " ".repeat(gap) : " ") + right;
-  };
-
   const settings = data.settings;
   const storeName              = settings.store_name              || "";
   const proprietor             = settings.proprietor             || "";
@@ -51,129 +43,135 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  const fmtPeso = (amount: number) =>
-    amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtPeso = (amount: number) => amount.toFixed(2);
 
-  const lines: string[] = [];
-  const ln = (s = "") => lines.push(s);
-
-  // Header - same as sales receipt
-  ln(rule("="));
-  if (registeredTaxpayerName) ln(center(registeredTaxpayerName));
-  if (proprietor) ln(center(proprietor));
-  ln(center(storeName));
-  ln(center(storeAddress));
-  ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}`));
-  if (isVAT) ln(center("VAT REGISTERED"));
-  if (posMin || posSerial) ln(center(`MIN: ${posMin}   |   S/N: ${posSerial}`));
-  ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
-  ln(rule("="));
-  ln();
-  ln(center("SALES RETURN RECEIPT"));
-  ln(`Return No: ${data.return_number}`);
-  ln(`Original Invoice: ${data.invoice_number}`);
-  ln(`Date: ${dateStr}${" ".repeat(Math.max(1, W - `Date: ${dateStr}`.length - `Time: ${timeStr}`.length))}Time: ${timeStr}`);
-  ln(rule("-"));
-  ln(`PROCESSED BY: ${data.processed_by_name}`);
-  ln(rule("-"));
-  ln(`CUSTOMER: ${data.customer_name}`);
-  ln(rule("-"));
-  ln("QTY UNIT DESCRIPTION    PRICE    AMT");
-  ln(rule("-"));
-
-  // Items table - same layout as sales receipt
-  for (const item of data.items) {
-    const qty  = String(item.quantity_returned).padStart(3);
-    const unit = "".padEnd(4); // No unit for returns
-    const up   = `${currSym} ${fmtPeso(item.unit_price)}`.padStart(12);
-    const amt  = `${currSym} ${fmtPeso(item.unit_price * item.quantity_returned)}`.padStart(12);
-    
-    // Wrap description if it exceeds 13 characters
-    const descWidth = 13;
+  const itemsHTML = data.items.map(item => {
+    const qty = item.quantity_returned;
+    const unit = "";
     const desc = item.product_name;
-    if (desc.length <= descWidth) {
-      ln(`${qty} ${unit} ${desc.padEnd(descWidth)} ${up} ${amt}`);
-    } else {
-      // First line with first part of description
-      const firstPart = desc.slice(0, descWidth);
-      ln(`${qty} ${unit} ${firstPart.padEnd(descWidth)} ${up} ${amt}`);
-      // Wrapped lines starting at DESCRIPTION column (7 spaces for QTY+UNIT)
-      const remaining = desc.slice(descWidth);
-      for (let i = 0; i < remaining.length; i += descWidth) {
-        const wrappedPart = remaining.slice(i, i + descWidth);
-        ln(`       ${wrappedPart}`);
-      }
-    }
-  }
+    const up = fmtPeso(item.unit_price);
+    const amt = fmtPeso(item.unit_price * item.quantity_returned);
+    return `<tr>
+      <td class="qty">${qty}</td>
+      <td class="unit">${unit}</td>
+      <td class="desc">${desc}</td>
+      <td class="price">${currSym} ${up}</td>
+      <td class="amt">${currSym} ${amt}</td>
+    </tr>`;
+  }).join("");
 
-  ln(rule("-"));
   const totalItems = data.items.reduce((s, i) => s + i.quantity_returned, 0);
-  ln(lr(`ITEMS: ${totalItems}`, `TOTAL REFUND:  ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`));
-  ln(rule("-"));
 
-  // Resolution-specific information
-  ln();
-  ln(center(`RESOLUTION: ${data.resolution.toUpperCase()}`));
-  ln(rule("-"));
-
+  let resolutionHTML = "";
   if (data.resolution === "refund") {
-    ln(`AMOUNT REFUNDED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
+    resolutionHTML = `<div class="section">AMOUNT REFUNDED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>`;
   } else if (data.resolution === "exchange") {
-    if (data.exchange_barcode) {
-      ln(`EXCHANGE BARCODE: ${data.exchange_barcode}`);
-    }
-    if (data.exchange_quantity) {
-      ln(`EXCHANGE QUANTITY: ${data.exchange_quantity}`);
-    }
-    if (data.additional_payment && data.additional_payment > 0) {
-      ln(`ADDITIONAL PAYMENT: ${currSym} ${fmtPeso(data.additional_payment)}`);
-    }
-    if (data.refund_difference && data.refund_difference > 0) {
-      ln(`REFUND DIFFERENCE: ${currSym} ${fmtPeso(data.refund_difference)}`);
-    }
+    resolutionHTML = `
+    ${data.exchange_barcode ? `<div class="section">EXCHANGE BARCODE: ${data.exchange_barcode}</div>` : ''}
+    ${data.exchange_quantity ? `<div class="section">EXCHANGE QUANTITY: ${data.exchange_quantity}</div>` : ''}
+    ${data.additional_payment && data.additional_payment > 0 ? `<div class="section">ADDITIONAL PAYMENT: ${currSym} ${fmtPeso(data.additional_payment)}</div>` : ''}
+    ${data.refund_difference && data.refund_difference > 0 ? `<div class="section">REFUND DIFFERENCE: ${currSym} ${fmtPeso(data.refund_difference)}</div>` : ''}`;
   } else if (data.resolution === "store_credit") {
-    ln(`CREDIT ISSUED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
-    ln(`AVAILABLE BALANCE: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}`);
+    resolutionHTML = `
+    <div class="section">CREDIT ISSUED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>
+    <div class="section">AVAILABLE BALANCE: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>`;
   } else if (data.resolution === "rejected") {
-    ln(`RETURN REJECTED`);
+    resolutionHTML = `<div class="section">RETURN REJECTED</div>`;
   }
 
-  ln(rule("-"));
-  ln();
-  ln(`ITEM CONDITION: ${data.item_condition === "good" ? "Good" : data.item_condition === "damaged" ? "Damaged" : "Defective"}`);
-  ln(`INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged/Defective"}`);
-  ln(rule("-"));
-  ln();
-  ln(`PROCESSED BY: ${data.processed_by_name}`);
-  ln(rule("-"));
-  ln();
-  ln(center("Thank you for your business."));
-  ln(center("We sincerely appreciate your trust"));
-  ln(center("and look forward to serving you again."));
-  ln();
-  ln(center("This is your SALES RETURN RECEIPT."));
-  ln(center('"This document is not valid for claiming input taxes."'));
-  ln(rule("="));
-
-  const text = lines.join("\n");
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Return Receipt ${data.return_number}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  @page { size: 58mm auto; margin: 0; }
-  html { width: 58mm; }
-  body { 
-    width: 44mm; 
-    margin: 0 auto; 
-    font-family:'Courier New',Courier,monospace;
-    font-size: 10px;
-    line-height: 1.3;
-    white-space: pre;
-    color: #000;
-    padding: 0;
-  }
-  @media print{body{padding:0}}
-</style></head><body>${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</body></html>`;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Return Receipt ${data.return_number}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 58mm auto; margin: 0; }
+    html { width: 58mm; }
+    body { 
+      width: 52mm; 
+      max-width: 52mm;
+      margin: 0 auto; 
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #000;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    .receipt { width: 100%; max-width: 52mm; margin: 0 auto; padding: 0; box-sizing: border-box; }
+    .center { text-align: center; margin: 2px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .section { margin: 2px 0; }
+    .items { width: 100%; border-collapse: collapse; margin: 4px 0; }
+    .items th, .items td { padding: 2px 0; }
+    .items .qty { width: 8mm; text-align: right; }
+    .items .unit { width: 10mm; text-align: left; }
+    .items .desc { width: 18mm; text-align: left; word-wrap: break-word; max-width: 18mm; }
+    .items .price { width: 8mm; text-align: right; }
+    .items .amt { width: 8mm; text-align: right; }
+    .bold { font-weight: bold; }
+    .divider { border-top: 1px solid #000; margin: 4px 0; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="divider"></div>
+    ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
+    ${proprietor ? `<div class="center">${proprietor}</div>` : ''}
+    <div class="center bold">${storeName}</div>
+    <div class="center">${storeAddress}</div>
+    <div class="center">TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+    ${isVAT ? '<div class="center">VAT REGISTERED</div>' : ''}
+    ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
+    <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
+    <div class="divider"></div>
+    <div class="center bold">SALES RETURN RECEIPT</div>
+    <div class="row"><span>Return No:</span><span>${data.return_number}</span></div>
+    <div class="row"><span>Original Invoice:</span><span>${data.invoice_number}</span></div>
+    <div class="row"><span>Date:</span><span>${dateStr}</span></div>
+    <div class="row"><span>Time:</span><span>${timeStr}</span></div>
+    <div class="divider"></div>
+    <div class="section">PROCESSED BY: ${data.processed_by_name}</div>
+    <div class="divider"></div>
+    <div class="section">CUSTOMER: ${data.customer_name}</div>
+    <div class="divider"></div>
+    <table class="items">
+      <thead>
+        <tr>
+          <th class="qty">QTY</th>
+          <th class="unit">UNIT</th>
+          <th class="desc">DESCRIPTION</th>
+          <th class="price">PRICE</th>
+          <th class="amt">AMT</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHTML}
+      </tbody>
+    </table>
+    <div class="divider"></div>
+    <div class="row"><span>ITEMS: ${totalItems}</span><span>TOTAL REFUND: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</span></div>
+    <div class="divider"></div>
+    <div class="center bold">RESOLUTION: ${data.resolution.toUpperCase()}</div>
+    <div class="divider"></div>
+    ${resolutionHTML}
+    <div class="divider"></div>
+    <div class="section">ITEM CONDITION: ${data.item_condition === "good" ? "Good" : data.item_condition === "damaged" ? "Damaged" : "Defective"}</div>
+    <div class="section">INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged/Defective"}</div>
+    <div class="divider"></div>
+    <div class="section">PROCESSED BY: ${data.processed_by_name}</div>
+    <div class="divider"></div>
+    <div class="center">Thank you for your business.</div>
+    <div class="center">We sincerely appreciate your trust</div>
+    <div class="center">and look forward to serving you again.</div>
+    <div class="center">This is your SALES RETURN RECEIPT.</div>
+    <div class="center">"This document is not valid for claiming input taxes."</div>
+    <div class="divider"></div>
+  </div>
+</body>
+</html>`;
 
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
