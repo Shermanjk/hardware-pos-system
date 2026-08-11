@@ -1,3 +1,5 @@
+import type { StoreSettings } from "@/shared/api/settingsApi";
+
 export interface ReturnReceiptItem {
   product_name: string;
   quantity_returned: number;
@@ -14,13 +16,7 @@ export interface ReturnReceiptData {
   refund_amount: number | null;
   items: ReturnReceiptItem[];
   resolved_at?: string;
-  store_name?: string;
-  facebook?: string;
-  contact_number?: string;
-  address?: string;
-  store_tin?: string;
-  vat_enabled?: boolean;
-  currency?: string;
+  settings: StoreSettings;
   exchange_barcode?: string;
   exchange_quantity?: number;
   additional_payment?: number;
@@ -28,7 +24,7 @@ export interface ReturnReceiptData {
 }
 
 export function printReturnReceipt(data: ReturnReceiptData): void {
-  const W = 48;
+  const W = 42;
   const center = (s: string, w = W) => s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
   const rule = (ch = "=") => ch.repeat(W);
   const lr = (left: string, right: string, w = W) => {
@@ -36,13 +32,20 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
     return left + (gap > 0 ? " ".repeat(gap) : " ") + right;
   };
 
-  const storeName    = data.store_name    || "";
-  const storeFb      = data.facebook      || "";
-  const storePhone   = data.contact_number || "";
-  const storeAddress = data.address      || "";
-  const storeTIN     = data.store_tin     || "";
-  const isVAT        = data.vat_enabled ?? false;
-  const currSym      = data.currency === "PHP" || !data.currency ? "P" : data.currency;
+  const settings = data.settings;
+  const storeName              = settings.store_name              || "";
+  const proprietor             = settings.proprietor             || "";
+  const storeFb                = settings.facebook                || "";
+  const storePhone             = settings.contact_number          || "";
+  const storeAddress           = settings.address                || "";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const storeTIN               = settings.tin || settings.business_license || "";
+  const documentType           = settings.document_type           || "SALES INVOICE";
+  const taxRate                = Number(settings.vat_rate) > 0 ? Number(settings.vat_rate) : 12;
+  const isVAT                  = settings.vat_enabled ?? false;
+  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
+  const posMin                 = settings.pos_min    || "";
+  const posSerial              = settings.pos_serial || "";
 
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -56,10 +59,13 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
 
   // Header - same as sales receipt
   ln(rule("="));
+  if (registeredTaxpayerName) ln(center(registeredTaxpayerName));
+  if (proprietor) ln(center(proprietor));
   ln(center(storeName));
   ln(center(storeAddress));
   ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}`));
   if (isVAT) ln(center("VAT REGISTERED"));
+  if (posMin || posSerial) ln(center(`MIN: ${posMin}   |   S/N: ${posSerial}`));
   ln(center(`Fb: ${storeFb}   |   Tel No: ${storePhone}`));
   ln(rule("="));
   ln();
@@ -72,7 +78,7 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   ln(rule("-"));
   ln(`CUSTOMER: ${data.customer_name}`);
   ln(rule("-"));
-  ln("QTY UNIT DESCRIPTION       PRICE       AMT");
+  ln("QTY UNIT DESCRIPTION    PRICE    AMT");
   ln(rule("-"));
 
   // Items table - same layout as sales receipt
@@ -82,8 +88,8 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
     const up   = `${currSym} ${fmtPeso(item.unit_price)}`.padStart(12);
     const amt  = `${currSym} ${fmtPeso(item.unit_price * item.quantity_returned)}`.padStart(12);
     
-    // Wrap description if it exceeds 15 characters
-    const descWidth = 15;
+    // Wrap description if it exceeds 13 characters
+    const descWidth = 13;
     const desc = item.product_name;
     if (desc.length <= descWidth) {
       ln(`${qty} ${unit} ${desc.padEnd(descWidth)} ${up} ${amt}`);
@@ -157,11 +163,11 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   @page { size: 58mm auto; margin: 0; }
   html { width: 58mm; }
   body { 
-    width: 48mm; 
+    width: 44mm; 
     margin: 0 auto; 
     font-family:'Courier New',Courier,monospace;
-    font-size: 9px;
-    line-height: 1.2;
+    font-size: 10px;
+    line-height: 1.3;
     white-space: pre;
     color: #000;
     padding: 0;

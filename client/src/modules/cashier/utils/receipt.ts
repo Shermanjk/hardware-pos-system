@@ -44,7 +44,7 @@ interface SaleReceiptParams {
   finalTotalCents?: number;
 }
 
-const W = 48;
+const W = 42;
 const center = (s: string, w = W) => s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
 const rule = (ch = "=") => ch.repeat(W);
 const lr = (left: string, right: string, w = W) => {
@@ -66,6 +66,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
   const grossCents = discountCents > 0 ? finalTotalCents + discountCents : totalCents;
 
   const storeName              = settings.store_name              || "";
+  const proprietor             = settings.proprietor             || "";
   const storeFb                = settings.facebook                || "";
   const storePhone             = settings.contact_number          || "";
   const storeAddress           = settings.address                || "";
@@ -87,6 +88,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
 
   ln(rule("="));
   if (registeredTaxpayerName) ln(center(registeredTaxpayerName));
+  if (proprietor) ln(center(proprietor));
   ln(center(storeName));
   ln(center(storeAddress));
   ln(center(`TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}`));
@@ -104,7 +106,7 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(`ADDRESS: ${customerInfo.address || "N/A"}`);
   ln(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
   ln(rule("-"));
-  ln("QTY UNIT DESCRIPTION       PRICE       AMT");
+  ln("QTY UNIT DESCRIPTION    PRICE    AMT");
   ln(rule("-"));
 
   for (const item of cartItems) {
@@ -113,8 +115,8 @@ function buildReceiptText(params: SaleReceiptParams): string {
     const up   = `${currSym} ${fmtCents(toCentavos(item.unitPrice))}`.padStart(12);
     const amt  = `${currSym} ${fmtCents(toCentavos(item.subtotal))}`.padStart(12);
     
-    // Wrap description if it exceeds 15 characters
-    const descWidth = 15;
+    // Wrap description if it exceeds 13 characters
+    const descWidth = 13;
     const desc = item.name;
     if (desc.length <= descWidth) {
       ln(`${qty} ${unit} ${desc.padEnd(descWidth)} ${up} ${amt}`);
@@ -206,11 +208,11 @@ export function printSaleReceipt(params: SaleReceiptParams): void {
   @page { size: 58mm auto; margin: 0; }
   html { width: 58mm; }
   body { 
-    width: 48mm; 
+    width: 44mm; 
     margin: 0 auto; 
     font-family:'Courier New',Courier,monospace;
-    font-size: 9px;
-    line-height: 1.2;
+    font-size: 10px;
+    line-height: 1.3;
     white-space: pre;
     color: #000;
     padding: 0;
