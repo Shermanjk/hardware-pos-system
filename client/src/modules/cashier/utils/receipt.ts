@@ -44,7 +44,7 @@ interface SaleReceiptParams {
   finalTotalCents?: number;
 }
 
-const W = 72;
+const W = 48;
 const center = (s: string, w = W) => s.padStart(Math.floor((w + s.length) / 2)).padEnd(w);
 const rule = (ch = "=") => ch.repeat(W);
 const lr = (left: string, right: string, w = W) => {
@@ -104,16 +104,31 @@ function buildReceiptText(params: SaleReceiptParams): string {
   ln(`ADDRESS: ${customerInfo.address || "N/A"}`);
   ln(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
   ln(rule("-"));
-  ln("QTY  UNIT  DESCRIPTION            UNIT PRICE            AMOUNT");
+  ln("QTY UNIT DESCRIPTION       PRICE       AMT");
   ln(rule("-"));
 
   for (const item of cartItems) {
     const qty  = String(item.quantity).padStart(3);
-    const unit = (item.unit || "").padEnd(5);
-    const desc = item.name.length > 21 ? item.name.slice(0, 20) + "…" : item.name.padEnd(21);
-    const up   = `${currSym} ${fmtCents(toCentavos(item.unitPrice))}`.padStart(16);
-    const amt  = `${currSym} ${fmtCents(toCentavos(item.subtotal))}`.padStart(16);
-    ln(`${qty}  ${unit} ${desc} ${up} ${amt}`);
+    const unit = (item.unit || "").padEnd(4);
+    const up   = `${currSym} ${fmtCents(toCentavos(item.unitPrice))}`.padStart(12);
+    const amt  = `${currSym} ${fmtCents(toCentavos(item.subtotal))}`.padStart(12);
+    
+    // Wrap description if it exceeds 15 characters
+    const descWidth = 15;
+    const desc = item.name;
+    if (desc.length <= descWidth) {
+      ln(`${qty} ${unit} ${desc.padEnd(descWidth)} ${up} ${amt}`);
+    } else {
+      // First line with first part of description
+      const firstPart = desc.slice(0, descWidth);
+      ln(`${qty} ${unit} ${firstPart.padEnd(descWidth)} ${up} ${amt}`);
+      // Wrapped lines starting at DESCRIPTION column (7 spaces for QTY+UNIT)
+      const remaining = desc.slice(descWidth);
+      for (let i = 0; i < remaining.length; i += descWidth) {
+        const wrappedPart = remaining.slice(i, i + descWidth);
+        ln(`       ${wrappedPart}`);
+      }
+    }
   }
 
   ln(rule("-"));
@@ -189,8 +204,17 @@ export function printSaleReceipt(params: SaleReceiptParams): void {
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   @page { size: 58mm auto; margin: 0; }
-  html, body { width: 58mm; height: auto; overflow-x: hidden; }
-  body{font-family:'Courier New',Courier,monospace;font-size:11px;white-space:pre;color:#000;padding:0;}
+  html { width: 58mm; }
+  body { 
+    width: 48mm; 
+    margin: 0 auto; 
+    font-family:'Courier New',Courier,monospace;
+    font-size: 9px;
+    line-height: 1.2;
+    white-space: pre;
+    color: #000;
+    padding: 0;
+  }
   @media print{body{padding:0}}
 </style></head><body>${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</body></html>`;
 
