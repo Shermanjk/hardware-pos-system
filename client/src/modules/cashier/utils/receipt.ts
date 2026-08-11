@@ -136,8 +136,8 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     @page { size: 58mm auto; margin: 0; }
     html { width: 58mm; }
     body { 
-      width: 52mm; 
-      max-width: 52mm;
+      width: 48mm; 
+      max-width: 48mm;
       margin: 0 auto; 
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
@@ -146,17 +146,17 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       padding: 0;
       overflow-x: hidden;
     }
-    .receipt { width: 100%; max-width: 52mm; margin: 0 auto; padding: 0; box-sizing: border-box; }
-    .center { text-align: center; margin: 2px 0; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; }
-    .section { margin: 2px 0; }
-    .items { width: 100%; border-collapse: collapse; margin: 4px 0; }
+    .receipt { width: 100%; max-width: 48mm; margin: 0 auto; padding: 0; box-sizing: border-box; }
+    .center { text-align: center; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
+    .section { margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
+    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
     .items th, .items td { padding: 2px 0; }
-    .items .qty { width: 8mm; text-align: right; }
-    .items .unit { width: 10mm; text-align: left; }
-    .items .desc { width: 18mm; text-align: left; word-wrap: break-word; max-width: 18mm; }
-    .items .price { width: 8mm; text-align: right; }
-    .items .amt { width: 8mm; text-align: right; }
+    .items .qty { width: 7mm; text-align: right; }
+    .items .unit { width: 9mm; text-align: left; }
+    .items .desc { width: 17mm; text-align: left; word-wrap: break-word; max-width: 17mm; overflow-wrap: anywhere; }
+    .items .price { width: 7.5mm; text-align: right; }
+    .items .amt { width: 7.5mm; text-align: right; }
     .bold { font-weight: bold; }
     .divider { border-top: 1px solid #000; margin: 4px 0; }
     @media print { body { padding: 0; } }
