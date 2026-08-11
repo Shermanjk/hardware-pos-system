@@ -139,7 +139,9 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
 <title>Return Receipt ${data.return_number}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',Courier,monospace;font-size:11px;white-space:pre;color:#000;padding:8px;}
+  @page { size: 58mm auto; margin: 0; }
+  html, body { width: 58mm; height: auto; overflow-x: hidden; }
+  body{font-family:'Courier New',Courier,monospace;font-size:11px;white-space:pre;color:#000;padding:0;}
   @media print{body{padding:0}}
 </style></head><body>${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</body></html>`;
 
