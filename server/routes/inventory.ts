@@ -134,14 +134,15 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+// Ensure notes column exists in inventory_logs
+pool.query("ALTER TABLE inventory_logs ADD COLUMN notes TEXT NULL").catch(() => {});
+
 // ─── GET /api/inventory/logs — movement history ───────────────────────────────
 router.get("/logs", async (req: Request, res: Response) => {
   if (!requireAdminOrClerk(req, res)) return;
 
   try {
-    const limit  = Math.min(1000, Math.max(1,  parseInt((req.query.limit  as string) || "50", 10)));
-    const offset = Math.max(0, parseInt((req.query.offset as string) || "0",  10));
-    const { product_id } = req.query;
+    const { product_id, limit = 50, offset = 0 } = req.query;
 
     let where = "WHERE 1=1";
     const params: any[] = [];
@@ -166,6 +167,7 @@ router.get("/logs", async (req: Request, res: Response) => {
         il.quantity,
         il.remaining_stock,
         il.reference,
+        il.notes,
         il.created_at,
         COALESCE(u.full_name, '—') AS performed_by
       FROM inventory_logs il
@@ -174,7 +176,7 @@ router.get("/logs", async (req: Request, res: Response) => {
       LEFT JOIN users    u ON u.id = il.user_id
       ${where}
       ORDER BY il.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ${Number(limit)} OFFSET ${Number(offset)}
     `, params);
 
     res.status(200).json(rows);
@@ -247,7 +249,8 @@ router.post("/stock-in", async (req: Request, res: Response) => {
     );
     const stockInId = `SI-${dateStr}-${String(nextSeq).padStart(6, "0")}`;
 
-    const reference = invoice_number?.trim() || stockInId;
+    const reference = invoice_number?.trim() || "N/A";
+    const notes = remarks?.trim() || "N/A";
 
     for (const item of items) {
       const [productRows] = await conn.execute<any[]>("SELECT id, quantity, product_name FROM products WHERE id = ? FOR UPDATE", [item.product_id]);
@@ -263,14 +266,15 @@ router.post("/stock-in", async (req: Request, res: Response) => {
       await conn.execute("UPDATE products SET quantity = ?, updated_at = NOW() WHERE id = ?", [newQuantity, product.id]);
       await conn.execute(`
         INSERT INTO inventory_logs
-          (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, user_id)
-        VALUES (?, 'Stock In', 'Received Stock', ?, ?, ?, ?, ?)
+          (product_id, transaction_type, action, quantity_change, quantity, remaining_stock, reference, notes, user_id)
+        VALUES (?, 'Stock In', 'Received Stock', ?, ?, ?, ?, ?, ?)
       `, [
         item.product_id,
         item.quantity_received,
         product.quantity,
         newQuantity,
         reference,
+        notes,
         req.user?.id,
       ]);
     }

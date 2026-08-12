@@ -11,7 +11,7 @@ interface Props {
   newDecision: VoidDecisionNotification | null;
   onRequestVoid: () => void;
   /** Called when the panel is opened so the parent can mark requests as "viewed" */
-  onViewed?: () => void;
+  onViewed?: (ids: number[]) => void;
 }
 
 function fmt(n: number) {
@@ -161,10 +161,17 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision, o
     if (show) {
       load();
       setDetail(null);
-      // Notify parent that the void requests have been viewed
-      if (onViewed) onViewed();
     }
-  }, [show, load, onViewed]);
+  }, [show, load]);
+
+  // Once requests are loaded and panel is visible, mark them all as seen
+  useEffect(() => {
+    if (show && requests.length > 0 && onViewed) {
+      onViewed(requests.map((r) => r.id));
+    }
+  // We only want to fire when the panel opens or fresh data arrives while open.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, requests]);
 
   // Refresh + update detail when a WS decision arrives
   useEffect(() => {

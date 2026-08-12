@@ -25,8 +25,8 @@ interface CartPanelProps {
   setShowDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   barcodeRef: React.RefObject<HTMLInputElement | null>;
   searchTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
-  setSelectedDiscount: React.Dispatch<React.SetStateAction<{ id: number; name: string; percentage: number; requiresApproval: boolean } | null>>;
+  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null;
+  setSelectedDiscount: React.Dispatch<React.SetStateAction<{ id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null>>;
   /** When true, scanning/searching is blocked until a shift is started. */
   noShift?: boolean;
 }
@@ -37,6 +37,7 @@ interface Discount {
   discount_type: string;
   value: number;
   requires_admin_approval: boolean;
+  is_sc_pwd: boolean;
 }
 
 export default function CartPanel({
@@ -209,8 +210,8 @@ export default function CartPanel({
   return (
     <div className="flex-1 flex flex-col gap-3 min-w-0 min-h-0">
       {/* Barcode / search input */}
-      <div className="shrink-0 bg-white rounded-xl border-2 border-gray-300 px-4 py-3 shadow-sm">
-        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+      <div className="shrink-0 bg-slate-50 rounded-xl border-2 border-slate-400 px-4 py-3 shadow-sm">
+        <label className="block text-xs font-semibold text-slate-800 uppercase tracking-wide mb-2">
           Barcode Scanner / Product Search
         </label>
 
@@ -228,11 +229,11 @@ export default function CartPanel({
             onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
             placeholder={noShift ? "Start your shift to begin scanning…" : "Scan barcode or type product name…"}
             disabled={noShift}
-            className="pl-9 h-11 text-sm bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+            className="pl-9 h-11 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
             autoFocus={!noShift}
           />
           {showDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-slate-400 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
               {searchResults.map((product) => (
                 <button
                   key={product.id}
@@ -257,9 +258,9 @@ export default function CartPanel({
       </div>
 
       {/* Cart */}
-      <div className="flex-1 bg-white rounded-xl border-2 border-gray-300 shadow-sm flex flex-col min-h-0">
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900">
+      <div className="flex-1 bg-slate-50 rounded-xl border-2 border-slate-400 shadow-sm flex flex-col min-h-0">
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <h2 className="text-sm font-bold text-slate-900">
             Shopping Cart
             {cartItems.length > 0 && (
               <span className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs">
@@ -278,7 +279,7 @@ export default function CartPanel({
         </div>
 
         {cartItems.length > 0 && (
-          <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2.5 bg-gray-100 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase tracking-wider">
+          <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2.5 bg-slate-200 border-b border-slate-300 text-xs font-bold text-slate-700 uppercase tracking-wider">
             <div className="col-span-5">Product</div>
             <div className="col-span-3 text-center">Qty</div>
             <div className="col-span-2 text-right">Unit Price</div>
@@ -297,10 +298,10 @@ export default function CartPanel({
               {cartItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className={`grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}
+                  className={`grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-slate-100"}`}
                 >
                   <div className="col-span-5 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 leading-snug truncate">{item.name}</p>
+                    <p className="text-sm font-semibold text-slate-900 leading-snug truncate">{item.name}</p>
                     {item.unit && (
                       <span className="inline-block mt-0.5 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded px-1.5 py-px font-medium leading-none">
                         {item.unit}
@@ -310,7 +311,7 @@ export default function CartPanel({
                   <div className="col-span-3 flex items-center justify-center gap-1.5">
                     <button
                       onClick={() => updateQty(item.id, item.quantity - 1)}
-                      className="w-7 h-7 rounded-md border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-600 transition-colors"
+                      className="w-7 h-7 rounded-md border-2 border-slate-400 bg-white flex items-center justify-center hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-slate-700 transition-colors"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
@@ -330,23 +331,23 @@ export default function CartPanel({
                       <span
                         title="Click to edit quantity"
                         onClick={() => setQtyDraft((prev) => ({ ...prev, [item.id]: String(item.quantity) }))}
-                        className="w-12 text-center text-sm font-bold tabular-nums text-gray-900 border-2 border-transparent rounded-md px-1 py-0.5 cursor-text hover:border-blue-300 hover:bg-blue-50 transition-colors select-none"
+                        className="w-12 text-center text-sm font-bold tabular-nums text-slate-900 border-2 border-slate-400 rounded-md px-1 py-0.5 hover:border-blue-400 hover:bg-blue-50 transition-colors select-none cursor-text"
                       >
                         {item.quantity}
                       </span>
                     )}
                     <button
                       onClick={() => updateQty(item.id, item.quantity + 1)}
-                      className="w-7 h-7 rounded-md border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-green-50 hover:border-green-300 hover:text-green-600 text-gray-600 transition-colors"
+                      className="w-7 h-7 rounded-md border-2 border-slate-400 bg-white flex items-center justify-center hover:bg-green-50 hover:border-green-300 hover:text-green-600 text-slate-700 transition-colors"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   <div className="col-span-2 text-right">
-                    <span className="text-sm font-medium text-gray-700 tabular-nums">₱{fmtCents(toCentavos(item.unitPrice))}</span>
+                    <span className="text-sm font-medium text-slate-700 tabular-nums">₱{fmtCents(toCentavos(item.unitPrice))}</span>
                   </div>
                   <div className="col-span-2 flex items-center justify-end gap-1">
-                    <span className="text-sm font-bold text-gray-900 tabular-nums">₱{fmtCents(toCentavos(item.subtotal))}</span>
+                    <span className="text-sm font-bold text-slate-900 tabular-nums">₱{fmtCents(toCentavos(item.subtotal))}</span>
                     <button
                       onClick={() => setCartItems((prev) => prev.filter((i) => i.id !== item.id))}
                       className="ml-1 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -362,10 +363,10 @@ export default function CartPanel({
 
         {/* Discount Selection */}
         {cartItems.length > 0 && (
-          <div className="shrink-0 px-4 py-3 bg-gray-50 border-t border-gray-200">
+          <div className="shrink-0 px-4 py-3 bg-slate-100 border-t border-slate-300">
             <div className="flex items-center gap-2">
-              <Percent className="h-4 w-4 text-gray-500" />
-              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Discount</label>
+              <Percent className="h-4 w-4 text-slate-600" />
+              <label className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Discount</label>
             </div>
             <div className="mt-2">
               <Select
@@ -382,6 +383,7 @@ export default function CartPanel({
                       name: discount.discount_name,
                       percentage: discount.value,
                       requiresApproval: discount.requires_admin_approval,
+                      isScPwd: discount.is_sc_pwd ?? false,
                     });
                   }
                 }}
@@ -408,6 +410,11 @@ export default function CartPanel({
                 <span className="text-gray-600">{selectedDiscount.name}</span>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-amber-600">{selectedDiscount.percentage}%</span>
+                  {selectedDiscount.isScPwd && (
+                    <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full text-xs font-medium">
+                      SC/PWD
+                    </span>
+                  )}
                   {selectedDiscount.requiresApproval && (
                     <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-xs font-medium">
                       Approval required

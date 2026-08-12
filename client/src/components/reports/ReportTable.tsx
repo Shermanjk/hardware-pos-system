@@ -189,7 +189,9 @@ export default forwardRef<ReportTableRef, ReportTableProps>(function ReportTable
                       }`}
                     >
                       {summary.values[column.key] !== undefined
-                        ? summary.values[column.key]
+                        ? column.format
+                          ? column.format(summary.values[column.key])
+                          : summary.values[column.key]
                         : ""}
                     </td>
                   ))}

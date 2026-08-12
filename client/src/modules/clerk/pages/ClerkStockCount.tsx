@@ -10,6 +10,7 @@ import { AdjustmentReason, getInventory, getInventoryLogs, type CreateAdjustment
 import { createStockCountRequest } from "@/shared/api/requestsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
+import ClerkAuthModal from "../components/ClerkAuthModal";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import {
     AlertTriangle,
@@ -97,17 +98,22 @@ function SystemQtyCell({ productId, systemQty, unit, quantityType }: { productId
   const [data, setData] = useState<Breakdown | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isWeighted = quantityType === "WEIGHTED";
+
+  // Format a breakdown number: decimals for weighted, whole numbers for unit-based
+  const fmt = (n: number) => isWeighted ? parseFloat(n.toFixed(3)).toString() : Math.round(n).toString();
+
   useEffect(() => {
     getInventoryLogs({ product_id: productId, limit: 500 })
       .then((logs) => {
         const stockIn     = logs.filter((l) => l.transaction_type === "Stock In")
-                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+                               .reduce((s, l) => s + Math.abs(Number(l.quantity_change) || 0), 0);
         const sold        = logs.filter((l) => l.transaction_type === "Sale")
-                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+                               .reduce((s, l) => s + Math.abs(Number(l.quantity_change) || 0), 0);
         const returned    = logs.filter((l) => l.transaction_type === "Return")
-                               .reduce((s, l) => s + Math.abs(l.quantity_change ?? 0), 0);
+                               .reduce((s, l) => s + Math.abs(Number(l.quantity_change) || 0), 0);
         const adjustments = logs.filter((l) => l.transaction_type === "Adjustment")
-                               .reduce((s, l) => s + (l.quantity_change ?? 0), 0);
+                               .reduce((s, l) => s + (Number(l.quantity_change) || 0), 0);
         setData({ stockIn, sold: sold - returned, adjustments });
       })
       .catch(() => setData(null))
@@ -133,15 +139,15 @@ function SystemQtyCell({ productId, systemQty, unit, quantityType }: { productId
       ) : data ? (
         <div className="flex flex-col gap-0.5">
           <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-semibold">
-            <PackagePlus className="h-3 w-3" />+{data.stockIn} received
+            <PackagePlus className="h-3 w-3" />+{fmt(data.stockIn)} received
           </span>
           <span className="inline-flex items-center gap-1 text-red-500 text-xs font-semibold">
-            <ShoppingCart className="h-3 w-3" />−{data.sold} sold
+            <ShoppingCart className="h-3 w-3" />−{fmt(data.sold)} sold
           </span>
           {data.adjustments !== 0 && (
             <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-semibold">
               <SlidersHorizontal className="h-3 w-3" />
-              {data.adjustments > 0 ? `+${data.adjustments}` : data.adjustments} adj
+              {data.adjustments > 0 ? `+${fmt(data.adjustments)}` : fmt(data.adjustments)} adj
             </span>
           )}
         </div>
@@ -774,7 +780,7 @@ export default function ClerkStockCount() {
           onRequestCreated={() => {
             // Request created — nothing extra needed, modal handles the flow
           }}
-          onApproved={(_adminName) => {
+          onApproved={(_adminName: string) => {
             const next = authQueueIndex + 1;
             if (next < authQueue.length) {
               setAuthQueueIndex(next);

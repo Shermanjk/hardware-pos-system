@@ -31,7 +31,7 @@ import {
     Barcode, Layers, Package,
     Printer, ScanLine, Tag, X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Barcode SVG preview (real JsBarcode — fully scannable) ──────────────────
@@ -41,12 +41,12 @@ function BarcodePreview({ code, heightMm, symbology }: {
   heightMm: number;
   symbology: string;
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  useEffect(() => {
-    if (!svgRef.current || !code) return;
+  // Callback ref fires the instant the node is attached — avoids timing issues
+  // with React's useEffect firing before the SVG element is in the DOM.
+  const svgCallbackRef = useCallback((node: SVGSVGElement | null) => {
+    if (!node || !code) return;
     try {
-      JsBarcode(svgRef.current, code, {
+      JsBarcode(node, code, {
         format:       symbology,
         displayValue: false,
         height:       heightMm * 3.7795,
@@ -58,7 +58,7 @@ function BarcodePreview({ code, heightMm, symbology }: {
     } catch { /* leave empty for invalid code */ }
   }, [code, heightMm, symbology]);
 
-  return <svg ref={svgRef} className="w-full h-auto" />;
+  return <svg ref={svgCallbackRef} className="w-full h-auto" />;
 }
 
 // ─── To-scale label preview card ─────────────────────────────────────────────
@@ -109,7 +109,8 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 // ─── Label size presets ───────────────────────────────────────────────────────
 
 const SIZE_PRESETS = [
-  { label: "50 × 30 mm (default)", w: 50, h: 30 },
+  { label: "30 × 20 mm (default)", w: 30, h: 20 },
+  { label: "50 × 30 mm",           w: 50, h: 30 },
   { label: "38 × 25 mm (small)",   w: 38, h: 25 },
   { label: "60 × 40 mm (medium)",  w: 60, h: 40 },
   { label: "100 × 50 mm (large)",  w: 100, h: 50 },
@@ -128,14 +129,14 @@ interface PrintModalProps {
 function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
   const [quantity,   setQuantity]   = useState(1);
   const [printing,   setPrinting]   = useState(false);
-  const [presetKey,  setPresetKey]  = useState("50×30");
+  const [presetKey,  setPresetKey]  = useState("30×20");
   const [customW,    setCustomW]    = useState(BARCODE_PRINTER_CONFIG.labelWidthMm);
   const [customH,    setCustomH]    = useState(BARCODE_PRINTER_CONFIG.labelHeightMm);
 
   useEffect(() => {
     if (open) {
       setQuantity(1);
-      setPresetKey("50×30");
+      setPresetKey("30×20");
       setCustomW(BARCODE_PRINTER_CONFIG.labelWidthMm);
       setCustomH(BARCODE_PRINTER_CONFIG.labelHeightMm);
     }

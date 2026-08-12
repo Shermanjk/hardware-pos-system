@@ -1,9 +1,9 @@
-import { Router, Request, Response } from "express";
+import { Request, Response, Router } from "express";
+import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-import { z } from "zod";
 
 const router = Router();
 
@@ -13,6 +13,7 @@ const createDiscountSchema = z.object({
   discount_type: z.enum(["Percentage", "Fixed"]),
   value: z.number().positive("Value must be positive"),
   requires_admin_approval: z.boolean().optional(),
+  is_sc_pwd: z.boolean().optional(),
   status: z.enum(["Active", "Inactive"]).optional(),
 });
 
@@ -21,6 +22,7 @@ const updateDiscountSchema = z.object({
   discount_type: z.enum(["Percentage", "Fixed"]).optional(),
   value: z.number().positive().optional(),
   requires_admin_approval: z.boolean().optional(),
+  is_sc_pwd: z.boolean().optional(),
   status: z.enum(["Active", "Inactive"]).optional(),
 });
 
@@ -33,7 +35,7 @@ router.get(
     try {
       const [rows] = await pool.execute<any[]>(
         `SELECT d.id, d.discount_name, d.discount_type, d.value, d.status, 
-                d.requires_admin_approval, d.created_by, d.created_at, d.updated_at,
+                d.requires_admin_approval, d.is_sc_pwd, d.created_by, d.created_at, d.updated_at,
                 u.username AS created_by_username
          FROM discounts d
          LEFT JOIN users u ON u.id = d.created_by
@@ -47,6 +49,7 @@ router.get(
         value: Number(r.value),
         status: r.status,
         requires_admin_approval: r.requires_admin_approval === 1 || r.requires_admin_approval === true,
+        is_sc_pwd: r.is_sc_pwd === 1 || r.is_sc_pwd === true,
         created_by: r.created_by,
         created_by_username: r.created_by_username,
         created_at: r.created_at,
@@ -69,7 +72,7 @@ router.get(
   async (_req: Request, res: Response): Promise<void> => {
     try {
       const [rows] = await pool.execute<any[]>(
-        `SELECT id, discount_name, discount_type, value, requires_admin_approval
+        `SELECT id, discount_name, discount_type, value, requires_admin_approval, is_sc_pwd
          FROM discounts
          WHERE status = 'Active'
          ORDER BY discount_name ASC`
@@ -81,6 +84,7 @@ router.get(
         discount_type: r.discount_type,
         value: Number(r.value),
         requires_admin_approval: r.requires_admin_approval === 1 || r.requires_admin_approval === true,
+        is_sc_pwd: r.is_sc_pwd === 1 || r.is_sc_pwd === true,
       }));
 
       res.status(200).json(discounts);
@@ -112,14 +116,15 @@ router.post(
       discount_type,
       value,
       requires_admin_approval = false,
+      is_sc_pwd = false,
       status = "Active",
     } = parsed.data;
 
     try {
       const [result] = await pool.execute<any>(
-        `INSERT INTO discounts (discount_name, discount_type, value, requires_admin_approval, status, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [discount_name, discount_type, value, requires_admin_approval ? 1 : 0, status, req.user!.id]
+        `INSERT INTO discounts (discount_name, discount_type, value, requires_admin_approval, is_sc_pwd, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [discount_name, discount_type, value, requires_admin_approval ? 1 : 0, is_sc_pwd ? 1 : 0, status, req.user!.id]
       );
 
       await logAuditEvent({
@@ -133,6 +138,7 @@ router.post(
           discount_type,
           value,
           requires_admin_approval,
+          is_sc_pwd,
           status,
         },
       });
@@ -143,6 +149,7 @@ router.post(
         discount_type,
         value,
         requires_admin_approval,
+        is_sc_pwd,
         status,
       });
     } catch (err) {
@@ -209,6 +216,10 @@ router.patch(
         setClauses.push("requires_admin_approval = ?");
         values.push(updates.requires_admin_approval ? 1 : 0);
       }
+      if (updates.is_sc_pwd !== undefined) {
+        setClauses.push("is_sc_pwd = ?");
+        values.push(updates.is_sc_pwd ? 1 : 0);
+      }
       if (updates.status !== undefined) {
         setClauses.push("status = ?");
         values.push(updates.status);
@@ -232,6 +243,7 @@ router.patch(
           discount_type: currentDiscount.discount_type,
           value: Number(currentDiscount.value),
           requires_admin_approval: currentDiscount.requires_admin_approval === 1,
+          is_sc_pwd: currentDiscount.is_sc_pwd === 1 || currentDiscount.is_sc_pwd === true,
           status: currentDiscount.status,
         },
         newValues: updates,
@@ -295,6 +307,7 @@ router.delete(
           discount_type: discount.discount_type,
           value: Number(discount.value),
           requires_admin_approval: discount.requires_admin_approval === 1,
+          is_sc_pwd: discount.is_sc_pwd === 1 || discount.is_sc_pwd === true,
           status: discount.status,
         },
       });

@@ -101,27 +101,27 @@ router.get("/", async (_req: Request, res: Response) => {
     // ── Daily sales for the last 7 days ──────────────────────────────────────
     const [weeklyRows] = await pool.execute<any[]>(`
       SELECT
-        DATE(s.created_at)               AS sale_date,
-        COUNT(*)                        AS transactions,
-        COALESCE(SUM(s.total_amount), 0)  AS gross_revenue
+        DATE_FORMAT(s.created_at, '%Y-%m-%d') AS sale_date,
+        COUNT(*)                              AS transactions,
+        COALESCE(SUM(s.total_amount), 0)      AS gross_revenue
       FROM sales s
       WHERE DATE(s.created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
         AND s.void_status != 'voided'
-      GROUP BY DATE(s.created_at)
+      GROUP BY DATE_FORMAT(s.created_at, '%Y-%m-%d')
       ORDER BY sale_date ASC
     `);
 
     // Get refunds for each day to subtract from gross revenue
     const [weeklyRefunds] = await pool.execute<any[]>(`
       SELECT
-        DATE(r.resolved_at) AS sale_date,
-        COALESCE(SUM(r.refund_amount), 0) AS refunds
+        DATE_FORMAT(r.resolved_at, '%Y-%m-%d') AS sale_date,
+        COALESCE(SUM(r.refund_amount), 0)      AS refunds
       FROM returns r
       JOIN sales s ON s.id = r.sale_id
       WHERE DATE(r.resolved_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
         AND r.status = 'completed'
         AND s.void_status != 'voided'
-      GROUP BY DATE(r.resolved_at)
+      GROUP BY DATE_FORMAT(r.resolved_at, '%Y-%m-%d')
     `);
 
     // Merge refunds into weekly data

@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { Request, Response, Router } from "express";
 import { PoolConnection } from "mysql2/promise";
 import { z } from "zod";

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
     getInventory,
@@ -26,7 +27,7 @@ import {
     RefreshCw,
     Search,
     TrendingDown,
-    X
+    X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -108,15 +109,14 @@ function SummaryCards({ summary, loading }: { summary: InventorySummary | null; 
 // ─── Stock Table ──────────────────────────────────────────────────────────────
 
 function StockTable({
-  items, loading, error, onRetry, onSelectProduct, selectedProductId, onViewDetails,
+  items, loading, error, onRetry, onViewDetails, onViewLogs,
 }: {
   items: InventoryItem[];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  onSelectProduct: (id: number | null) => void;
-  selectedProductId: number | null;
   onViewDetails: (item: InventoryItem) => void;
+  onViewLogs: (item: InventoryItem) => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -169,10 +169,9 @@ function StockTable({
               </td></tr>
             ) : items.map((item) => {
               const st = deriveStatus(item.quantity, item.reorder_level);
-              const isSelected = selectedProductId === item.id;
               return (
                 <tr key={item.id}
-                  className={`hover:bg-blue-50/40 transition-colors ${isSelected ? "bg-blue-50" : ""}`}>
+                  className="hover:bg-blue-50/40 transition-colors">
                   <td className="py-3.5 px-5">
                     <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
                       {item.barcode}
@@ -219,11 +218,9 @@ function StockTable({
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => onSelectProduct(isSelected ? null : item.id)}
-                        className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${
-                          isSelected ? "bg-blue-600 text-white" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                        }`}
-                        title="View movement logs"
+                        onClick={() => onViewLogs(item)}
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="View movement log"
                       >
                         <History className="h-4 w-4" />
                       </button>
@@ -241,94 +238,6 @@ function StockTable({
           <p className="text-xs text-gray-400">Sorted by urgency</p>
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Movement Log Panel ───────────────────────────────────────────────────────
-
-function MovementLog({ productId, productName, onClose }: {
-  productId: number | null;
-  productName?: string;
-  onClose: () => void;
-}) {
-  const [logs,    setLogs]    = useState<InventoryLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
-
-  useEffect(() => {
-    if (productId === null) { setLogs([]); return; }
-    setLoading(true);
-    setError(null);
-    getInventoryLogs({ product_id: productId, limit: 50 })
-      .then(setLogs)
-      .catch(() => setError("Failed to load movement logs."))
-      .finally(() => setLoading(false));
-  }, [productId]);
-
-  if (productId === null) return null;
-
-  return (
-    <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-blue-50">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-blue-600" />
-          <p className="text-sm font-semibold text-gray-900">
-            Movement Log{productName ? ` — ${productName}` : ""}
-          </p>
-        </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="overflow-x-auto max-h-72 overflow-y-auto">
-        {loading ? (
-          <div className="py-10 text-center flex items-center justify-center gap-2 text-gray-400">
-            <LoadingSpinner size={16} className="text-blue-500" /><span className="text-sm">Loading…</span>
-          </div>
-        ) : error ? (
-          <p className="py-6 text-center text-sm text-red-600">{error}</p>
-        ) : logs.length === 0 ? (
-          <p className="py-10 text-center text-sm text-gray-400">No movement history yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Date</th>
-                <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Type</th>
-                <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Action</th>
-                <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Change</th>
-                <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Remaining</th>
-                <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Reference</th>
-                <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {logs.map((log) => {
-                const change = log.quantity_change ?? log.quantity ?? 0;
-                const isPositive = change > 0;
-                return (
-                  <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-2.5 px-4 text-xs text-gray-500 whitespace-nowrap">{fmtDate(log.created_at)}</td>
-                    <td className="py-2.5 px-4">{txBadge(log.transaction_type)}</td>
-                    <td className="py-2.5 px-4 text-xs text-gray-600">{log.action ?? "—"}</td>
-                    <td className="py-2.5 px-4 text-center">
-                      <span className={`text-sm font-bold tabular-nums ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
-                        {isPositive ? "+" : ""}{change}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 text-center text-sm font-semibold text-gray-700 tabular-nums">
-                      {log.remaining_stock ?? "—"}
-                    </td>
-                    <td className="py-2.5 px-4 text-xs font-mono text-gray-500">{log.reference ?? "—"}</td>
-                    <td className="py-2.5 px-4 text-xs text-gray-600">{log.performed_by}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }
@@ -358,9 +267,6 @@ function ProductDetailsModal({ item, onClose }: {
             <h2 className="text-lg font-bold text-white truncate">{item.product_name}</h2>
             <p className="text-xs text-blue-100 mt-0.5">Complete Product Information</p>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white transition-colors">
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         {/* Content */}
@@ -559,6 +465,143 @@ function ProductDetailsModal({ item, onClose }: {
   );
 }
 
+// ─── Movement Log Modal ───────────────────────────────────────────────────────
+
+function MovementLogModal({ item, onClose }: {
+  item: InventoryItem | null;
+  onClose: () => void;
+}) {
+  const [activeItem, setActiveItem] = useState<InventoryItem | null>(null);
+  const [logs,    setLogs]    = useState<InventoryLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  // Keep track of the last non-null item to avoid unmounting content while exit animations are playing
+  useEffect(() => {
+    if (item) {
+      setActiveItem(item);
+    }
+  }, [item]);
+
+  useEffect(() => {
+    if (!item) return;
+    setLoading(true);
+    setError(null);
+    getInventoryLogs({ product_id: item.id, limit: 50 })
+      .then(setLogs)
+      .catch(() => setError("Failed to load movement logs."))
+      .finally(() => setLoading(false));
+  }, [item?.id]);
+
+  const displayItem = item || activeItem;
+  if (!displayItem) return null;
+
+  return (
+    <Sheet open={!!item} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-4xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Movement Log - {displayItem.product_name}</SheetTitle>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <History className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0 pr-8">
+            <h2 className="text-lg font-bold text-white truncate">Movement Log — {displayItem.product_name}</h2>
+            <p className="text-xs text-blue-100 mt-0.5">Live stock levels and transaction history</p>
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="py-16 text-center flex items-center justify-center gap-2 text-gray-400">
+              <LoadingSpinner size={16} className="text-blue-500" />
+              <span className="text-sm">Loading movement log…</span>
+            </div>
+          ) : error ? (
+            <p className="py-10 text-center text-sm text-red-600">{error}</p>
+          ) : logs.length === 0 ? (
+            <div className="py-16 text-center flex flex-col items-center gap-2">
+              <History className="h-8 w-8 text-gray-300" />
+              <p className="text-sm text-gray-400">No movement history yet.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Date</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Type</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Action</th>
+                    <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Change</th>
+                    <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Remaining</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Reference & Notes</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">By</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {logs.map((log) => {
+                    const change = log.quantity_change ?? log.quantity ?? 0;
+                    const isPositive = change > 0;
+                    return (
+                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 px-4 text-xs text-gray-500 whitespace-nowrap">{fmtDate(log.created_at)}</td>
+                        <td className="py-2.5 px-4">{txBadge(log.transaction_type)}</td>
+                        <td className="py-2.5 px-4 text-xs text-gray-600">{log.action ?? "—"}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          <span className={`text-sm font-bold tabular-nums ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                            {isPositive ? "+" : ""}{change}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-center text-sm font-semibold text-gray-700 tabular-nums">
+                          {log.remaining_stock ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-4 text-xs">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] text-gray-500 font-medium">Ref:</span>
+                              <span className={`font-mono text-xs font-semibold px-1.5 py-0.5 rounded ${
+                                log.reference && log.reference !== "—"
+                                  ? "bg-gray-100 text-gray-800 border border-gray-200" 
+                                  : "text-gray-400 font-normal italic"
+                              }`}>
+                                {log.reference && log.reference !== "—" ? log.reference : "N/A"}
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-1">
+                              <span className="text-[11px] text-gray-500 font-medium shrink-0">Notes:</span>
+                              <span className={`text-xs ${
+                                log.notes && log.notes !== "—"
+                                  ? "text-gray-700 italic font-medium" 
+                                  : "text-gray-400 italic"
+                              }`}>
+                                {log.notes && log.notes !== "—" ? log.notes : "N/A"}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-xs text-gray-600">{log.performed_by}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+          <Button onClick={onClose} variant="outline" className="border-gray-300">
+            Close
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Inventory() {
@@ -574,9 +617,8 @@ export default function Inventory() {
   const [filterStatus, setFilterStatus] = useState<StockStatusFilter>("all");
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [selectedProductId,   setSelectedProductId]   = useState<number | null>(null);
-  const [selectedProductName, setSelectedProductName] = useState<string | undefined>();
-  const [detailsItem,         setDetailsItem]         = useState<InventoryItem | null>(null);
+  const [detailsItem, setDetailsItem] = useState<InventoryItem | null>(null);
+  const [logItem,     setLogItem]     = useState<InventoryItem | null>(null);
 
   // Load categories for filter dropdown
   useEffect(() => {
@@ -628,12 +670,12 @@ export default function Inventory() {
     loadItems(search);
   };
 
-  const handleSelectProduct = (id: number | null) => {
-    setSelectedProductId(id);
-    if (id !== null) {
-      const p = items.find((i) => i.id === id);
-      setSelectedProductName(p?.product_name);
-    }
+  const handleViewDetails = (item: InventoryItem) => {
+    setDetailsItem(item);
+  };
+
+  const handleViewLogs = (item: InventoryItem) => {
+    setLogItem(item);
   };
 
   const clearFilters = () => {
@@ -721,22 +763,20 @@ export default function Inventory() {
         loading={itemsLoading}
         error={loadError}
         onRetry={() => loadItems(search)}
-        onSelectProduct={handleSelectProduct}
-        selectedProductId={selectedProductId}
-        onViewDetails={(item) => setDetailsItem(item)}
-      />
-
-      {/* Movement log (shown when a product row is selected) */}
-      <MovementLog
-        productId={selectedProductId}
-        productName={selectedProductName}
-        onClose={() => setSelectedProductId(null)}
+        onViewDetails={handleViewDetails}
+        onViewLogs={handleViewLogs}
       />
 
       {/* Product details modal */}
       <ProductDetailsModal
         item={detailsItem}
         onClose={() => setDetailsItem(null)}
+      />
+
+      {/* Movement log modal */}
+      <MovementLogModal
+        item={logItem}
+        onClose={() => setLogItem(null)}
       />
     </div>
   );

@@ -178,59 +178,75 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
 
     /* ── Printable inner area (respects margins) ── */
     .label-inner {
-      width:  ${printW}mm;
-      height: ${printH}mm;
+      width:   ${printW}mm;
+      height:  ${printH}mm;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 0.3mm;
+      justify-content: space-between;
       overflow: hidden;
     }
 
-    /* ── Store name ── */
+    /* ── Store name — pinned to top, never shrinks ── */
     .store-name {
+      flex-shrink: 0;
+      width:       100%;
       font-family: ${font_family}, sans-serif;
       font-size:   ${font_size_pt}pt;
       font-weight: 700;
       text-align:  center;
       white-space: nowrap;
       overflow:    hidden;
-      text-overflow: ellipsis;
-      max-width:   100%;
-      line-height: 1.1;
+      line-height: 1.2;
       letter-spacing: 0.3px;
     }
 
-    /* ── Barcode SVG ── */
+    /* ── Barcode SVG — fills remaining space ── */
     .barcode-svg {
-      width:    100%;
-      max-width: 100%;
-      display:  flex;
+      flex:      1;
+      width:     100%;
+      display:   flex;
+      align-items: center;
       justify-content: center;
+      overflow:  hidden;
+      min-height: 0;
     }
     .barcode-svg svg {
-      width:    100%;
-      height:   auto;
-      display:  block;
-      /* Preserve quiet zones — do not stretch beyond label width */
+      width:     100%;
+      height:    auto;
+      display:   block;
       max-width: ${printW}mm;
     }
 
-    /* ── Human-readable barcode number ── */
+    /* ── Human-readable barcode number — pinned to bottom, never shrinks ── */
     .barcode-text {
+      flex-shrink:    0;
+      width:          100%;
       font-family:    ${font_family}, monospace;
       font-size:      ${font_size_pt}pt;
       text-align:     center;
       letter-spacing: 1px;
       white-space:    nowrap;
+      line-height:    1.2;
     }
   </style>
 </head>
 <body>
   ${labels}
   <script>
+    // Auto-fit store name to one line by shrinking font until it fits
     window.addEventListener('load', function() {
+      var el = document.querySelector('.store-name');
+      if (el) {
+        var minPt = 4;
+        var sizePt = parseFloat(window.getComputedStyle(el).fontSize);
+        // getComputedStyle returns px; convert: 1pt = 1.3333px
+        var sizePx = sizePt;
+        while (el.scrollWidth > el.clientWidth && sizePx > minPt * 1.3333) {
+          sizePx -= 0.5;
+          el.style.fontSize = sizePx + 'px';
+        }
+      }
       window.print();
     });
     window.addEventListener('afterprint', function() {

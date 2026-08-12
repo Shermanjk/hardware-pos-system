@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Receipt Test — 80mm XP-365B</title>
+  <style>
+    body {
+      background: #555;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      padding: 32px;
+      font-family: sans-serif;
+    }
+    .label {
+      color: #fff;
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .paper {
+      background: #fff;
+      width: 80mm;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      padding: 4mm;
+      box-sizing: border-box;
+    }
+
+    /* ── Receipt styles (exact copy from receipt.ts) ── */
+    .receipt * { margin: 0; padding: 0; box-sizing: border-box; }
+    .receipt {
+      width: 72mm;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #000;
+    }
+    .center { text-align: center; margin: 1px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
+    .section { margin: 1px 0; word-break: break-word; }
+    .bold { font-weight: bold; }
+    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
+    .divider { border-top: 1px dashed #000; margin: 3px 0; }
+    .items { width: 100%; border-collapse: collapse; margin: 3px 0; }
+    .items th, .items td { padding: 0 2px; vertical-align: middle; }
+    .items .col-hdr-qty   { width: 8%;  text-align: center; }
+    .items .col-hdr-unit  { width: 12%; text-align: left; }
+    .items .col-hdr-space { text-align: left; }
+    .items .col-hdr-price { width: 27%; text-align: right; }
+    .items .col-hdr-amt   { width: 27%; text-align: right; }
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 2px 0 2px; font-weight: bold; }
+    .item-detail-row td { padding: 0 2px 3px 2px; }
+    .item-detail-row .col-qty    { width: 8%;  text-align: center; }
+    .item-detail-row .col-unit   { width: 12%; text-align: left; }
+    .item-detail-row .col-spacer { }
+    .item-detail-row .col-price  { width: 27%; text-align: right; word-break: break-all; }
+    .item-detail-row .col-amt    { width: 27%; text-align: right; word-break: break-all; }
+
+    @media print {
+      body { background: none; padding: 0; gap: 0; }
+      .label { display: none; }
+      .paper { box-shadow: none; page-break-after: always; }
+      @page { size: 80mm auto; margin: 4mm; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     TEST 1 — Normal sale (short names, low amounts)
+     ══════════════════════════════════════ -->
+<div>
+  <div class="label">TEST 1 — Normal (short names, low amounts)</div>
+  <div class="paper">
+    <div class="receipt">
+      <div class="divider"></div>
+      <div class="store-name">ISRA HARDWARE TRADING</div>
+      <div class="center">IRIES S. SALUDO</div>
+      <div class="center">PROPRIETOR: IRIES S. SALUDO</div>
+      <div class="center">PRK LAPU-LAPU, TIKWAS DUMALINAO, ZAMBOANGA DEL SUR</div>
+      <div class="center">VAT REGISTERED | TIN: 765-490-574-00000</div>
+      <div class="center">Fb: REXJIE SALUDO | Tel No: 09093250717</div>
+      <div class="divider"></div>
+      <div class="center bold">SALES INVOICE</div>
+      <div class="row"><span>Invoice No:</span><span>INV-000099</span></div>
+      <div class="row"><span>Date:</span><span>August 12, 2026</span></div>
+      <div class="row"><span>Time:</span><span>10:30:00 AM</span></div>
+      <div class="divider"></div>
+      <div class="section">SOLD TO: Juan Dela Cruz</div>
+      <div class="section">TIN: 123-456-789-000</div>
+      <div class="section">ADDRESS: Zamboanga Del Sur</div>
+      <div class="section">BUSINESS STYLE: Hardware</div>
+      <div class="divider"></div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="col-hdr-qty">QTY</th>
+            <th class="col-hdr-unit">UNIT</th>
+            <th class="col-hdr-space"></th>
+            <th class="col-hdr-price">PRICE</th>
+            <th class="col-hdr-amt">AMT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Nails</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">4</td>
+            <td class="col-unit">box</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 50.00</td>
+            <td class="col-amt">P 200.00</td>
+          </tr>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Hammer</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">2</td>
+            <td class="col-unit">pc</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 160.00</td>
+            <td class="col-amt">P 320.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <div class="row"><span>ITEMS: 6</span><span class="bold">TOTAL: P&nbsp;520.00</span></div>
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (Net of VAT):</span><span>P 464.29</span></div>
+      <div class="row"><span>VAT Amount (12%):</span><span>P 55.71</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>P 0.00</span></div>
+      <div class="divider"></div>
+      <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>P 520.00</span></div>
+      <div class="row"><span>Cash Tendered:</span><span>P 1,000.00</span></div>
+      <div class="row"><span>Change:</span><span>P 480.00</span></div>
+      <div class="divider"></div>
+      <div class="section">CASHIER: Mara</div>
+      <div class="divider"></div>
+      <div class="center">Thank you for your business.</div>
+      <div class="center">We sincerely appreciate your trust</div>
+      <div class="center">and look forward to serving you again.</div>
+      <div class="center">This is your SALES INVOICE.</div>
+      <div class="center">"Not valid for claiming input taxes."</div>
+      <div class="divider"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TEST 2 — Long product name
+     ══════════════════════════════════════ -->
+<div>
+  <div class="label">TEST 2 — Long product names</div>
+  <div class="paper">
+    <div class="receipt">
+      <div class="divider"></div>
+      <div class="store-name">ISRA HARDWARE TRADING</div>
+      <div class="center">IRIES S. SALUDO</div>
+      <div class="center">PROPRIETOR: IRIES S. SALUDO</div>
+      <div class="center">PRK LAPU-LAPU, TIKWAS DUMALINAO, ZAMBOANGA DEL SUR</div>
+      <div class="center">VAT REGISTERED | TIN: 765-490-574-00000</div>
+      <div class="center">Fb: REXJIE SALUDO | Tel No: 09093250717</div>
+      <div class="divider"></div>
+      <div class="center bold">SALES INVOICE</div>
+      <div class="row"><span>Invoice No:</span><span>INV-000100</span></div>
+      <div class="row"><span>Date:</span><span>August 12, 2026</span></div>
+      <div class="row"><span>Time:</span><span>11:15:00 AM</span></div>
+      <div class="divider"></div>
+      <div class="section">SOLD TO: Maria Santos</div>
+      <div class="section">TIN: N/A</div>
+      <div class="section">ADDRESS: N/A</div>
+      <div class="section">BUSINESS STYLE: N/A</div>
+      <div class="divider"></div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="col-hdr-qty">QTY</th>
+            <th class="col-hdr-unit">UNIT</th>
+            <th class="col-hdr-space"></th>
+            <th class="col-hdr-price">PRICE</th>
+            <th class="col-hdr-amt">AMT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Offset Handle Professional Grade Tin Snips and Wire Cutter</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">3</td>
+            <td class="col-unit">pc</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 450.00</td>
+            <td class="col-amt">P 1,350.00</td>
+          </tr>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Galvanized Steel Wire Mesh Roll 3ft x 10ft Heavy Duty</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">2</td>
+            <td class="col-unit">roll</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 875.00</td>
+            <td class="col-amt">P 1,750.00</td>
+          </tr>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Nails</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">10</td>
+            <td class="col-unit">kg</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 85.00</td>
+            <td class="col-amt">P 850.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <div class="row"><span>ITEMS: 15</span><span class="bold">TOTAL: P&nbsp;3,950.00</span></div>
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (Net of VAT):</span><span>P 3,526.79</span></div>
+      <div class="row"><span>VAT Amount (12%):</span><span>P 423.21</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>P 0.00</span></div>
+      <div class="divider"></div>
+      <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>P 3,950.00</span></div>
+      <div class="row"><span>Cash Tendered:</span><span>P 4,000.00</span></div>
+      <div class="row"><span>Change:</span><span>P 50.00</span></div>
+      <div class="divider"></div>
+      <div class="section">CASHIER: Mara</div>
+      <div class="divider"></div>
+      <div class="center">Thank you for your business.</div>
+      <div class="center">We sincerely appreciate your trust</div>
+      <div class="center">and look forward to serving you again.</div>
+      <div class="center">This is your SALES INVOICE.</div>
+      <div class="center">"Not valid for claiming input taxes."</div>
+      <div class="divider"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TEST 3 — 100k+ amounts
+     ══════════════════════════════════════ -->
+<div>
+  <div class="label">TEST 3 — High amounts (100k+)</div>
+  <div class="paper">
+    <div class="receipt">
+      <div class="divider"></div>
+      <div class="store-name">ISRA HARDWARE TRADING</div>
+      <div class="center">IRIES S. SALUDO</div>
+      <div class="center">PROPRIETOR: IRIES S. SALUDO</div>
+      <div class="center">PRK LAPU-LAPU, TIKWAS DUMALINAO, ZAMBOANGA DEL SUR</div>
+      <div class="center">VAT REGISTERED | TIN: 765-490-574-00000</div>
+      <div class="center">Fb: REXJIE SALUDO | Tel No: 09093250717</div>
+      <div class="divider"></div>
+      <div class="center bold">SALES INVOICE</div>
+      <div class="row"><span>Invoice No:</span><span>INV-000101</span></div>
+      <div class="row"><span>Date:</span><span>August 12, 2026</span></div>
+      <div class="row"><span>Time:</span><span>02:45:00 PM</span></div>
+      <div class="divider"></div>
+      <div class="section">SOLD TO: ABC Construction Supply</div>
+      <div class="section">TIN: 987-654-321-000</div>
+      <div class="section">ADDRESS: Pagadian City</div>
+      <div class="section">BUSINESS STYLE: Construction</div>
+      <div class="divider"></div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="col-hdr-qty">QTY</th>
+            <th class="col-hdr-unit">UNIT</th>
+            <th class="col-hdr-space"></th>
+            <th class="col-hdr-price">PRICE</th>
+            <th class="col-hdr-amt">AMT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Portland Cement 40kg Bag</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">200</td>
+            <td class="col-unit">bag</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 285.00</td>
+            <td class="col-amt">P 57,000.00</td>
+          </tr>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Deformed Bar 10mm x 6m (Grade 40)</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">500</td>
+            <td class="col-unit">pc</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 189.00</td>
+            <td class="col-amt">P 94,500.00</td>
+          </tr>
+          <tr class="item-name-row"><td colspan="5" class="col-name">G.I. Pipe 1 inch x 6m Schedule 40</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">50</td>
+            <td class="col-unit">lgth</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 1,250.00</td>
+            <td class="col-amt">P 62,500.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <div class="row"><span>ITEMS: 750</span><span class="bold">TOTAL: P&nbsp;214,000.00</span></div>
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (Net of VAT):</span><span>P 191,071.43</span></div>
+      <div class="row"><span>VAT Amount (12%):</span><span>P 22,928.57</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>P 0.00</span></div>
+      <div class="divider"></div>
+      <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>P 214,000.00</span></div>
+      <div class="row"><span>Cash Tendered:</span><span>P 220,000.00</span></div>
+      <div class="row"><span>Change:</span><span>P 6,000.00</span></div>
+      <div class="divider"></div>
+      <div class="section">CASHIER: Mara</div>
+      <div class="divider"></div>
+      <div class="center">Thank you for your business.</div>
+      <div class="center">We sincerely appreciate your trust</div>
+      <div class="center">and look forward to serving you again.</div>
+      <div class="center">This is your SALES INVOICE.</div>
+      <div class="center">"Not valid for claiming input taxes."</div>
+      <div class="divider"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TEST 4 — 100k+ WITH DISCOUNT
+     ══════════════════════════════════════ -->
+<div>
+  <div class="label">TEST 4 — High amount with discount</div>
+  <div class="paper">
+    <div class="receipt">
+      <div class="divider"></div>
+      <div class="store-name">ISRA HARDWARE TRADING</div>
+      <div class="center">IRIES S. SALUDO</div>
+      <div class="center">PROPRIETOR: IRIES S. SALUDO</div>
+      <div class="center">PRK LAPU-LAPU, TIKWAS DUMALINAO, ZAMBOANGA DEL SUR</div>
+      <div class="center">VAT REGISTERED | TIN: 765-490-574-00000</div>
+      <div class="center">Fb: REXJIE SALUDO | Tel No: 09093250717</div>
+      <div class="divider"></div>
+      <div class="center bold">SALES INVOICE</div>
+      <div class="row"><span>Invoice No:</span><span>INV-000102</span></div>
+      <div class="row"><span>Date:</span><span>August 12, 2026</span></div>
+      <div class="row"><span>Time:</span><span>03:00:00 PM</span></div>
+      <div class="divider"></div>
+      <div class="section">SOLD TO: Senior Citizen Pedro Reyes</div>
+      <div class="section">TIN: N/A</div>
+      <div class="section">ADDRESS: Dumalinao, ZDS</div>
+      <div class="section">BUSINESS STYLE: N/A</div>
+      <div class="divider"></div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="col-hdr-qty">QTY</th>
+            <th class="col-hdr-unit">UNIT</th>
+            <th class="col-hdr-space"></th>
+            <th class="col-hdr-price">PRICE</th>
+            <th class="col-hdr-amt">AMT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="item-name-row"><td colspan="5" class="col-name">Fiber Cement Board 4x8 ft (6mm thickness)</td></tr>
+          <tr class="item-detail-row">
+            <td class="col-qty">100</td>
+            <td class="col-unit">sht</td>
+            <td class="col-spacer"></td>
+            <td class="col-price">P 1,200.00</td>
+            <td class="col-amt">P 120,000.00</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <div class="row"><span>ITEMS: 100</span><span class="bold">TOTAL: P&nbsp;120,000.00</span></div>
+      <div class="divider"></div>
+      <div class="row"><span>DISCOUNT: Senior Citizen (20%):</span><span>- P 24,000.00</span></div>
+      <div class="divider"></div>
+      <div class="row"><span>GROSS TOTAL:</span><span>P 120,000.00</span></div>
+      <div class="row"><span>NET TOTAL:</span><span>P 96,000.00</span></div>
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (Net of VAT):</span><span>P 85,714.29</span></div>
+      <div class="row"><span>VAT Amount (12%):</span><span>P 10,285.71</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>P 0.00</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>P 0.00</span></div>
+      <div class="divider"></div>
+      <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>P 96,000.00</span></div>
+      <div class="row"><span>Cash Tendered:</span><span>P 100,000.00</span></div>
+      <div class="row"><span>Change:</span><span>P 4,000.00</span></div>
+      <div class="divider"></div>
+      <div class="section">CASHIER: Mara</div>
+      <div class="divider"></div>
+      <div class="center">Thank you for your business.</div>
+      <div class="center">We sincerely appreciate your trust</div>
+      <div class="center">and look forward to serving you again.</div>
+      <div class="center">This is your SALES INVOICE.</div>
+      <div class="center">"Not valid for claiming input taxes."</div>
+      <div class="divider"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

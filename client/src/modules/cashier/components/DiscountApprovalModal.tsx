@@ -18,9 +18,11 @@ import { toast } from "sonner";
 interface DiscountApprovalModalProps {
   open: boolean;
   onClose: () => void;
-  discount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
+  discount: { id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null;
   /** Total amount of the current transaction in centavos. */
   totalAmount: number;
+  /** VAT rate (e.g. 12). Used for SC/PWD VAT-exclusive base calculation. */
+  vatRate: number;
   onApproved: (requestId: number) => void;
   onRejected: () => void;
 }
@@ -33,6 +35,7 @@ export default function DiscountApprovalModal({
   onClose,
   discount,
   totalAmount,
+  vatRate,
   onApproved,
   onRejected,
 }: DiscountApprovalModalProps) {
@@ -109,8 +112,8 @@ export default function DiscountApprovalModal({
               toast.success(`Discount approved by ${data.admin_name ?? "Admin"}`, { duration: 5000 });
               setTimeout(() => {
                 if (!mountedRef.current) return;
-                onApproved(requestId!);
                 onClose();
+                onApproved(requestId!);
               }, 1500);
             } else {
               setStatus("rejected");
@@ -149,7 +152,11 @@ export default function DiscountApprovalModal({
   // ── Derived values ─────────────────────────────────────────────────────────
   if (!discount) return null;
 
-  const discountCents = Math.round((totalAmount * discount.percentage) / 100);
+  // SC/PWD discount: apply percentage on VAT-exclusive base (RA 9994/9442)
+  // Regular discount: apply percentage on VAT-inclusive total
+  const discountCents = discount.isScPwd
+    ? Math.round((totalAmount / (1 + vatRate / 100)) * (discount.percentage / 100))
+    : Math.round((totalAmount * discount.percentage) / 100);
   const finalCents    = totalAmount - discountCents;
 
   const fmt = (cents: number) =>
@@ -176,7 +183,28 @@ export default function DiscountApprovalModal({
       toast.info("Approval request sent to admin.", { duration: 4000 });
     } catch (err: any) {
       if (!mountedRef.current) return;
-      toast.error(err?.response?.data?.message ?? "Failed to send approval request.");
+      // If a pending request already exists on the server for this discount,
+      // reuse it rather than showing an error — just move to pending state.
+      if (err?.response?.status === 422 && err?.response?.data?.existing_id) {
+        setRequestId(err.response.data.existing_id);
+        setStatus("pending");
+        toast.info("Resuming existing approval request.", { duration: 4000 });
+      } else if (err?.response?.status === 422 && err?.response?.data?.message?.includes("pending request")) {
+        // Server has a pending request but didn't return the ID — fetch it
+        try {
+          const listRes = await httpClient.get("/api/discount-approvals/my-pending");
+          const existing = listRes.data?.find?.((r: any) => r.discount_id === discount.id);
+          if (existing && mountedRef.current) {
+            setRequestId(existing.id);
+            setStatus("pending");
+            toast.info("Resuming existing approval request.", { duration: 4000 });
+            return;
+          }
+        } catch { /* fall through to generic error */ }
+        toast.error("You already have a pending request for this discount. Please wait for admin response.");
+      } else {
+        toast.error(err?.response?.data?.message ?? "Failed to send approval request.");
+      }
     } finally {
       if (mountedRef.current) setIsRequesting(false);
     }
@@ -242,8 +270,8 @@ export default function DiscountApprovalModal({
 
       setTimeout(() => {
         if (!mountedRef.current) return;
-        onApproved(drId!);
         onClose();
+        onApproved(drId!);
       }, 1200);
     } catch (err: any) {
       if (!mountedRef.current) return;

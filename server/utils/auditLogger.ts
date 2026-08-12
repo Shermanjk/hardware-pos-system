@@ -17,11 +17,18 @@ export type AuditAction =
   // ── Void / cancellation ─────────────────────────────────────────────────────
   | "SALE_VOID_REQUESTED"
   | "SALE_VOIDED"
+  | "SALE_VOIDED_LOCAL_OVERRIDE"
   | "SALE_CANCELLATION_REJECTED"
+  // ── Cash Reconciliation / Shifts ─────────────────────────────────────────────
+  | "SHIFT_OPENED"
+  | "SHIFT_CLOSED"
+  | "SHIFT_REVIEWED"
   // ── Returns ─────────────────────────────────────────────────────────────────
   | "RETURN_REQUESTED"
   | "RETURN_APPROVED"
+  | "RETURN_APPROVED_LOCAL_OVERRIDE"
   | "RETURN_REJECTED"
+  | "RETURN_REJECTED_LOCAL_OVERRIDE"
   | "REFUND_PROCESSED"
   | "EXCHANGE_COMPLETED"
   | "STORE_CREDIT_ISSUED"
@@ -79,6 +86,7 @@ export type AuditAction =
   | "DISCOUNT_DELETED"
   | "DISCOUNT_REQUESTED"
   | "DISCOUNT_APPROVED"
+  | "DISCOUNT_APPROVED_LOCAL_OVERRIDE"
   | "DISCOUNT_REJECTED"
   | "DISCOUNT_REQUEST_CANCELLED"
   | "DISCOUNT_APPLIED";

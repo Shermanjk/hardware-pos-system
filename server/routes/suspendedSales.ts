@@ -43,6 +43,7 @@ const suspendSaleSchema = z.object({
     name: z.string(),
     percentage: z.number(),
     requiresApproval: z.boolean(),
+    isScPwd: z.boolean().optional(),
   }).nullable().optional(),
 });
 

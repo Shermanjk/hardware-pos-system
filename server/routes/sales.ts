@@ -97,9 +97,10 @@ router.post(
     // ── DISCOUNT VALIDATION ────────────────────────────────────────────────────
     let discountAmount = 0;
     let discountName = null;
+    let discountIsScPwd = false;
     if (discount_id) {
       const [discountRows] = await pool.execute<any[]>(
-        `SELECT id, discount_name, discount_type, value, requires_admin_approval, status
+        `SELECT id, discount_name, discount_type, value, requires_admin_approval, is_sc_pwd, status
          FROM discounts WHERE id = ?`,
         [discount_id]
       );
@@ -116,6 +117,7 @@ router.post(
         res.status(422).json({ message: "Only percentage discounts are supported." });
         return;
       }
+      discountIsScPwd = discount.is_sc_pwd === 1 || discount.is_sc_pwd === true;
 
       // If discount requires approval, validate the approval request
       if (discount.requires_admin_approval) {
@@ -277,15 +279,34 @@ router.post(
       if (discount_id && discountAmount === 0) {
         // Calculate discount from percentage for non-approval discounts
         const [discountRows] = await conn.execute<any[]>(
-          `SELECT value FROM discounts WHERE id = ?`,
+          `SELECT value, is_sc_pwd FROM discounts WHERE id = ?`,
           [discount_id]
         );
         if (discountRows.length > 0) {
           const percentage = Number(discountRows[0].value);
-          final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+          const isScPwd = discountRows[0].is_sc_pwd === 1 || discountRows[0].is_sc_pwd === true;
+
+          if (isScPwd) {
+            // SC/PWD discount per RA 9994/9442:
+            // 1. Remove VAT from the total first (VAT-exclusive base)
+            // 2. Apply the percentage on the VAT-exclusive base
+            // Fetch current VAT rate from system_settings
+            const [vatRows] = await conn.execute<any[]>(
+              `SELECT vat_rate FROM system_settings WHERE id = 1 LIMIT 1`
+            );
+            const vatRate = vatRows.length > 0 && Number(vatRows[0].vat_rate) > 0
+              ? Number(vatRows[0].vat_rate)
+              : 12;
+            const vatExclusiveTotal = calc_total_amount / (1 + vatRate / 100);
+            final_discount_amount = Math.round((vatExclusiveTotal * (percentage / 100)) * 100) / 100;
+          } else {
+            // Regular discount: straight percentage of the VAT-inclusive total
+            final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+          }
         }
       } else if (discount_id) {
         // Use the pre-calculated discount amount from approval request
+        // (already computed correctly on the client before submitting for approval)
         final_discount_amount = discountAmount;
       }
 

@@ -3,9 +3,9 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
 import httpClient from "@/shared/api/httpClient";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { loadToken } from "@/shared/utils/auth";
@@ -20,6 +20,7 @@ interface Discount {
   value: number;
   status: string;
   requires_admin_approval: boolean;
+  is_sc_pwd: boolean;
   created_by: number | null;
   created_by_username: string | null;
   created_at: string;
@@ -60,6 +61,7 @@ export default function DiscountManagement() {
     discount_type: "Percentage",
     value: 0,
     requires_admin_approval: false,
+    is_sc_pwd: false,
     status: "Active",
   });
 
@@ -187,7 +189,7 @@ export default function DiscountManagement() {
     try {
       await httpClient.post("/api/discounts", formData);
       setIsCreateDialogOpen(false);
-      setFormData({ discount_name: "", discount_type: "Percentage", value: 0, requires_admin_approval: false, status: "Active" });
+      setFormData({ discount_name: "", discount_type: "Percentage", value: 0, requires_admin_approval: false, is_sc_pwd: false, status: "Active" });
       loadDiscounts();
     } catch (err) {
       setDiscountsError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to create discount" : "An error occurred");
@@ -200,7 +202,7 @@ export default function DiscountManagement() {
       await httpClient.patch(`/api/discounts/${selectedDiscount.id}`, formData);
       setIsEditDialogOpen(false);
       setSelectedDiscount(null);
-      setFormData({ discount_name: "", discount_type: "Percentage", value: 0, requires_admin_approval: false, status: "Active" });
+      setFormData({ discount_name: "", discount_type: "Percentage", value: 0, requires_admin_approval: false, is_sc_pwd: false, status: "Active" });
       loadDiscounts();
     } catch (err) {
       setDiscountsError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to update discount" : "An error occurred");
@@ -226,6 +228,7 @@ export default function DiscountManagement() {
       discount_type: discount.discount_type,
       value: discount.value,
       requires_admin_approval: discount.requires_admin_approval,
+      is_sc_pwd: discount.is_sc_pwd,
       status: discount.status,
     });
     setIsEditDialogOpen(true);
@@ -331,6 +334,7 @@ export default function DiscountManagement() {
                     <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Name</th>
                     <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Type</th>
                     <th className="text-right py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Value</th>
+                    <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">SC/PWD</th>
                     <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Requires Approval</th>
                     <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
                     <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
@@ -345,17 +349,25 @@ export default function DiscountManagement() {
                         <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
                         <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
                         <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                        <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
                         <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
                       </tr>
                     ))
                   ) : discounts.length === 0 ? (
-                    <tr><td colSpan={6} className="py-16 text-center text-gray-400">No discounts found</td></tr>
+                    <tr><td colSpan={7} className="py-16 text-center text-gray-400">No discounts found</td></tr>
                   ) : (
                     discounts.map((discount) => (
                       <tr key={discount.id} className="hover:bg-gray-50">
                         <td className="py-3.5 px-5 font-medium text-gray-900">{discount.discount_name}</td>
                         <td className="py-3.5 px-5 text-gray-600">{discount.discount_type}</td>
                         <td className="py-3.5 px-5 text-right font-semibold text-gray-900">{discount.value}%</td>
+                        <td className="py-3.5 px-5 text-center">
+                          {discount.is_sc_pwd ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">Yes</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">No</span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-5 text-center">
                           {discount.requires_admin_approval ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Yes</span>
@@ -567,6 +579,17 @@ export default function DiscountManagement() {
                 className="data-[state=checked]:bg-blue-600"
               />
             </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
+                <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
+              </div>
+              <Switch
+                checked={formData.is_sc_pwd}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
+                className="data-[state=checked]:bg-purple-600"
+              />
+            </div>
             <div>
               <Label className="text-sm font-semibold text-gray-700">Status</Label>
               <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
@@ -621,6 +644,17 @@ export default function DiscountManagement() {
                 checked={formData.requires_admin_approval}
                 onCheckedChange={(checked) => setFormData({ ...formData, requires_admin_approval: checked })}
                 className="data-[state=checked]:bg-blue-600"
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
+                <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
+              </div>
+              <Switch
+                checked={formData.is_sc_pwd}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
+                className="data-[state=checked]:bg-purple-600"
               />
             </div>
             <div>

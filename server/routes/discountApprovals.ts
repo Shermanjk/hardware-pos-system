@@ -80,6 +80,7 @@ router.post(
       if (existingRequest.length > 0) {
         res.status(422).json({
           message: "You already have a pending request for this discount.",
+          existing_id: existingRequest[0].id,
         });
         return;
       }

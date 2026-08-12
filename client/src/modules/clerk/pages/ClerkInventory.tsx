@@ -17,14 +17,19 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { getInventoryLogs, type InventoryLog } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
+import { BARCODE_PRINTER_CONFIG } from "@/shared/services/barcodePrinter";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import JsBarcode from "jsbarcode";
 import {
     AlertTriangle,
     Boxes,
     CheckCircle2,
     Eye,
     Hash,
+    History,
     Layers,
     Package,
     Printer,
@@ -165,24 +170,28 @@ interface BarcodePrintModalProps {
 
 function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
   const [labelCount, setLabelCount] = useState(1);
-  const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
-    if (!svgRef.current || !product?.barcode) return;
+  // Callback ref: fires the instant the <svg> node is attached to the DOM,
+  // bypassing Dialog animation timing that breaks useRef + useEffect.
+  const svgCallbackRef = useCallback((node: SVGSVGElement | null) => {
+    if (!node || !product?.barcode) return;
     try {
-      JsBarcode(svgRef.current, product.barcode, {
+      JsBarcode(node, product.barcode, {
         format: "CODE128",
         displayValue: false,
-        height: 48,
-        margin: 2,
+        height: 52,
+        width: 1.5,
+        margin: 4,
         background: "transparent",
+        lineColor: "#000",
       });
-    } catch { /* invalid barcode */ }
-  }, [product?.barcode]);
+    } catch { /* invalid barcode — leave blank */ }
+  }, [product?.barcode, open]); // re-run when product or open state changes
 
   const handlePrint = () => {
     if (!product) return;
     const clampedCount = Math.max(1, Math.min(100, labelCount));
+    const storeName = BARCODE_PRINTER_CONFIG.storeName;
 
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     try {
@@ -200,7 +209,8 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
     const svgHTML = svgEl.outerHTML;
     const label = `
       <div class="label">
-        <div>${svgHTML}</div>
+        <div class="store-name">${storeName}</div>
+        <div class="barcode-wrap">${svgHTML}</div>
         <div class="code">${product.barcode}</div>
       </div>`;
 
@@ -213,9 +223,13 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
         .label { display: inline-flex; flex-direction: column; align-items: center;
                  width: 50mm; height: 30mm; padding: 1mm;
                  page-break-inside: avoid; overflow: hidden; }
-        .label svg { display: block; width: 100%; height: auto; }
+        .store-name { font-size: 6pt; font-weight: 700; text-align: center;
+                      letter-spacing: 0.3px; white-space: nowrap; overflow: hidden;
+                      text-overflow: ellipsis; width: 100%; line-height: 1.2; }
+        .barcode-wrap { width: 100%; flex: 1; display: flex; align-items: center; }
+        .barcode-wrap svg { display: block; width: 100%; height: auto; }
         .code { font-size: 6pt; letter-spacing: 1px; margin-top: 1px; text-align: center; }
-        @media print { @page { margin: 4mm; } body { padding: 0; } }
+        @media print { @page { size: 50mm 30mm; margin: 0; } body { padding: 0; } }
       </style></head><body>
       ${Array.from({ length: clampedCount }).map(() => label).join("")}
       <script>window.onload=function(){window.print();window.close();}<\/script>
@@ -243,12 +257,15 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
 
         <div className="space-y-4">
           {/* Barcode preview */}
-          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center gap-2">
-            <p className="text-xs text-gray-500">{product.product_name}</p>
-            <svg ref={svgRef} />
+          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center gap-1">
+            <p className="text-xs font-bold text-gray-700 tracking-wide uppercase">
+              {BARCODE_PRINTER_CONFIG.storeName}
+            </p>
+            <svg ref={svgCallbackRef} className="w-full h-auto" />
             <p className="font-mono text-sm font-bold tracking-widest text-gray-900">
               {product.barcode}
             </p>
+            <p className="text-xs text-gray-400">{product.product_name}</p>
           </div>
 
           {/* Number of labels */}
@@ -279,6 +296,134 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
   );
 }
 
+// ─── Movement Log Modal for Clerk ──────────────────────────────────────────────
+
+interface ClerkMovementLogModalProps {
+  product: ProductRecord | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+function ClerkMovementLogModal({ product, open, onClose }: ClerkMovementLogModalProps) {
+  const [logs, setLogs] = useState<InventoryLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product || !open) return;
+    setLoading(true);
+    setError(null);
+    getInventoryLogs({ product_id: product.id, limit: 50 })
+      .then(setLogs)
+      .catch(() => setError("Failed to load movement history."))
+      .finally(() => setLoading(false));
+  }, [product?.id, open]);
+
+  if (!product) return null;
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-4xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Movement Log - {product.product_name}</SheetTitle>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <History className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0 pr-8">
+            <h2 className="text-lg font-bold text-white truncate">Movement Log — {product.product_name}</h2>
+            <p className="text-xs text-blue-100 mt-0.5">Stock movement history, reference & notes</p>
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="py-16 text-center text-gray-400 text-sm">Loading movement history…</div>
+          ) : error ? (
+            <p className="py-10 text-center text-sm text-red-600">{error}</p>
+          ) : logs.length === 0 ? (
+            <div className="py-16 text-center flex flex-col items-center gap-2">
+              <History className="h-8 w-8 text-gray-300" />
+              <p className="text-sm text-gray-400">No movement history yet.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Date</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Type</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Action</th>
+                    <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Change</th>
+                    <th className="text-center py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Remaining</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">Reference & Notes</th>
+                    <th className="text-left py-2.5 px-4 font-semibold text-gray-500 text-xs uppercase tracking-wide">By</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {logs.map((log) => {
+                    const change = log.quantity_change ?? log.quantity ?? 0;
+                    const isPositive = change > 0;
+                    return (
+                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 px-4 text-xs text-gray-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td className="py-2.5 px-4 text-xs font-semibold">{log.transaction_type}</td>
+                        <td className="py-2.5 px-4 text-xs text-gray-600">{log.action ?? "—"}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          <span className={`text-sm font-bold tabular-nums ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                            {isPositive ? "+" : ""}{change}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-center text-sm font-semibold text-gray-700 tabular-nums">
+                          {log.remaining_stock ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-4 text-xs">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] text-gray-500 font-medium">Ref:</span>
+                              <span className={`font-mono text-xs font-semibold px-1.5 py-0.5 rounded ${
+                                log.reference && log.reference !== "—"
+                                  ? "bg-gray-100 text-gray-800 border border-gray-200" 
+                                  : "text-gray-400 font-normal italic"
+                              }`}>
+                                {log.reference && log.reference !== "—" ? log.reference : "N/A"}
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-1">
+                              <span className="text-[11px] text-gray-500 font-medium shrink-0">Notes:</span>
+                              <span className={`text-xs ${
+                                log.notes && log.notes !== "—"
+                                  ? "text-gray-700 italic font-medium" 
+                                  : "text-gray-400 italic"
+                              }`}>
+                                {log.notes && log.notes !== "—" ? log.notes : "N/A"}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-xs text-gray-600">{log.performed_by}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+          <Button onClick={onClose} variant="outline" className="border-gray-300">
+            Close
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ClerkInventory() {
@@ -295,8 +440,10 @@ export default function ClerkInventory() {
 
   const [detailProduct, setDetailProduct] = useState<ProductRecord | null>(null);
   const [printProduct, setPrintProduct] = useState<ProductRecord | null>(null);
+  const [logProduct, setLogProduct] = useState<ProductRecord | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
 
@@ -682,6 +829,15 @@ export default function ClerkInventory() {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                          title="View Movement Log"
+                          onClick={() => { setLogProduct(product); setLogOpen(true); }}
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                           title="Print Barcode"
                           onClick={() => { setPrintProduct(product); setPrintOpen(true); }}
                         >
@@ -742,6 +898,11 @@ export default function ClerkInventory() {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onPrintBarcode={(p) => { setPrintProduct(p); setPrintOpen(true); }}
+      />
+      <ClerkMovementLogModal
+        product={logProduct}
+        open={logOpen}
+        onClose={() => setLogOpen(false)}
       />
       <BarcodePrintModal
         product={printProduct}

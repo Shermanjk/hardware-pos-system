@@ -1,7 +1,7 @@
 import type { TaxType } from "@/shared/api/productsApi";
 import type { SaleItemSnapshot } from "@/shared/api/salesApi";
 import type { StoreSettings } from "@/shared/api/settingsApi";
-import { fmtCents, toCentavos } from "./money";
+import { toCentavos } from "./money";
 
 export interface CartItem {
   id: number;
@@ -80,12 +80,15 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     const desc = item.name;
     const up = fmtCents(toCentavos(item.unitPrice));
     const amt = fmtCents(toCentavos(item.subtotal));
-    return `<tr>
-      <td class="qty">${qty}</td>
-      <td class="unit">${unit}</td>
-      <td class="desc">${desc}</td>
-      <td class="price">${currSym} ${up}</td>
-      <td class="amt">${currSym} ${amt}</td>
+    return `<tr class="item-name-row">
+      <td colspan="5" class="col-name">${desc}</td>
+    </tr>
+    <tr class="item-detail-row">
+      <td class="col-qty">${qty}</td>
+      <td class="col-unit">${unit}</td>
+      <td class="col-spacer"></td>
+      <td class="col-price">${currSym} ${up}</td>
+      <td class="col-amt">${currSym} ${amt}</td>
     </tr>`;
   }).join("");
 
@@ -133,44 +136,49 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   <title>Receipt</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 58mm auto; margin: 0; }
-    html { width: 58mm; }
-    body { 
-      width: 48mm; 
-      max-width: 48mm;
-      margin: 0 auto; 
+    @page { size: 80mm auto; margin: 4mm 4mm 4mm 4mm; }
+    html, body {
+      width: 72mm;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
-      line-height: 1.4;
+      line-height: 1.45;
       color: #000;
-      padding: 0;
-      overflow-x: hidden;
     }
-    .receipt { width: 100%; max-width: 48mm; margin: 0 auto; padding: 0; box-sizing: border-box; }
-    .center { text-align: center; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .section { margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
-    .items th, .items td { padding: 2px 0; }
-    .items .qty { width: 7mm; text-align: right; }
-    .items .unit { width: 9mm; text-align: left; }
-    .items .desc { width: 17mm; text-align: left; word-wrap: break-word; max-width: 17mm; overflow-wrap: anywhere; }
-    .items .price { width: 7.5mm; text-align: right; }
-    .items .amt { width: 7.5mm; text-align: right; }
+    body { padding: 0; overflow-x: hidden; }
+    .receipt { width: 72mm; }
+    .center { text-align: center; margin: 1px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
+    .section { margin: 1px 0; word-break: break-word; }
     .bold { font-weight: bold; }
-    .divider { border-top: 1px solid #000; margin: 4px 0; }
-    @media print { body { padding: 0; } }
+    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
+    .divider { border-top: 1px dashed #000; margin: 3px 0; }
+    .items { width: 100%; border-collapse: collapse; margin: 3px 0; }
+    .items th, .items td { padding: 0 2px; vertical-align: middle; }
+    .items .col-hdr-qty   { width: 8%; text-align: center; }
+    .items .col-hdr-unit  { width: 12%; text-align: left; }
+    .items .col-hdr-space { text-align: left; }
+    .items .col-hdr-price { width: 27%; text-align: right; }
+    .items .col-hdr-amt   { width: 27%; text-align: right; }
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 2px 0 2px; font-weight: bold; }
+    .item-detail-row td { padding: 0 2px 3px 2px; }
+    .item-detail-row .col-qty   { width: 8%; text-align: center; }
+    .item-detail-row .col-unit  { width: 12%; text-align: left; }
+    .item-detail-row .col-spacer { }
+    .item-detail-row .col-price { width: 27%; text-align: right; word-break: break-all; }
+    .item-detail-row .col-amt   { width: 27%; text-align: right; word-break: break-all; }
+    @media print { html, body { width: 72mm; } }
   </style>
 </head>
 <body>
   <div class="receipt">
     <div class="divider"></div>
+    <div class="store-name">${storeName}</div>
     ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
-    ${proprietor ? `<div class="center">${proprietor}</div>` : ''}
-    <div class="center bold">${storeName}</div>
+    ${proprietor ? `<div class="center">PROPRIETOR: ${proprietor}</div>` : ''}
     <div class="center">${storeAddress}</div>
-    <div class="center">TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
-    ${settings.vat_enabled ? '<div class="center">VAT REGISTERED</div>' : ''}
+    <div class="center">${settings.vat_enabled ? 'VAT REGISTERED | ' : ''}TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
     ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
     <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
     <div class="divider"></div>
@@ -187,11 +195,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <table class="items">
       <thead>
         <tr>
-          <th class="qty">QTY</th>
-          <th class="unit">UNIT</th>
-          <th class="desc">DESCRIPTION</th>
-          <th class="price">PRICE</th>
-          <th class="amt">AMT</th>
+          <th class="col-hdr-qty">QTY</th>
+          <th class="col-hdr-unit">UNIT</th>
+          <th class="col-hdr-space"></th>
+          <th class="col-hdr-price">PRICE</th>
+          <th class="col-hdr-amt">AMT</th>
         </tr>
       </thead>
       <tbody>
@@ -199,7 +207,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       </tbody>
     </table>
     <div class="divider"></div>
-    <div class="row"><span>ITEMS: ${totalItems}</span><span>TOTAL: ${currSym} ${fmtCents(grossCents)}</span></div>
+    <div class="row"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL: ${currSym}&nbsp;${fmtCents(grossCents)}</span></div>
     ${discountHTML}
     ${vatBreakdownHTML}
     <div class="divider"></div>
@@ -213,7 +221,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="center">We sincerely appreciate your trust</div>
     <div class="center">and look forward to serving you again.</div>
     <div class="center">This is your ${documentType}.</div>
-    <div class="center">"This document is not valid for claiming input taxes."</div>
+    <div class="center">"Not valid for claiming input taxes."</div>
     <div class="divider"></div>
   </div>
 </body>
@@ -224,7 +232,7 @@ export function printSaleReceipt(params: SaleReceiptParams): void {
   const html = buildReceiptHTML(params);
 
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
+  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;";
   document.body.appendChild(iframe);
   const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
   if (!doc) { document.body.removeChild(iframe); return; }

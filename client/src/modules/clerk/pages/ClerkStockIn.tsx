@@ -1231,7 +1231,7 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Qty Added</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Stock</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[160px]">Reference</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Reference & Notes</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">By</th>
                 </tr>
               </thead>
@@ -1255,8 +1255,29 @@ function HistoryPanel({ logs, logsLoading, commodityRequests, commodityLoading, 
                     <td className="py-3.5 px-4 text-center">
                       <span className="text-sm font-bold text-gray-900 tabular-nums">{log.remaining_stock ?? "—"}</span>
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-xs font-mono text-gray-600 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">{log.reference ?? "—"}</span>
+                    <td className="py-3.5 px-4 text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-gray-500 font-medium">Ref:</span>
+                          <span className={`font-mono text-xs font-semibold px-1.5 py-0.5 rounded ${
+                            log.reference && log.reference !== "—"
+                              ? "bg-gray-100 text-gray-800 border border-gray-200" 
+                              : "text-gray-400 font-normal italic"
+                          }`}>
+                            {log.reference && log.reference !== "—" ? log.reference : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1">
+                          <span className="text-[11px] text-gray-500 font-medium shrink-0">Notes:</span>
+                          <span className={`text-xs ${
+                            log.notes && log.notes !== "—"
+                              ? "text-gray-700 italic font-medium" 
+                              : "text-gray-400 italic"
+                          }`}>
+                            {log.notes && log.notes !== "—" ? log.notes : "N/A"}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-xs font-medium text-gray-700">{log.performed_by}</td>
                   </tr>

@@ -46,6 +46,7 @@ export interface InventoryLog {
   quantity: number | null;
   remaining_stock: number | null;
   reference: string | null;
+  notes?: string | null;
   created_at: string;
   performed_by: string;
 }

@@ -51,12 +51,12 @@ export default function PaymentPanel({
 
   return (
     <div className="w-80 shrink-0 flex flex-col gap-3 min-h-0">
-      <div className="shrink-0 bg-white rounded-xl border-2 border-gray-300 shadow-sm px-4 py-3 space-y-2">
-        <div className="flex justify-between text-sm text-gray-600">
+      <div className="shrink-0 bg-slate-50 rounded-xl border-2 border-slate-400 shadow-sm px-4 py-3 space-y-2">
+        <div className="flex justify-between text-sm text-slate-700">
           <span>Subtotal</span>
           <span className="font-medium tabular-nums">₱{fmtCents(subtotalCents)}</span>
         </div>
-        <div className="flex justify-between text-sm text-gray-600">
+        <div className="flex justify-between text-sm text-slate-700">
           <span>VAT ({taxRate}%)</span>
           <span className="font-medium tabular-nums">₱{fmtCents(taxCents)}</span>
         </div>
@@ -71,17 +71,17 @@ export default function PaymentPanel({
           </div>
         )}
         
-        <div className="border-t border-gray-200 pt-3 flex flex-col gap-1">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
+        <div className="border-t border-slate-300 pt-3 flex flex-col gap-1">
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total</span>
           <span className="font-bold text-blue-600 tabular-nums leading-none" style={{ fontSize: "2.5rem" }}>
             ₱{fmtCents(finalTotalCents)}
           </span>
         </div>
 
-        <div className="border-t border-dashed border-gray-200 pt-3 space-y-2">
-          <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Cash Tendered</label>
+        <div className="border-t border-dashed border-slate-300 pt-3 space-y-2">
+          <label className="block text-xs font-semibold text-slate-800 uppercase tracking-wide">Cash Tendered</label>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold pointer-events-none select-none" style={{ fontSize: "1.4rem", lineHeight: 1, color: "#6b7280" }}>₱</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold pointer-events-none select-none" style={{ fontSize: "1.4rem", lineHeight: 1, color: "#475569" }}>₱</span>
             <input
               type="text"
               inputMode="decimal"
@@ -99,7 +99,7 @@ export default function PaymentPanel({
                   ? "border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200 text-red-700"
                   : cashCents >= finalTotalCents && cashCents > 0
                   ? "border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-200 text-green-700"
-                  : "border-gray-400 bg-white focus:border-blue-500 focus:ring-blue-100 text-gray-900"
+                  : "border-slate-400 bg-white focus:border-blue-500 focus:ring-blue-100 text-slate-900"
                 }`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && cartLength > 0 && cashCents >= finalTotalCents && customerName.trim()) {
@@ -153,22 +153,20 @@ export default function PaymentPanel({
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <Button
-              variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-10 text-sm rounded-xl gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHold}
               disabled={noShift || cartLength === 0 || !customerName.trim()}
             >
               <PauseCircle className="h-4 w-4" /> Hold
             </Button>
             <Button
-              variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-10 text-sm rounded-xl gap-1.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onHoldOrders}
               disabled={noShift}
             >
               <PauseCircle className="h-4 w-4" /> Held Transactions
               {pendingHeldOrdersCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs font-bold">
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-orange-600 text-xs font-bold">
                   {pendingHeldOrdersCount}
                 </span>
               )}
@@ -176,27 +174,25 @@ export default function PaymentPanel({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button
-              variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-10 text-sm rounded-xl gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={hasApprovedReturns ? onPendingReturns : onReturn}
               disabled={noShift}
             >
               <RotateCcw className="h-4 w-4" /> {hasApprovedReturns ? "Process Return" : "Return"}
               {pendingReturnsCount > 0 && (
-                <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs font-bold ${hasApprovedReturns ? "bg-green-500" : "bg-purple-500"}`}>
+                <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs font-bold ${hasApprovedReturns ? "bg-green-500" : "bg-white text-purple-600"}`}>
                   {pendingReturnsCount}
                 </span>
               )}
             </Button>
             <Button
-              variant="outline"
-              className="relative h-10 text-sm rounded-xl gap-1.5 border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-10 text-sm rounded-xl gap-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={onVoidRequests}
               disabled={noShift}
             >
               <Ban className="h-4 w-4" /> Void Requests
               {pendingVoidRequestsCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white text-xs font-bold">
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-red-600 text-xs font-bold">
                   {pendingVoidRequestsCount}
                 </span>
               )}

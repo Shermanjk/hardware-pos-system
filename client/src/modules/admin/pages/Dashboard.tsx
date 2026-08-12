@@ -179,13 +179,23 @@ export default function Dashboard() {
 
   // Build weekly chart — fill missing days with 0
   const weeklyChart = (() => {
-    const map = new Map((data?.weekly_sales ?? []).map((r) => [r.sale_date, r]));
+    // Map sale_date using YYYY-MM-DD prefix
+    const map = new Map(
+      (data?.weekly_sales ?? []).map((r) => [String(r.sale_date).slice(0, 10), r])
+    );
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
-      d.setUTCDate(d.getUTCDate() - (6 - i));
-      const key  = d.toISOString().slice(0, 10);
+      d.setDate(d.getDate() - (6 - i));
+      const y   = d.getFullYear();
+      const m   = String(d.getMonth() + 1).padStart(2, "0");
+      const day2 = String(d.getDate()).padStart(2, "0");
+      const localKey = `${y}-${m}-${day2}`;
       const day  = d.toLocaleDateString("en-PH", { weekday: "short" });
-      const row  = map.get(key);
+      
+      // Try local date key first, then UTC date key as fallback
+      const utcKey = d.toISOString().slice(0, 10);
+      const row  = map.get(localKey) || map.get(utcKey);
+      
       return { day, revenue: row ? Number(row.revenue) : 0, transactions: row ? Number(row.transactions) : 0 };
     });
   })();

@@ -39,7 +39,7 @@ interface CashierDraft {
   cartItems: CartItem[];
   cashTendered: string;
   customerInfo: CustomerInfo;
-  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean } | null;
+  selectedDiscount: { id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null;
   savedAt: string;
 }
 
@@ -163,7 +163,7 @@ export default function Cashier() {
   const [holdCounter, setHoldCounter]     = useState(0);
   const [showHolds, setShowHolds]         = useState(false);
   const [isProcessing, setIsProcessing]   = useState(false);
-  const [selectedDiscount, setSelectedDiscount] = useState<{ id: number; name: string; percentage: number; requiresApproval: boolean } | null>(null);
+  const [selectedDiscount, setSelectedDiscount] = useState<{ id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null>(null);
   const [discountRequestId, setDiscountRequestId] = useState<number | null>(null);
   const [showDiscountApprovalModal, setShowDiscountApprovalModal] = useState(false);
 
@@ -194,6 +194,32 @@ export default function Cashier() {
   const [pendingVoidRequestsCount, setPendingVoidRequestsCount] = useState(0);
   const [unreadVoidCount, setUnreadVoidCount] = useState(0);
 
+  // ── Void read-state helpers (persisted in localStorage per user) ──────────
+  // Key is scoped to the logged-in user so two cashiers on the same machine
+  // don't share the same "seen" set.
+  const getSeenVoidKey = useCallback(
+    () => `seen_void_ids_${user?.id ?? "unknown"}`,
+    [user?.id]
+  );
+
+  const getSeenVoidIds = useCallback((): Set<number> => {
+    try {
+      const raw = localStorage.getItem(getSeenVoidKey());
+      if (!raw) return new Set();
+      return new Set(JSON.parse(raw) as number[]);
+    } catch {
+      return new Set();
+    }
+  }, [getSeenVoidKey]);
+
+  const markVoidIdsAsSeen = useCallback((ids: number[]) => {
+    try {
+      const seen = getSeenVoidIds();
+      ids.forEach((id) => seen.add(id));
+      localStorage.setItem(getSeenVoidKey(), JSON.stringify(Array.from(seen)));
+    } catch { /* ignore storage errors */ }
+  }, [getSeenVoidIds, getSeenVoidKey]);
+
   // ── End Shift modal ───────────────────────────────────────────────────────
   const [showEndShift, setShowEndShift]       = useState(false);
   const [hasOpenSession, setHasOpenSession]   = useState(false);
@@ -217,8 +243,12 @@ export default function Cashier() {
   const subtotalCents = totalCents - taxCents;
   
   // Calculate discount amount
-  const discountCents = selectedDiscount 
-    ? Math.round((totalCents * selectedDiscount.percentage) / 100)
+  // SC/PWD discount (RA 9994/9442): apply percentage on VAT-exclusive base
+  // Regular discount: apply percentage on VAT-inclusive total
+  const discountCents = selectedDiscount
+    ? selectedDiscount.isScPwd
+      ? Math.round((totalCents / (1 + taxRate / 100)) * (selectedDiscount.percentage / 100))
+      : Math.round((totalCents * selectedDiscount.percentage) / 100)
     : 0;
   const finalTotalCents = totalCents - discountCents;
   
@@ -255,12 +285,14 @@ export default function Cashier() {
     // If the fetch failed, retain last known list — no state update.
 
     if (voidsResult.status === "fulfilled") {
-      const newCount = voidsResult.value.length;
-      setPendingVoidRequestsCount(newCount);
-      // Only increment unread count if there are NEW void requests
-      setUnreadVoidCount((prev) => Math.max(prev, newCount));
+      const allVoids = voidsResult.value;
+      setPendingVoidRequestsCount(allVoids.length);
+      // Unread = IDs that aren't in the persisted "seen" set
+      const seen = getSeenVoidIds();
+      const unreadCount = allVoids.filter((v) => !seen.has(v.id)).length;
+      setUnreadVoidCount(unreadCount);
     }
-  }, []);
+  }, [getSeenVoidIds]);
 
   // Initial load + 60 s recurring poll. Pauses when tab is hidden.
   useEffect(() => {
@@ -301,8 +333,10 @@ export default function Cashier() {
   useVoidDecisions((n: VoidDecisionNotification) => {
     setLatestVoidDecision(n);
     setShowVoidRequests(true);
-    // Increment unread count when a new decision arrives
-    setUnreadVoidCount((prev) => prev + 1);
+    // The panel is being auto-opened, so mark this specific void as "seen"
+    // immediately so it doesn't re-appear in the badge after close/re-login.
+    // fetchPendingData() below will then compute unreadCount = 0 for this ID.
+    markVoidIdsAsSeen([n.void_id]);
     if (n.decision === "approved")
       toast.success(`Void Approved — ${n.invoice_number}`, { description: `${fmt(n.total_amount)} · Approved by ${n.admin_name}. Inventory restored.`, duration: 10000 });
     else
@@ -413,10 +447,14 @@ export default function Cashier() {
 
   // ── Payment processing ────────────────────────────────────────────────────
   const handleDiscountApproved = (requestId: number) => {
+    setShowDiscountApprovalModal(false);
     setDiscountRequestId(requestId);
-    // Pass the requestId directly to avoid depending on React state having
-    // flushed before handleProcessPayment reads discountRequestId.
-    handleProcessPaymentWithRequest(requestId);
+    // Defer payment processing to next tick so React can flush the
+    // modal-close state update first — prevents the modal from seeing
+    // open=true the entire time and skipping its reset effect.
+    setTimeout(() => {
+      handleProcessPaymentWithRequest(requestId);
+    }, 0);
   };
 
   const handleDiscountRejected = () => {
@@ -553,7 +591,7 @@ export default function Cashier() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-gray-100 overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-slate-300 overflow-hidden">
       {/* Draft recovery prompt */}
       <DraftRecoveryPrompt
         draft={recoverableDraft}
@@ -567,7 +605,7 @@ export default function Cashier() {
         onDiscard={handleDiscardDraft}
       />
       {/* Header */}
-      <header className="h-14 shrink-0 bg-white border-b-2 border-gray-300 px-6 flex items-center justify-between shadow-sm z-10">
+      <header className="h-14 shrink-0 bg-slate-100 border-b-2 border-slate-400 px-6 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -727,7 +765,11 @@ export default function Cashier() {
         show={showVoidRequests} onClose={() => setShowVoidRequests(false)}
         newDecision={latestVoidDecision}
         onRequestVoid={() => setShowVoidDialog(true)}
-        onViewed={() => setUnreadVoidCount(0)}
+        onViewed={(ids: number[]) => {
+          // Persist the viewed IDs so the badge stays cleared after re-login
+          markVoidIdsAsSeen(ids);
+          setUnreadVoidCount(0);
+        }}
       />
       <VoidSaleDialog open={showVoidDialog} onClose={() => setShowVoidDialog(false)} />
       <DiscountApprovalModal
@@ -735,6 +777,7 @@ export default function Cashier() {
         onClose={() => setShowDiscountApprovalModal(false)}
         discount={selectedDiscount}
         totalAmount={totalCents}
+        vatRate={taxRate}
         onApproved={handleDiscountApproved}
         onRejected={handleDiscountRejected}
       />
