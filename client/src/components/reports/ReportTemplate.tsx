@@ -13,6 +13,7 @@ interface ReportTemplateProps {
   columns: Column[];
   data: any[];
   summaryRows?: SummaryRow[];
+  orientation?: 'portrait' | 'landscape';
 }
 
 export default function ReportTemplate({
@@ -25,27 +26,35 @@ export default function ReportTemplate({
   columns,
   data,
   summaryRows = [],
+  orientation,
 }: ReportTemplateProps) {
-  // Generate filter summary
+  // Determine page orientation: default to landscape for 6+ columns
+  const isLandscape = orientation ? orientation === 'landscape' : columns.length >= 6;
+
+  // Generate filter summary items
   const filterSummary: string[] = [];
   if (filters.dateFrom && filters.dateTo) {
     filterSummary.push(`Date Range: ${formatDateLong(filters.dateFrom)} - ${formatDateLong(filters.dateTo)}`);
   }
-  if (filters.cashierId) filterSummary.push(`Cashier: ${filters.cashierId}`);
+  if (filters.cashierId) filterSummary.push(`Cashier ID: ${filters.cashierId}`);
   if (filters.status && filters.status !== 'all') filterSummary.push(`Status: ${filters.status}`);
   if (filters.categoryId) filterSummary.push(`Category: ${filters.categoryId}`);
   if (filters.supplierId) filterSummary.push(`Supplier: ${filters.supplierId}`);
   if (filters.productId) filterSummary.push(`Product: ${filters.productId}`);
   if (filters.resolution && filters.resolution !== 'all') filterSummary.push(`Resolution: ${filters.resolution}`);
   if (filters.approvedBy) filterSummary.push(`Approved By: ${filters.approvedBy}`);
-  if (filters.authorizationType && filters.authorizationType !== 'all') filterSummary.push(`Authorization Type: ${filters.authorizationType}`);
-  if (filters.actionType && filters.actionType !== 'all') filterSummary.push(`Action Type: ${filters.actionType}`);
-  if (filters.movementType && filters.movementType !== 'all') filterSummary.push(`Movement Type: ${filters.movementType}`);
-  if (filters.search) filterSummary.push(`Search: ${filters.search}`);
+  if (filters.authorizationType && filters.authorizationType !== 'all') filterSummary.push(`Auth Type: ${filters.authorizationType}`);
+  if (filters.actionType && filters.actionType !== 'all') filterSummary.push(`Action: ${filters.actionType}`);
+  if (filters.movementType && filters.movementType !== 'all') filterSummary.push(`Movement: ${filters.movementType}`);
+  if (filters.search) filterSummary.push(`Search: "${filters.search}"`);
 
-  // Format cell value
-  const formatCellValue = (value: any, key: string) => {
-    if (value === null || value === undefined || value === '') return '-';
+  // Format cell value cleanly
+  const formatCellValue = (value: any, key: string, columnFormat?: (val: any) => any) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (columnFormat && typeof columnFormat === 'function') {
+      const formatted = columnFormat(value);
+      if (typeof formatted === 'string' || typeof formatted === 'number') return formatted;
+    }
     
     // Format currency
     if (typeof value === 'number' && 
@@ -81,119 +90,151 @@ export default function ReportTemplate({
     return String(value);
   };
 
+  const isNoWrapKey = (key: string, align?: string) => {
+    const k = key.toLowerCase();
+    return align === 'right' || 
+      k.includes('date') || 
+      k.includes('time') || 
+      k.includes('receipt') || 
+      k.includes('code') || 
+      k.includes('barcode') ||
+      k.includes('cashier') ||
+      k.includes('status');
+  };
+
   return createPortal(
     <div className="report-template" style={{ 
-      padding: '20px', 
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '12px',
-      color: '#000',
-      maxWidth: '210mm',
-      margin: '0 auto'
+      padding: isLandscape ? '16px 20px' : '24px 32px', 
+      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontSize: isLandscape ? '10px' : '11px',
+      color: '#0f172a',
+      backgroundColor: '#ffffff',
+      maxWidth: isLandscape ? '297mm' : '210mm',
+      margin: '0 auto',
+      boxSizing: 'border-box'
     }}>
-      {/* Store Information */}
-      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+      <style>{`
+        @media print {
+          @page {
+            size: ${isLandscape ? 'A4 landscape' : 'A4 portrait'};
+            margin: 8mm 10mm;
+          }
+        }
+      `}</style>
+
+      {/* Official Header */}
+      <div style={{ textAlign: 'center', marginBottom: '14px' }}>
         <h1 style={{ 
-          fontSize: '24px', 
-          fontWeight: 'bold', 
-          marginBottom: '12px',
-          margin: 0 
+          fontSize: isLandscape ? '20px' : '22px', 
+          fontWeight: '800', 
+          letterSpacing: '0.5px',
+          color: '#0f172a',
+          margin: '0 0 4px 0',
+          textTransform: 'uppercase'
         }}>
           {storeSettings.store_name || 'ISRA HARDWARE TRADING'}
         </h1>
-        <p style={{ margin: '4px 0', fontSize: '11px' }}>
-          {storeSettings.address || '—'}
+        <p style={{ margin: '2px 0', fontSize: '10px', color: '#475569' }}>
+          {storeSettings.address || 'General Santos City, South Cotabato, Philippines'}
         </p>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
           gap: '20px', 
-          marginTop: '8px',
-          flexWrap: 'wrap'
+          marginTop: '4px',
+          fontSize: '9.5px',
+          color: '#475569'
         }}>
-          <div style={{ fontSize: '11px' }}>
-            <span style={{ fontWeight: 'bold' }}>Contact:</span> {storeSettings.contact_number || '—'}
-          </div>
-          <div style={{ fontSize: '11px' }}>
-            <span style={{ fontWeight: 'bold' }}>TIN:</span> {storeSettings.tin || '—'}
-          </div>
+          <span><strong>Contact:</strong> {storeSettings.contact_number || '—'}</span>
+          <span><strong>TIN:</strong> {storeSettings.tin || '—'}</span>
+          <span><strong>Business Style:</strong> {storeSettings.business_license || 'Retail Hardware'}</span>
+          <span><strong>Tax Status:</strong> {storeSettings.vat_registered ? 'VAT Registered' : 'Non-VAT Registered'}</span>
         </div>
+      </div>
+
+      {/* Double Divider */}
+      <div style={{ 
+        borderBottom: '3px double #0f172a', 
+        marginBottom: '14px' 
+      }} />
+
+      {/* Document Information & Metadata Grid */}
+      <div style={{ 
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '6px',
+        padding: '10px 14px',
+        marginBottom: '16px'
+      }}>
         <div style={{ 
           display: 'flex', 
-          justifyContent: 'center', 
-          gap: '20px', 
-          marginTop: '4px',
-          flexWrap: 'wrap'
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          borderBottom: '1px solid #e2e8f0',
+          paddingBottom: '6px',
+          marginBottom: '8px'
         }}>
-          <div style={{ fontSize: '11px' }}>
-            <span style={{ fontWeight: 'bold' }}>Business Style:</span> {storeSettings.business_license || '—'}
-          </div>
-          <div style={{ fontSize: '11px' }}>
-            <span style={{ fontWeight: 'bold' }}>VAT Status:</span> {storeSettings.vat_registered ? 'VAT Registered' : 'Non-VAT'}
-          </div>
+          <h2 style={{ 
+            fontSize: '15px', 
+            fontWeight: '700', 
+            margin: 0,
+            color: '#1e293b',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            {title}
+          </h2>
+          <span style={{ 
+            fontSize: '9.5px', 
+            fontWeight: '600', 
+            backgroundColor: '#e2e8f0',
+            color: '#334155',
+            padding: '2px 8px',
+            borderRadius: '4px'
+          }}>
+            Total Records: {data.length}
+          </span>
         </div>
-      </div>
 
-      {/* Report Title */}
-      <div style={{ 
-        borderBottom: '2px solid #000', 
-        paddingBottom: '10px', 
-        marginBottom: '15px' 
-      }}>
-        <h2 style={{ 
-          fontSize: '18px', 
-          fontWeight: 'bold', 
-          margin: 0,
-          textAlign: 'center'
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: isLandscape ? '1fr 1fr 1fr' : '1fr 1fr', 
+          gap: '6px 16px',
+          fontSize: '9.5px',
+          color: '#334155'
         }}>
-          {title}
-        </h2>
-      </div>
-
-      {/* Report Metadata */}
-      <div style={{ marginBottom: '15px', fontSize: '11px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <div><strong>Date Generated:</strong> {formatDateLong(new Date().toISOString())}</div>
+          <div><strong>Date Generated:</strong> {formatDateTimeLong(new Date().toISOString())}</div>
           <div><strong>Generated By:</strong> {generatedBy}</div>
+          {filters.dateFrom && filters.dateTo && (
+            <div><strong>Report Period:</strong> {formatDateLong(filters.dateFrom)} to {formatDateLong(filters.dateTo)}</div>
+          )}
+          {filterSummary.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <strong>Applied Filters:</strong> {filterSummary.join(' | ')}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filters */}
-      {filterSummary.length > 0 && (
-        <div style={{ marginBottom: '15px', fontSize: '11px' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Applied Filters:</div>
-          <div style={{ marginLeft: '10px' }}>
-            {filterSummary.map((filter, index) => (
-              <div key={index} style={{ margin: '2px 0' }}>{filter}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Total Records */}
-      <div style={{ 
-        marginBottom: '15px', 
-        fontSize: '11px', 
-        fontWeight: 'bold' 
-      }}>
-        Total Records: {data.length}
-      </div>
-
-      {/* Data Table */}
+      {/* Main Data Table */}
       <table style={{ 
         width: '100%', 
         borderCollapse: 'collapse', 
         marginBottom: '20px',
-        fontSize: '11px'
+        fontSize: isLandscape ? '9.5px' : '10px'
       }}>
         <thead>
-          <tr style={{ backgroundColor: '#4472C4', color: '#fff' }}>
+          <tr style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
             {columns.map((column, index) => (
               <th key={index} style={{
-                padding: '8px 6px',
+                padding: isLandscape ? '6px 8px' : '8px 10px',
                 textAlign: column.align === 'right' ? 'right' : column.align === 'center' ? 'center' : 'left',
-                border: '1px solid #000',
-                fontWeight: 'bold',
-                fontSize: '10px'
+                border: '1px solid #0f172a',
+                fontWeight: '700',
+                fontSize: isLandscape ? '8.5px' : '9px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                whiteSpace: 'nowrap'
               }}>
                 {column.label}
               </th>
@@ -201,37 +242,49 @@ export default function ReportTemplate({
           </tr>
         </thead>
         <tbody>
-          {data.map((row, rowIndex) => (
-            <tr key={rowIndex} style={{ 
-              backgroundColor: rowIndex % 2 === 0 ? '#fff' : '#f9f9f9' 
-            }}>
-              {columns.map((column, colIndex) => (
-                <td key={colIndex} style={{
-                  padding: '6px',
-                  textAlign: column.align === 'right' ? 'right' : column.align === 'center' ? 'center' : 'left',
-                  border: '1px solid #ddd'
-                }}>
-                  {formatCellValue(row[column.key], column.key)}
-                </td>
-              ))}
+          {data.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} style={{ padding: '16px', textAlign: 'center', color: '#64748b' }}>
+                No records found for the specified report parameters.
+              </td>
             </tr>
-          ))}
+          ) : (
+            data.map((row, rowIndex) => (
+              <tr key={rowIndex} style={{ 
+                backgroundColor: rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc' 
+              }}>
+                {columns.map((column, colIndex) => (
+                  <td key={colIndex} style={{
+                    padding: isLandscape ? '5px 8px' : '6px 10px',
+                    textAlign: column.align === 'right' ? 'right' : column.align === 'center' ? 'center' : 'left',
+                    border: '1px solid #cbd5e1',
+                    color: '#1e293b',
+                    whiteSpace: isNoWrapKey(column.key, column.align) ? 'nowrap' : 'normal'
+                  }}>
+                    {formatCellValue(row[column.key], column.key, column.format)}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
         {summaryRows.length > 0 && (
           <tfoot>
             {summaryRows.map((summary, summaryIndex) => (
               <tr key={summaryIndex} style={{ 
-                backgroundColor: '#4472C4', 
-                color: '#fff',
-                fontWeight: 'bold'
+                backgroundColor: '#334155', 
+                color: '#ffffff',
+                fontWeight: '700'
               }}>
                 {columns.map((column, colIndex) => (
                   <td key={colIndex} style={{
-                    padding: '8px 6px',
+                    padding: isLandscape ? '6px 8px' : '8px 10px',
                     textAlign: column.align === 'right' ? 'right' : column.align === 'center' ? 'center' : 'left',
-                    border: '1px solid #000'
+                    border: '1px solid #1e293b',
+                    fontSize: isLandscape ? '9px' : '10px',
+                    whiteSpace: 'nowrap'
                   }}>
-                    {colIndex === 0 ? summary.label : formatCellValue(summary.values[column.key], column.key)}
+                    {colIndex === 0 ? summary.label : formatCellValue(summary.values[column.key], column.key, column.format)}
                   </td>
                 ))}
               </tr>
@@ -240,23 +293,52 @@ export default function ReportTemplate({
         )}
       </table>
 
-      {/* Prepared By Section */}
-      <div style={{ 
-        marginTop: '40px', 
-        paddingTop: '20px', 
-        borderTop: '1px solid #000',
-        fontSize: '11px'
+      {/* Dual Signature Section */}
+      <div className="report-signatures" style={{ 
+        marginTop: '28px', 
+        paddingTop: '14px', 
+        borderTop: '1px solid #cbd5e1',
+        fontSize: '9.5px',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '40px'
       }}>
-        <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>Prepared By:</div>
-        <div style={{ 
-          borderBottom: '1px solid #000', 
-          width: '200px', 
-          marginBottom: '5px',
-          height: '30px'
-        }}></div>
-        <div style={{ fontStyle: 'italic', color: '#666' }}>Name & Signature</div>
+        <div>
+          <div style={{ fontWeight: '700', color: '#334155', marginBottom: '28px' }}>PREPARED BY:</div>
+          <div style={{ 
+            borderBottom: '1.5px solid #0f172a', 
+            width: '180px', 
+            marginBottom: '4px'
+          }} />
+          <div style={{ fontWeight: '600', color: '#0f172a' }}>{generatedBy}</div>
+          <div style={{ fontSize: '8.5px', color: '#64748b' }}>Authorized Staff / Cashier</div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: '700', color: '#334155', marginBottom: '28px' }}>APPROVED / VERIFIED BY:</div>
+          <div style={{ 
+            borderBottom: '1.5px solid #0f172a', 
+            width: '180px', 
+            marginBottom: '4px'
+          }} />
+          <div style={{ fontWeight: '600', color: '#0f172a' }}>Store Management</div>
+          <div style={{ fontSize: '8.5px', color: '#64748b' }}>Manager / Auditor</div>
+        </div>
+      </div>
+
+      {/* Report Audit Notice */}
+      <div style={{ 
+        marginTop: '20px', 
+        textAlign: 'center', 
+        fontSize: '8px', 
+        color: '#94a3b8',
+        letterSpacing: '0.5px'
+      }}>
+        OFFICIAL SYSTEM GENERATED REPORT • ISRA HARDWARE POS SYSTEM • CONFIDENTIAL
       </div>
     </div>,
     document.body
   );
 }
+
+
