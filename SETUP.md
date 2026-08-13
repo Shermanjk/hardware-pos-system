@@ -11,8 +11,9 @@ This guide provides step-by-step instructions for setting up the Isra Hardware P
 5. [Application Setup](#application-setup)
 6. [Running the System](#running-the-system)
 7. [Accessing from Network](#accessing-from-network)
-8. [Troubleshooting](#troubleshooting)
-9. [Security Considerations](#security-considerations)
+8. [Cashier Terminal Kiosk Setup](KIOSK_SETUP.md)
+9. [Troubleshooting](#troubleshooting)
+10. [Security Considerations](#security-considerations)
 
 ## Prerequisites
 

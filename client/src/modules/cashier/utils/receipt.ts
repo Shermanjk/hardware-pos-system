@@ -24,6 +24,8 @@ export interface CustomerInfo {
   address: string;
   tin: string;
   businessStyle: string;
+  scPwdType?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  scPwdId?: string;
 }
 
 interface SaleReceiptParams {
@@ -42,6 +44,12 @@ interface SaleReceiptParams {
   discountName?: string;
   discountPercentage?: number;
   finalTotalCents?: number;
+  /** VAT-exempt amount for SC/PWD transactions (VAT-exclusive base). Defaults to 0 for regular customers. */
+  vatExemptCents?: number;
+  /** SC/PWD type — "NONE" for regular customers. */
+  scPwdType?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  /** SC/PWD ID number — required for SC/PWD transactions. */
+  scPwdId?: string;
 }
 
 function buildReceiptHTML(params: SaleReceiptParams): string {
@@ -50,9 +58,15 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     subtotalCents, taxCents, totalCents,
     cashCents, changeCents, cashierName, settings,
     discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
+    vatExemptCents = 0, scPwdType = "NONE", scPwdId,
   } = params;
 
-  const grossCents = discountCents > 0 ? finalTotalCents + discountCents : totalCents;
+  const isScPwd = scPwdType !== "NONE";
+  const grossCents = cartItems.reduce((acc, item) => acc + toCentavos(item.subtotal), 0);
+  // For SC/PWD, the displayed VAT amount is 0 (VAT-exempt). For regular: the customer's VAT.
+  const displayTaxCents = isScPwd ? 0 : taxCents;
+  const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
+  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
 
   const storeName              = settings.store_name              || "";
   const proprietor             = settings.proprietor             || "";
@@ -72,7 +86,12 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const timeStr  = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
 
-  const fmtCents = (cents: number) => (cents / 100).toFixed(2);
+  const fmtCents = (cents: number) => {
+    if (!Number.isFinite(cents)) {
+      throw new Error(`[Receipt Error] fmtCents called with invalid non-finite value: ${cents}`);
+    }
+    return (cents / 100).toFixed(2);
+  };
 
   const itemsHTML = cartItems.map(item => {
     const qty = item.quantity;
@@ -94,23 +113,49 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
   let vatBreakdownHTML = "";
   if (settings.vat_enabled) {
-    const snaps = params.itemSnapshots;
-    const discountRatio = grossCents > 0 && discountCents > 0
-      ? finalTotalCents / grossCents
-      : 1;
-    const vatableNetCents = Math.round(snaps.filter((s) => s.tax_type === "VATABLE").reduce((acc, s) => acc + toCentavos(s.taxable_amount), 0) * discountRatio);
-    const vatExemptCents  = Math.round(snaps.filter((s) => s.tax_type === "VAT_EXEMPT").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
-    const zeroRatedCents  = Math.round(snaps.filter((s) => s.tax_type === "ZERO_RATED").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
-    const nonTaxableCents = Math.round(snaps.filter((s) => s.tax_type === "NON_TAXABLE").reduce((acc, s) => acc + toCentavos(s.line_subtotal), 0) * discountRatio);
-    const scaledTaxCents  = Math.round(taxCents * discountRatio);
-    vatBreakdownHTML = `
-    <div class="divider"></div>
-    <div class="center bold">VAT BREAKDOWN</div>
-    <div class="row"><span>VATable Sales (Net of VAT):</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
-    <div class="row"><span>VAT Amount (${taxRate}%):</span><span>${currSym} ${fmtCents(scaledTaxCents)}</span></div>
-    <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCents)}</span></div>
-    <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
-    <div class="row"><span>Non-Taxable Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>`;
+    const snaps = params.itemSnapshots || [];
+    if (isScPwd) {
+      // SC/PWD: VAT is exempted. Show the VAT-exempt base as the VAT-Exempt Sales.
+      const scPwdVatExemptCents = snaps
+        .filter((s) => s.tax_type === "VAT_EXEMPT")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      const zeroRatedCents = snaps
+        .filter((s) => s.tax_type === "ZERO_RATED")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      const nonTaxableCents = snaps
+        .filter((s) => s.tax_type === "NON_TAXABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      vatBreakdownHTML = `
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (VAT-Exempt for SC/PWD):</span><span>${currSym} ${fmtCents(vatExemptCents)}</span></div>
+      <div class="row"><span>VAT Amount (${taxRate}%):</span><span>${currSym} 0.00</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(scPwdVatExemptCents)}</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>`;
+    } else {
+      // Regular customer: use raw snapshot values.
+      const vatableNetCents = snaps
+        .filter((s) => s.tax_type === "VATABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.taxable_amount)), 0);
+      const vatExemptCategoryCents = snaps
+        .filter((s) => s.tax_type === "VAT_EXEMPT")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      const zeroRatedCents = snaps
+        .filter((s) => s.tax_type === "ZERO_RATED")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      const nonTaxableCents = snaps
+        .filter((s) => s.tax_type === "NON_TAXABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      vatBreakdownHTML = `
+      <div class="divider"></div>
+      <div class="center bold">VAT BREAKDOWN</div>
+      <div class="row"><span>VATable Sales (Net of VAT):</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
+      <div class="row"><span>VAT Amount (${taxRate}%):</span><span>${currSym} ${fmtCents(displayTaxCents)}</span></div>
+      <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCategoryCents)}</span></div>
+      <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
+      <div class="row"><span>Non-Taxable Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>`;
+    }
   } else {
     vatBreakdownHTML = `
     <div class="divider"></div>
@@ -121,11 +166,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
   let discountHTML = "";
   if (discountCents > 0) {
+    const pctStr = discountPercentage ? ` (${discountPercentage}%)` : "";
     discountHTML = `
     <div class="divider"></div>
-    <div class="row"><span>DISCOUNT: ${discountName || "N/A"} (${discountPercentage}%):</span><span>- ${currSym} ${fmtCents(discountCents)}</span></div>
+    <div class="row"><span>DISCOUNT: ${discountName || "Discount"}${pctStr}:</span><span>- ${currSym} ${fmtCents(discountCents)}</span></div>
     <div class="divider"></div>
     <div class="row"><span>GROSS TOTAL:</span><span>${currSym} ${fmtCents(grossCents)}</span></div>
+    <div class="row"><span>VAT-EXEMPT AMOUNT:</span><span>${currSym} ${fmtCents(isScPwd ? vatExemptCents : 0)}</span></div>
     <div class="row"><span>NET TOTAL:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>`;
   }
 
@@ -188,6 +235,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="row"><span>Time:</span><span>${timeStr}</span></div>
     <div class="divider"></div>
     <div class="section">SOLD TO: ${customerInfo.name}</div>
+    ${scPwdType !== "NONE" ? `<div class="section bold">${scPwdLabel}: ${scPwdId || "N/A"}</div>` : ''}
     <div class="section">TIN: ${customerInfo.tin || "N/A"}</div>
     <div class="section">ADDRESS: ${customerInfo.address || "N/A"}</div>
     <div class="section">BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}</div>
@@ -213,7 +261,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="divider"></div>
     <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>Cash Tendered:</span><span>${currSym} ${fmtCents(cashCents)}</span></div>
-    <div class="row"><span>Change:</span><span>${currSym} ${fmtCents(changeCents ?? 0)}</span></div>
+    <div class="row"><span>Change:</span><span>${currSym} ${fmtCents(displayChangeCents)}</span></div>
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>

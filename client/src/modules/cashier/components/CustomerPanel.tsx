@@ -1,15 +1,21 @@
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User } from "lucide-react";
 import type { CustomerInfo } from "../utils/receipt";
 
 interface CustomerPanelProps {
   customerInfo: CustomerInfo;
   setCustomerInfo: React.Dispatch<React.SetStateAction<CustomerInfo>>;
+  /** When true, show SC/PWD identification fields (selected discount is SC/PWD). */
+  showScPwdFields?: boolean;
 }
 
-export default function CustomerPanel({ customerInfo, setCustomerInfo }: CustomerPanelProps) {
+export default function CustomerPanel({ customerInfo, setCustomerInfo, showScPwdFields = false }: CustomerPanelProps) {
   const set = (k: keyof CustomerInfo, v: string) =>
     setCustomerInfo((prev) => ({ ...prev, [k]: v }));
+
+  const setScPwdType = (v: "NONE" | "SENIOR_CITIZEN" | "PWD") =>
+    setCustomerInfo((prev) => ({ ...prev, scPwdType: v }));
 
   return (
     <div className="w-72 shrink-0 flex flex-col min-h-0">
@@ -17,9 +23,9 @@ export default function CustomerPanel({ customerInfo, setCustomerInfo }: Custome
         <div className="flex items-center gap-2 mb-4">
           <User className="h-4 w-4 text-blue-600" />
           <h3 className="text-sm font-bold text-slate-900">Customer Details</h3>
-          {(customerInfo.name || customerInfo.tin) && (
+          {(customerInfo.name || customerInfo.tin || customerInfo.scPwdId) && (
             <button
-              onClick={() => setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" })}
+              onClick={() => setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "", scPwdType: "NONE", scPwdId: "" })}
               className="ml-auto text-xs text-red-400 hover:text-red-600"
             >
               Clear
@@ -36,6 +42,43 @@ export default function CustomerPanel({ customerInfo, setCustomerInfo }: Custome
               className="h-10 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
+
+          {/* SC/PWD Type Selector — shown when an SC/PWD discount is selected */}
+          {showScPwdFields && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-800 mb-1">
+                Discount Type <span className="text-red-500">*</span>
+              </label>
+              <Select
+                value={customerInfo.scPwdType || "NONE"}
+                onValueChange={(v) => setScPwdType(v as "NONE" | "SENIOR_CITIZEN" | "PWD")}
+              >
+                <SelectTrigger className="h-10 text-sm bg-white border-slate-400 text-slate-900">
+                  <SelectValue placeholder="Select discount type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SENIOR_CITIZEN">Senior Citizen</SelectItem>
+                  <SelectItem value="PWD">PWD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* SC/PWD ID — required when SC/PWD type is selected */}
+          {showScPwdFields && customerInfo.scPwdType && customerInfo.scPwdType !== "NONE" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-800 mb-1">
+                {customerInfo.scPwdType === "SENIOR_CITIZEN" ? "OSCA / Senior Citizen ID" : "PWD ID"} <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={customerInfo.scPwdId || ""}
+                onChange={(e) => set("scPwdId", e.target.value)}
+                placeholder={customerInfo.scPwdType === "SENIOR_CITIZEN" ? "Enter OSCA / SC ID number" : "Enter PWD ID number"}
+                className="h-10 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-800 mb-1">Address</label>
             <Input

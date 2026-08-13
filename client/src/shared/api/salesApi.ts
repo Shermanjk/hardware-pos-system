@@ -28,6 +28,7 @@ export interface Sale {
   cashier_name: string;
   subtotal: number;
   vat_amount: number;
+  vat_exempt_amount: number;
   total_amount: number;
   cash_tendered: number;
   change_amount: number;
@@ -35,6 +36,18 @@ export interface Sale {
   payment_status: "pending" | "completed" | "failed";
   receipt_printed: number | boolean;
   created_at: string;
+  sc_pwd_type: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  sc_pwd_id: string | null;
+  discount: number;
+  discount_id: number | null;
+  /** Discount name from the discounts table (null if no discount was applied). */
+  discount_name: string | null;
+  /** Discount type ('Percentage' or 'Fixed'). */
+  discount_type: "Percentage" | "Fixed" | null;
+  /** Discount percentage value (e.g. 20 for 20%). Null if no discount. */
+  discount_percentage: number | null;
+  /** True when the applied discount is an SC/PWD type discount. */
+  discount_is_sc_pwd: boolean;
   items: SaleItem[];
 }
 
@@ -64,6 +77,8 @@ export interface CreateSalePayload {
   client_transaction_id?: string;
   discount_id?: number;
   discount_request_id?: number;
+  sc_pwd_type?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  sc_pwd_id?: string;
   items: Array<{
     product_id: number;
     quantity: number;
@@ -85,7 +100,13 @@ export interface CreateSaleResult {
   invoice_number:  string;
   id:              number;
   subtotal:        number;
+  discount:        number;
+  discount_name:   string | null;
+  discount_id:     number | null;
   vat_amount:      number;
+  vat_exempt_amount: number;
+  sc_pwd_type:     "NONE" | "SENIOR_CITIZEN" | "PWD";
+  sc_pwd_id:       string | null;
   total_amount:    number;
   change_amount:   number;
   payment_status:  "pending" | "completed" | "failed";

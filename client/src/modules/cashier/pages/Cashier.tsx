@@ -171,6 +171,15 @@ export default function Cashier() {
   // without a stale closure.
   useEffect(() => { discountRequestIdRef.current = discountRequestId; }, [discountRequestId]);
 
+  // ── Reset discount approval modal when discount changes ───────────────────
+  // Guards against stale modal state: if the cashier changes or clears the
+  // discount while a previous approval attempt is in-flight or lingering,
+  // close the modal and reset the request ID so the next attempt starts fresh.
+  useEffect(() => {
+    setShowDiscountApprovalModal(false);
+    setDiscountRequestId(null);
+  }, [selectedDiscount]);
+
   // ── Auto-save cart draft after every change ───────────────────────────────
   // Runs only when there is something worth saving (non-empty cart).
   // Cleared by commitDraft() on successful payment or discardDraft() on discard.
@@ -243,18 +252,35 @@ export default function Cashier() {
   const totalCents    = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
   const taxRate       = storeSettings.vat_rate > 0 ? storeSettings.vat_rate : 12;
   const vatableCents  = cartItems.filter((i) => i.tax_type === "VATABLE").reduce((s, i) => s + toCentavos(i.subtotal), 0);
+  const nonVatableCents = cartItems.filter((i) => i.tax_type !== "VATABLE").reduce((s, i) => s + toCentavos(i.subtotal), 0);
   const taxCents      = Math.round(vatableCents * taxRate / (100 + taxRate));
   const subtotalCents = totalCents - taxCents;
   
   // Calculate discount amount
-  // SC/PWD discount (RA 9994/9442): apply percentage on VAT-exclusive base
+  // SC/PWD discount (RA 9994/9442): apply percentage on VAT-exclusive base of VATABLE items only
   // Regular discount: apply percentage on VAT-inclusive total
-  const discountCents = selectedDiscount
-    ? selectedDiscount.isScPwd
-      ? Math.round((totalCents / (1 + taxRate / 100)) * (selectedDiscount.percentage / 100))
-      : Math.round((totalCents * selectedDiscount.percentage) / 100)
+  const isScPwdSelected = (customerInfo.scPwdType && customerInfo.scPwdType !== "NONE") || (selectedDiscount?.isScPwd ?? false);
+  // VAT-exclusive base for SC/PWD — only VATABLE items are eligible
+  const vatExclusiveCents = isScPwdSelected
+    ? Math.round(vatableCents / (1 + taxRate / 100))
     : 0;
-  const finalTotalCents = totalCents - discountCents;
+  const discountCents = selectedDiscount
+    ? isScPwdSelected
+      ? Math.round((vatExclusiveCents * selectedDiscount.percentage) / 100)
+      : Math.round((totalCents * selectedDiscount.percentage) / 100)
+    : isScPwdSelected
+    ? Math.round((vatExclusiveCents * 20) / 100)
+    : 0;
+  // For SC/PWD: final payable = VAT-exclusive base - discount (+ non-vatable items)
+  // For regular: final payable = VAT-inclusive total - discount
+  const finalTotalCents = isScPwdSelected
+    ? (vatExclusiveCents - discountCents) + nonVatableCents
+    : totalCents - discountCents;
+  // SC/PWD identification — required when an SC/PWD discount is selected
+  const scPwdType = isScPwdSelected ? (customerInfo.scPwdType ?? "NONE") : "NONE";
+  const scPwdId = isScPwdSelected ? (customerInfo.scPwdId ?? "") : "";
+  const scPwdIdValid = !isScPwdSelected || (scPwdType !== "NONE" && scPwdId.trim().length > 0);
+  const showScPwdFields = isScPwdSelected;
   
   const cashCents     = parseCashInput(cashTendered);
   const changeCents   = cashCents >= finalTotalCents ? cashCents - finalTotalCents : null;
@@ -415,6 +441,8 @@ export default function Cashier() {
         })),
         label,
         discount: selectedDiscount ?? null,
+        sc_pwd_type: scPwdType,
+        sc_pwd_id: scPwdId || undefined,
       });
       toast.success("Transaction suspended and saved.");
       loadSuspendedSales(); clearCart();
@@ -437,7 +465,14 @@ export default function Cashier() {
     // Restore discount — a held transaction keeps its selected discount
     setSelectedDiscount(held.discount ?? null);
     setDiscountRequestId(null); // approval must be re-obtained after recall
-    setCustomerInfo({ name: held.customer_name || "", address: held.customer_address || "", tin: held.customer_tin || "", businessStyle: "" });
+    setCustomerInfo({ 
+      name: held.customer_name || "", 
+      address: held.customer_address || "", 
+      tin: held.customer_tin || "", 
+      businessStyle: "",
+      scPwdType: held.sc_pwd_type || "NONE",
+      scPwdId: held.sc_pwd_id || "",
+    });
     setCashTendered(""); setShowHolds(false);
     try { await discardSuspendedSale(holdId); loadSuspendedSales(); }
     catch (err: unknown) { toast.error(getErrorMessage(err, "Failed to remove held order.")); }
@@ -458,7 +493,14 @@ export default function Cashier() {
       tax_type: item.tax_type || "VATABLE", tax_rate: item.tax_rate || taxRate,
       taxable_amount: item.taxable_amount || 0, vat_amount: item.vat_amount || 0,
     })),
-    customerInfo: { name: s.customer_name || "", address: s.customer_address || "", tin: s.customer_tin || "", businessStyle: "" },
+    customerInfo: { 
+      name: s.customer_name || "", 
+      address: s.customer_address || "", 
+      tin: s.customer_tin || "", 
+      businessStyle: "",
+      scPwdType: s.sc_pwd_type || "NONE",
+      scPwdId: s.sc_pwd_id || "",
+    },
     label: s.label || s.suspended_order_id,
   }));
 
@@ -490,6 +532,18 @@ export default function Cashier() {
     }
     const effectiveDiscountRequestId = overrideRequestId ?? discountRequestId;
     if (cartItems.length === 0 || cashCents < finalTotalCents || !customerInfo.name.trim()) return;
+
+    // SC/PWD validation — require type and ID when an SC/PWD discount is selected
+    if (isScPwdSelected) {
+      if (!customerInfo.scPwdType || customerInfo.scPwdType === "NONE") {
+        toast.error("Please select Senior Citizen or PWD as the discount type.");
+        return;
+      }
+      if (!customerInfo.scPwdId || !customerInfo.scPwdId.trim()) {
+        toast.error(`Please enter the ${customerInfo.scPwdType === "SENIOR_CITIZEN" ? "OSCA / Senior Citizen" : "PWD"} ID number.`);
+        return;
+      }
+    }
 
     // Check if discount requires approval and we don't have one yet
     if (selectedDiscount && selectedDiscount.requiresApproval && !effectiveDiscountRequestId) {
@@ -528,6 +582,8 @@ export default function Cashier() {
         client_transaction_id: clientTxnId,
         discount_id: selectedDiscount?.id,
         discount_request_id: effectiveDiscountRequestId || undefined,
+        sc_pwd_type: scPwdType,
+        sc_pwd_id: scPwdId || undefined,
         items: cartItems.map((i) => ({ product_id: i.id, quantity: i.quantity, unit_price: Number(i.unitPrice), subtotal: Number(i.subtotal), tax_type: i.tax_type })),
       };
       const saleResult = await createSale(payload);
@@ -539,6 +595,9 @@ export default function Cashier() {
       const printedDiscountName       = selectedDiscount?.name;
       const printedDiscountPercentage = selectedDiscount?.percentage;
       const printedFinalTotalCents    = finalTotalCents;
+      const printedVatExemptCents     = vatExclusiveCents;
+      const printedScPwdType          = scPwdType;
+      const printedScPwdId            = scPwdId;
       // Clear discount state BEFORE clearing cart so the wrapped setCartItems
       // does not attempt to cancel an already-used or already-completed request.
       setSelectedDiscount(null);
@@ -551,6 +610,19 @@ export default function Cashier() {
 
       let receiptPrinted = false;
       try {
+        if (
+          !Number.isFinite(saleResult.subtotal) ||
+          !Number.isFinite(saleResult.vat_amount) ||
+          !Number.isFinite(saleResult.total_amount) ||
+          !Number.isFinite(saleResult.change_amount) ||
+          !Number.isFinite(saleResult.discount) ||
+          !Number.isFinite(saleResult.vat_exempt_amount)
+        ) {
+          throw new Error(
+            `Invalid monetary value in saleResult: subtotal=${saleResult.subtotal}, vat=${saleResult.vat_amount}, total=${saleResult.total_amount}, change=${saleResult.change_amount}, discount=${saleResult.discount}, vat_exempt=${saleResult.vat_exempt_amount}`
+          );
+        }
+
         printSaleReceipt({ 
           invoiceNumber: saleResult.invoice_number, 
           cartItems: printedCartItems, 
@@ -563,13 +635,17 @@ export default function Cashier() {
           cashierName: user?.full_name ?? "—", 
           settings: storeSettings, 
           itemSnapshots: saleResult.items,
-          discountCents: printedDiscountCents,
-          discountName: printedDiscountName,
+          discountCents: Math.round(saleResult.discount * 100),
+          discountName: saleResult.discount_name ?? printedDiscountName,
           discountPercentage: printedDiscountPercentage,
-          finalTotalCents: printedFinalTotalCents,
+          finalTotalCents: Math.round(saleResult.total_amount * 100),
+          vatExemptCents: Math.round(saleResult.vat_exempt_amount * 100),
+          scPwdType: saleResult.sc_pwd_type ?? printedScPwdType,
+          scPwdId: saleResult.sc_pwd_id ?? printedScPwdId ?? "",
         });
         receiptPrinted = true;
-      } catch {
+      } catch (printErr) {
+        console.error("Receipt print error:", printErr);
         toast.warning("Sale saved but receipt failed to print. You can reprint from the sales history.");
       }
       if (receiptPrinted) {
@@ -729,7 +805,7 @@ export default function Cashier() {
           setSelectedDiscount={setSelectedDiscount}
           noShift={sessionChecked && !hasOpenSession}
         />
-        <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} />
+        <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} showScPwdFields={showScPwdFields} />
         <PaymentPanel
           subtotalCents={subtotalCents} taxCents={taxCents}
           totalCents={totalCents} taxRate={taxRate}
@@ -745,6 +821,9 @@ export default function Cashier() {
           discountName={selectedDiscount?.name}
           discountPercentage={selectedDiscount?.percentage}
           finalTotalCents={finalTotalCents}
+          vatExemptCents={vatExclusiveCents}
+          scPwdType={scPwdType}
+          scPwdId={scPwdId}
           onReturn={() => setShowReturns(true)}
           onPendingReturns={() => setShowHeldReturns(true)}
           onVoid={() => setShowVoidDialog(true)}

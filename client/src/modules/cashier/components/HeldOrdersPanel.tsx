@@ -70,6 +70,12 @@ export default function HeldOrdersPanel({
                   {hold.customerInfo.name && (
                     <p className="text-xs text-gray-500 border-t border-gray-200 pt-2">
                       Customer: <span className="font-medium text-gray-700">{hold.customerInfo.name}</span>
+                      {hold.customerInfo.scPwdType && hold.customerInfo.scPwdType !== "NONE" && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700">
+                          {hold.customerInfo.scPwdType === "SENIOR_CITIZEN" ? "Senior Citizen" : "PWD"}
+                          {hold.customerInfo.scPwdId ? ` · ${hold.customerInfo.scPwdId}` : ""}
+                        </span>
+                      )}
                     </p>
                   )}
                   <div className="flex gap-2 pt-1">

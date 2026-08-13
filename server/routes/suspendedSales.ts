@@ -9,12 +9,17 @@ const router = Router();
 // ─── Helper: parse cart_data JSON (supports old array format & new wrapper) ───
 // Old format:  JSON array of items  →  { items: [...], discount: null }
 // New format:  { items: [...], discount: {...} | null }
-function parseCartData(raw: any): { cart_data: any[]; discount: any | null } {
+function parseCartData(raw: any): { cart_data: any[]; discount: any | null; sc_pwd_type?: string; sc_pwd_id?: string | null } {
   const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
   if (Array.isArray(parsed)) {
-    return { cart_data: parsed, discount: null };
+    return { cart_data: parsed, discount: null, sc_pwd_type: "NONE", sc_pwd_id: null };
   }
-  return { cart_data: parsed?.items ?? [], discount: parsed?.discount ?? null };
+  return {
+    cart_data: parsed?.items ?? [],
+    discount: parsed?.discount ?? null,
+    sc_pwd_type: parsed?.sc_pwd_type ?? "NONE",
+    sc_pwd_id: parsed?.sc_pwd_id ?? null,
+  };
 }
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
@@ -45,6 +50,8 @@ const suspendSaleSchema = z.object({
     requiresApproval: z.boolean(),
     isScPwd: z.boolean().optional(),
   }).nullable().optional(),
+  sc_pwd_type: z.enum(["NONE", "SENIOR_CITIZEN", "PWD"]).optional(),
+  sc_pwd_id: z.string().optional(),
 });
 
 // ─── GET /api/suspended-sales — List suspended sales for current cashier ───────
@@ -109,7 +116,7 @@ router.post(
       return;
     }
 
-    const { customer_name, customer_address, customer_tin, cart_items, label, discount } = parsed.data;
+    const { customer_name, customer_address, customer_tin, cart_items, label, discount, sc_pwd_type = "NONE", sc_pwd_id } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -147,7 +154,7 @@ router.post(
 
       // Insert suspended sale — cart_data stores items, label stores discount as JSON in the label
       // We store discount separately inside a wrapper JSON object
-      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null });
+      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null, sc_pwd_type, sc_pwd_id: sc_pwd_id ?? null });
 
       await conn.execute(
         `INSERT INTO suspended_sales 
@@ -249,7 +256,7 @@ router.put(
       return;
     }
 
-    const { customer_name, customer_address, customer_tin, cart_items, label, discount } = parsed.data;
+    const { customer_name, customer_address, customer_tin, cart_items, label, discount, sc_pwd_type = "NONE", sc_pwd_id } = parsed.data;
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -267,7 +274,7 @@ router.put(
         return;
       }
 
-      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null });
+      const cartDataJson = JSON.stringify({ items: cart_items, discount: discount ?? null, sc_pwd_type, sc_pwd_id: sc_pwd_id ?? null });
 
       const [result] = await conn.execute<any>(
         `UPDATE suspended_sales 
@@ -383,7 +390,7 @@ router.post(
       }
 
       const suspended = rows[0];
-      const { cart_data: cartItems } = parseCartData(suspended.cart_data);
+      const { cart_data: cartItems, discount: suspendedDiscount, sc_pwd_type: suspendedScPwdType, sc_pwd_id: suspendedScPwdId } = parseCartData(suspended.cart_data);
 
       // 1. Read tax_rate and vat_registered from system_settings (authoritative)
       const [settingsRows] = await conn.execute<any[]>(
@@ -469,9 +476,47 @@ router.post(
         calcItems.reduce((s, i) => s + i.vat_amount, 0) * 100
       ) / 100;
       const calc_subtotal = Math.round((calc_total_amount - calc_vat_amount) * 100) / 100;
+
+      // ── 3b. Apply discount if one was selected when the sale was suspended ────
+      let final_discount_amount = 0;
+      let vat_exempt_amount = 0;
+      let isScPwdDiscount = false;
+      if (suspendedDiscount && suspendedDiscount.id) {
+        const discountId = Number(suspendedDiscount.id);
+        const [discountRows] = await conn.execute<any[]>(
+          `SELECT value, is_sc_pwd FROM discounts WHERE id = ? AND status = 'Active'`,
+          [discountId]
+        );
+        if (discountRows.length > 0) {
+          const percentage = Number(discountRows[0].value);
+          const isScPwd = discountRows[0].is_sc_pwd === 1 || discountRows[0].is_sc_pwd === true;
+          isScPwdDiscount = isScPwd;
+
+          if (isScPwd) {
+            // SC/PWD: apply on VAT-exclusive base of VATABLE items only
+            const vatableTotal = calcItems
+              .filter((i) => i.tax_type === "VATABLE")
+              .reduce((s, i) => s + i.line_subtotal, 0);
+            const vatExclusiveTotal = vatableTotal / (1 + dbTaxRate / 100);
+            vat_exempt_amount = Math.round(vatExclusiveTotal * 100) / 100;
+            final_discount_amount = Math.round((vatExclusiveTotal * (percentage / 100)) * 100) / 100;
+          } else {
+            // Regular discount: straight percentage of the VAT-inclusive total
+            final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+          }
+        }
+      }
+
+      // Final total: SC/PWD = VAT-exclusive base - discount; Regular = VAT-inclusive - discount
+      let final_total_amount: number;
+      if (isScPwdDiscount) {
+        final_total_amount = Math.round((vat_exempt_amount - final_discount_amount) * 100) / 100;
+      } else {
+        final_total_amount = Math.round((calc_total_amount - final_discount_amount) * 100) / 100;
+      }
       const calc_change   = change_amount !== undefined
         ? change_amount
-        : Math.round((cash_tendered - calc_total_amount) * 100) / 100;
+        : Math.round((cash_tendered - final_total_amount) * 100) / 100;
 
       // 4. Generate invoice number (concurrency-safe, row-locked sequence)
       const [invSeqRows] = await conn.execute<any[]>(
@@ -493,9 +538,10 @@ router.post(
       const [saleHeaderResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, vat_amount, total_amount, cash_tendered, change_amount,
+            cashier_id, subtotal, discount, discount_id, sc_pwd_type, sc_pwd_id,
+            vat_amount, vat_exempt_amount, total_amount, cash_tendered, change_amount,
             payment_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
         [
           invoice_number,
           suspended.customer_name || "Walk-in Customer",
@@ -503,8 +549,15 @@ router.post(
           suspended.customer_tin || null,
           req.user!.id,
           calc_subtotal,
+          final_discount_amount,
+          suspendedDiscount?.id ?? null,
+          // SC/PWD type — we only know it's SC/PWD from the discount flag, not the specifics
+          // of Senior vs PWD. Use PWD for the discount flag since we can't determine from cart.
+          isScPwdDiscount ? (suspendedScPwdType ?? "PWD") : "NONE",
+          isScPwdDiscount ? (suspendedScPwdId ?? null) : null,
           calc_vat_amount,
-          calc_total_amount,
+          vat_exempt_amount,
+          final_total_amount,
           cash_tendered,
           calc_change >= 0 ? calc_change : 0,
         ]
@@ -567,8 +620,11 @@ router.post(
         invoice_number,
         id: sale_id,
         subtotal:      calc_subtotal,
+        discount:       final_discount_amount,
+        discount_id:    suspendedDiscount?.id ?? null,
         vat_amount:    calc_vat_amount,
-        total_amount:  calc_total_amount,
+        vat_exempt_amount,
+        total_amount:  final_total_amount,
         change_amount: calc_change >= 0 ? calc_change : 0,
         payment_status: "completed",
         receipt_printed: false,

@@ -154,10 +154,18 @@ export default function DiscountApprovalModal({
 
   // SC/PWD discount: apply percentage on VAT-exclusive base (RA 9994/9442)
   // Regular discount: apply percentage on VAT-inclusive total
+  const vatExclusiveCents = discount.isScPwd
+    ? Math.round(totalAmount / (1 + vatRate / 100))
+    : totalAmount;
   const discountCents = discount.isScPwd
-    ? Math.round((totalAmount / (1 + vatRate / 100)) * (discount.percentage / 100))
+    ? Math.round((vatExclusiveCents * discount.percentage) / 100)
     : Math.round((totalAmount * discount.percentage) / 100);
-  const finalCents    = totalAmount - discountCents;
+  // For SC/PWD: final payable = VAT-exclusive base - discount (VAT is exempted, not added back)
+  // For regular: final payable = VAT-inclusive total - discount
+  const finalCents    = discount.isScPwd
+    ? vatExclusiveCents - discountCents
+    : totalAmount - discountCents;
+  const vatExemptAmount = discount.isScPwd ? vatExclusiveCents : 0;
 
   const fmt = (cents: number) =>
     "₱" + (cents / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -318,7 +326,7 @@ export default function DiscountApprovalModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Percent className="h-5 w-5 text-amber-600" />
@@ -335,8 +343,9 @@ export default function DiscountApprovalModal({
               <p className="text-sm text-gray-600 font-medium">How would you like to get approval?</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() => setMethod("remote")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors text-left"
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors text-left focus:ring-2 focus:ring-blue-400 focus:outline-none"
                 >
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                     <Send className="h-5 w-5 text-blue-600" />
@@ -347,8 +356,9 @@ export default function DiscountApprovalModal({
                   </div>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMethod("local")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors text-left"
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors text-left focus:ring-2 focus:ring-purple-400 focus:outline-none"
                 >
                   <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
                     <KeyRound className="h-5 w-5 text-purple-600" />

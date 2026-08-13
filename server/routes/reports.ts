@@ -33,7 +33,10 @@ router.get("/", async (req: Request, res: Response) => {
         COALESCE(AVG(total_amount), 0)    AS avg_order_value,
         COALESCE(MAX(total_amount), 0)    AS largest_sale,
         COALESCE(MIN(total_amount), 0)    AS smallest_sale,
-        COALESCE(SUM(COALESCE(discount, 0)), 0) AS total_discounts
+        COALESCE(SUM(COALESCE(discount, 0)), 0) AS total_discounts,
+        COALESCE(SUM(COALESCE(vat_exempt_amount, 0)), 0) AS total_vat_exempt,
+        COALESCE(SUM(CASE WHEN sc_pwd_type = 'SENIOR_CITIZEN' THEN 1 ELSE 0 END), 0) AS senior_count,
+        COALESCE(SUM(CASE WHEN sc_pwd_type = 'PWD' THEN 1 ELSE 0 END), 0) AS pwd_count
       FROM sales
       WHERE DATE(created_at) BETWEEN ? AND ?
         AND void_status != 'voided'
@@ -63,6 +66,10 @@ router.get("/", async (req: Request, res: Response) => {
       total_discounts: totalDiscounts,
       total_revenue: netRevenue,
       total_refunds: totalRefunds,
+      total_vat_exempt: Number(summaryRows[0].total_vat_exempt ?? 0),
+      senior_count: Number(summaryRows[0].senior_count ?? 0),
+      pwd_count: Number(summaryRows[0].pwd_count ?? 0),
+      sc_pwd_count: Number(summaryRows[0].senior_count ?? 0) + Number(summaryRows[0].pwd_count ?? 0),
     };
 
     // ── 2. Daily sales breakdown — exclude voided ────────────────────────────
@@ -310,6 +317,9 @@ router.get("/sales", async (req: Request, res: Response) => {
         u.full_name AS cashier,
         s.subtotal AS gross_sales,
         COALESCE(s.discount, 0) AS discounts,
+        s.sc_pwd_type,
+        s.sc_pwd_id,
+        COALESCE(s.vat_exempt_amount, 0) AS vat_exempt_amount,
         COALESCE((SELECT SUM(r.refund_amount) FROM returns r WHERE r.sale_id = s.id AND r.status = 'completed'), 0) AS returns,
         CASE WHEN s.void_status = 'voided' THEN s.total_amount ELSE 0 END AS voids,
         CASE WHEN s.void_status = 'voided' THEN 0 ELSE s.total_amount - COALESCE((SELECT SUM(r.refund_amount) FROM returns r WHERE r.sale_id = s.id AND r.status = 'completed'), 0) END AS net_sales
@@ -792,6 +802,8 @@ router.get("/discounts", async (req: Request, res: Response) => {
         d.discount_name,
         d.discount_type,
         s.discount AS discount_amount,
+        s.sc_pwd_type,
+        COALESCE(s.vat_exempt_amount, 0) AS vat_exempt_amount,
         c.full_name AS cashier,
         NULL AS approved_by,
         s.created_at

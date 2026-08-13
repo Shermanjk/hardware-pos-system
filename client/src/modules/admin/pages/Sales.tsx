@@ -14,6 +14,7 @@ import {
     AlertCircle,
     Calendar, ChevronDown, ChevronUp,
     Eye,
+    Percent,
     Receipt,
     Search,
     ShoppingCart,
@@ -101,9 +102,32 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
           )}
 
           {sale && !loading && (() => {
-            const effectiveTaxRate = sale.total_amount > 0 && sale.vat_amount > 0
-              ? Math.round((sale.vat_amount / (sale.total_amount - sale.vat_amount)) * 100)
-              : 0;
+            const hasDiscount   = sale.discount > 0;
+            const isScPwd       = sale.sc_pwd_type !== "NONE";
+            const grossTotal    = sale.items && sale.items.length > 0
+              ? sale.items.reduce((sum, item) => sum + Number(item.subtotal), 0)
+              : (hasDiscount ? sale.total_amount + sale.discount : sale.total_amount);
+            // BIR-mandated VAT rate for the Philippines.
+            // The `sales` table does not store the rate used at transaction time,
+            // so reverse-computing it from stored amounts produces incorrect labels
+            // (13%, 15%, etc.) due to per-item centavo rounding and historical
+            // settings changes. The vat_amount stored in the DB is the correct
+            // accounting figure — the label is purely informational.
+            const scPwdLabel = sale.sc_pwd_type === "SENIOR_CITIZEN" ? "Senior Citizen" : sale.sc_pwd_type === "PWD" ? "PWD" : null;
+            const discountTypeLabel = isScPwd
+              ? `${scPwdLabel}${sale.discount_percentage ? ` (${sale.discount_percentage}%)` : ""}`
+              : sale.discount_name && sale.discount_type
+              ? `${sale.discount_name} (${sale.discount_percentage ? `${sale.discount_percentage}%` : sale.discount_type})`
+              : sale.discount_name
+              ? `${sale.discount_name}${sale.discount_percentage ? ` (${sale.discount_percentage}%)` : ""}`
+              : sale.discount_type === "Percentage"
+              ? `Percentage ${sale.discount_percentage ? `(${sale.discount_percentage}%)` : "Discount"}`
+              : sale.discount_type === "Fixed"
+              ? "Fixed Amount"
+              : hasDiscount
+              ? "Applied Discount"
+              : null;
+
             return (
               <div className="px-6 py-5 space-y-4">
                 {/* Transaction info */}
@@ -119,6 +143,20 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                     )}
                     {sale.customer_tin && (
                       <div><span className="text-gray-500">TIN:</span> <span className="text-gray-700 font-mono ml-1">{sale.customer_tin}</span></div>
+                    )}
+                    {/* Discount identification info */}
+                    {(hasDiscount || isScPwd) && (
+                      <>
+                        <div>
+                          <span className="text-gray-500">Discount Type:</span>
+                          <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                            {discountTypeLabel}
+                          </span>
+                        </div>
+                        {sale.sc_pwd_id && (
+                          <div><span className="text-gray-500">ID No.:</span> <span className="font-mono text-gray-700 ml-1">{sale.sc_pwd_id}</span></div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -164,21 +202,70 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                 </div>
 
                 {/* Totals */}
-                <div className="rounded-xl border border-gray-200 p-4 space-y-2 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span><span className="tabular-nums">{fmt(sale.subtotal)}</span>
+                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <Receipt className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Transaction Summary</span>
                   </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>VAT ({effectiveTaxRate}%)</span><span className="tabular-nums">{fmt(sale.vat_amount)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base text-gray-900 pt-2 border-t-2 border-gray-200">
-                    <span>Total</span><span className="tabular-nums text-blue-600 text-lg">{fmt(sale.total_amount)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600 pt-1 border-t border-gray-100">
-                    <span>Cash Tendered</span><span className="tabular-nums">{fmt(sale.cash_tendered)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Change</span><span className="tabular-nums">{fmt(sale.change_amount)}</span>
+                  <div className="p-4 space-y-2 text-sm">
+
+                    {/* Standard BIR Tax Breakdown */}
+                    <div className="flex justify-between text-gray-600">
+                      <span>VATable Sales (Net Base)</span>
+                      <span className="tabular-nums">{fmt(sale.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500 text-xs pl-3">
+                      <span>VAT (12%)</span>
+                      <span className="tabular-nums">{fmt(sale.vat_amount)}</span>
+                    </div>
+                    {sale.vat_exempt_amount > 0 && (
+                      <div className="flex justify-between text-purple-600 text-xs pl-3">
+                        <span>VAT-Exempt Sales</span>
+                        <span className="tabular-nums">{fmt(sale.vat_exempt_amount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-gray-700 font-medium pt-1 border-t border-gray-100">
+                      <span>Gross Amount (incl. VAT)</span>
+                      <span className="tabular-nums">{fmt(grossTotal)}</span>
+                    </div>
+
+                    {/* Discount line */}
+                    {hasDiscount && (
+                      <div className="border-t border-dashed border-gray-200 pt-2 mt-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-amber-700">
+                            <Percent className="h-3.5 w-3.5" />
+                            <span className="font-medium">
+                              {sale.discount_name ?? "Discount"}
+                              {sale.discount_percentage != null && (
+                                <span className="ml-1 text-xs text-amber-600">({sale.discount_percentage}%)</span>
+                              )}
+                            </span>
+                            {sale.discount_is_sc_pwd && (
+                              <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">SC/PWD</span>
+                            )}
+                          </div>
+                          <span className="tabular-nums font-semibold text-amber-700">-{fmt(sale.discount)}</span>
+                        </div>
+                        {isScPwd && (
+                          <p className="text-xs text-gray-400 pl-5">Applied on VAT-exclusive base per RA 9994/9442</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Final total */}
+                    <div className="flex justify-between font-bold text-base text-gray-900 pt-2 border-t-2 border-gray-200">
+                      <span>{hasDiscount ? "Total After Discount" : "Total"}</span>
+                      <span className="tabular-nums text-blue-600 text-lg">{fmt(sale.total_amount)}</span>
+                    </div>
+
+                    {/* Cash & change */}
+                    <div className="flex justify-between text-gray-600 pt-1 border-t border-gray-100">
+                      <span>Cash Tendered</span><span className="tabular-nums">{fmt(sale.cash_tendered)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Change</span><span className="tabular-nums">{fmt(sale.change_amount)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -195,6 +282,7 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
 }
 
 // ─── Main Sales Page ──────────────────────────────────────────────────────────
+
 
 export default function Sales() {
   const [sales,      setSales]      = useState<SaleSummary[]>([]);

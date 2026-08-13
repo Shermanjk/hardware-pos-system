@@ -33,6 +33,12 @@ interface PaymentPanelProps {
   discountName?: string;
   discountPercentage?: number;
   finalTotalCents?: number;
+  /** VAT-exempt amount for SC/PWD transactions (VAT-exclusive base). */
+  vatExemptCents?: number;
+  /** SC/PWD type — "NONE" for regular customers. */
+  scPwdType?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  /** SC/PWD ID number. */
+  scPwdId?: string;
 }
 
 export default function PaymentPanel({
@@ -44,7 +50,14 @@ export default function PaymentPanel({
   onProcessPayment, onHold, onHoldOrders, onReturn, onPendingReturns, onVoid, onVoidRequests,
   pendingReturnsCount, hasApprovedReturns, pendingVoidRequestsCount, pendingHeldOrdersCount,
   discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
+  vatExemptCents = 0, scPwdType = "NONE", scPwdId,
 }: PaymentPanelProps) {
+  const isScPwd = scPwdType !== "NONE";
+  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "Senior Citizen" : scPwdType === "PWD" ? "PWD" : "";
+  // For SC/PWD, the displayed VAT is 0 (VAT-exempt). For regular: the customer's VAT.
+  const displayTaxCents = isScPwd ? 0 : taxCents;
+  // For SC/PWD, the gross is the VAT-exclusive base. For regular: VAT-inclusive total.
+  const displayGrossCents = isScPwd ? vatExemptCents : totalCents;
   const cashCents   = parseCashInput(cashTendered);
   const changeCents = cashCents >= finalTotalCents ? cashCents - finalTotalCents : null;
   const isExact     = cashCents === finalTotalCents;
@@ -52,13 +65,23 @@ export default function PaymentPanel({
   return (
     <div className="w-80 shrink-0 flex flex-col gap-3 min-h-0">
       <div className="shrink-0 bg-slate-50 rounded-xl border-2 border-slate-400 shadow-sm px-4 py-3 space-y-2">
+        {isScPwd && (
+          <div className="flex items-center justify-between text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+            <span>{scPwdLabel}</span>
+            <span className="font-mono">{scPwdId || "—"}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm text-slate-700">
-          <span>Subtotal</span>
-          <span className="font-medium tabular-nums">₱{fmtCents(subtotalCents)}</span>
+          <span>Gross Amount (incl. VAT)</span>
+          <span className="font-medium tabular-nums">₱{fmtCents(totalCents)}</span>
+        </div>
+        <div className="flex justify-between text-sm text-slate-700">
+          <span>VATable Sales (Net Base)</span>
+          <span className="font-medium tabular-nums">₱{fmtCents(isScPwd ? vatExemptCents : subtotalCents)}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-700">
           <span>VAT ({taxRate}%)</span>
-          <span className="font-medium tabular-nums">₱{fmtCents(taxCents)}</span>
+          <span className="font-medium tabular-nums">₱{fmtCents(displayTaxCents)}</span>
         </div>
         
         {discountCents > 0 && (
@@ -72,7 +95,7 @@ export default function PaymentPanel({
         )}
         
         <div className="border-t border-slate-300 pt-3 flex flex-col gap-1">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Amount Payable</span>
           <span className="font-bold text-blue-600 tabular-nums leading-none" style={{ fontSize: "2.5rem" }}>
             ₱{fmtCents(finalTotalCents)}
           </span>
@@ -103,6 +126,7 @@ export default function PaymentPanel({
                 }`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && cartLength > 0 && cashCents >= finalTotalCents && customerName.trim()) {
+                  e.preventDefault();
                   onProcessPayment();
                 }
               }}

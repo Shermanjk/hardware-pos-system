@@ -29,6 +29,9 @@ const createSaleSchema = z.object({
   // Discount fields
   discount_id: z.number().int().positive().optional(),
   discount_request_id: z.number().int().positive().optional(),
+  // SC/PWD identification fields
+  sc_pwd_type: z.enum(["NONE", "SENIOR_CITIZEN", "PWD"]).optional(),
+  sc_pwd_id: z.string().optional(),
   items: z.array(z.object({
     product_id: z.number().int().positive(),
     quantity:   z.number().int().positive(),
@@ -92,6 +95,7 @@ router.post(
       customer_name, customer_address, customer_tin,
       cash_tendered, items,
       discount_id, discount_request_id,
+      sc_pwd_type = "NONE", sc_pwd_id,
     } = parsed.data;
 
     // ── DISCOUNT VALIDATION ────────────────────────────────────────────────────
@@ -156,9 +160,11 @@ router.post(
     if (clientTxnId) {
       try {
         const [existing] = await pool.execute<any[]>(
-          `SELECT id, invoice_number, subtotal, vat_amount, total_amount, change_amount,
-                  payment_status, receipt_printed
-           FROM sales WHERE client_transaction_id = ? LIMIT 1`,
+          `SELECT s.id, s.invoice_number, s.subtotal, s.discount, s.discount_id, s.vat_amount, s.vat_exempt_amount, s.total_amount, s.change_amount,
+                  s.payment_status, s.receipt_printed, s.sc_pwd_type, s.sc_pwd_id, d.discount_name
+           FROM sales s
+           LEFT JOIN discounts d ON d.id = s.discount_id
+           WHERE s.client_transaction_id = ? LIMIT 1`,
           [clientTxnId]
         );
         if (existing.length > 0) {
@@ -177,7 +183,13 @@ router.post(
             id: sale.id,
             invoice_number: sale.invoice_number,
             subtotal: Number(sale.subtotal),
+            discount: Number(sale.discount ?? 0),
+            discount_name: sale.discount_name ?? null,
+            discount_id: sale.discount_id ?? null,
             vat_amount: Number(sale.vat_amount),
+            vat_exempt_amount: Number(sale.vat_exempt_amount ?? 0),
+            sc_pwd_type: sale.sc_pwd_type ?? "NONE",
+            sc_pwd_id: sale.sc_pwd_id ?? null,
             total_amount: Number(sale.total_amount),
             change_amount: Number(sale.change_amount),
             payment_status: sale.payment_status,
@@ -276,41 +288,92 @@ router.post(
 
       // ── 4. Apply discount if applicable ──────────────────────────────────────
       let final_discount_amount = 0;
-      if (discount_id && discountAmount === 0) {
-        // Calculate discount from percentage for non-approval discounts
+      let vat_exempt_amount = 0;
+      let final_vat_amount = calc_vat_amount;
+      let final_subtotal = calc_subtotal;
+      let isScPwdDiscount = sc_pwd_type === "SENIOR_CITIZEN" || sc_pwd_type === "PWD" || discountIsScPwd;
+
+      if (discount_id) {
+        // Fetch discount info from DB to get percentage / type / is_sc_pwd
         const [discountRows] = await conn.execute<any[]>(
-          `SELECT value, is_sc_pwd FROM discounts WHERE id = ?`,
+          `SELECT value, discount_type, is_sc_pwd FROM discounts WHERE id = ?`,
           [discount_id]
         );
         if (discountRows.length > 0) {
-          const percentage = Number(discountRows[0].value);
-          const isScPwd = discountRows[0].is_sc_pwd === 1 || discountRows[0].is_sc_pwd === true;
+          const discountRecord = discountRows[0];
+          const isScPwdFlag = discountRecord.is_sc_pwd === 1 || discountRecord.is_sc_pwd === true;
+          if (isScPwdFlag) isScPwdDiscount = true;
+          const percentage = Number(discountRecord.value);
 
-          if (isScPwd) {
-            // SC/PWD discount per RA 9994/9442:
-            // 1. Remove VAT from the total first (VAT-exclusive base)
-            // 2. Apply the percentage on the VAT-exclusive base
-            // Fetch current VAT rate from system_settings
-            const [vatRows] = await conn.execute<any[]>(
-              `SELECT vat_rate FROM system_settings WHERE id = 1 LIMIT 1`
-            );
-            const vatRate = vatRows.length > 0 && Number(vatRows[0].vat_rate) > 0
-              ? Number(vatRows[0].vat_rate)
-              : 12;
-            const vatExclusiveTotal = calc_total_amount / (1 + vatRate / 100);
-            final_discount_amount = Math.round((vatExclusiveTotal * (percentage / 100)) * 100) / 100;
+          if (isScPwdDiscount) {
+            // SC/PWD statutory discount per RA 9994 / RA 9442:
+            // 1. Filter VATABLE items (eligible for VAT exemption)
+            const vatableGross = calcItems
+              .filter((i) => i.tax_type === "VATABLE")
+              .reduce((s, i) => s + i.line_subtotal, 0);
+            const nonVatableGross = calcItems
+              .filter((i) => i.tax_type !== "VATABLE")
+              .reduce((s, i) => s + i.line_subtotal, 0);
+
+            // 2. Remove 12% VAT to get Net Base for VATABLE items
+            const taxDivisor = 1 + (dbTaxRate / 100);
+            const netBase = dbVatActive && vatableGross > 0
+              ? Math.round((vatableGross / taxDivisor) * 100) / 100
+              : vatableGross;
+
+            // 3. SC/PWD 20% discount applies on the Net Base
+            const computedDiscount = Math.round((netBase * (percentage / 100)) * 100) / 100;
+            // Use pre-approved discount amount if approval was required, otherwise computed
+            final_discount_amount = (discountAmount > 0) ? discountAmount : computedDiscount;
+
+            // 4. VAT is EXEMPTED for SC/PWD: VAT charged = 0
+            final_vat_amount = 0;
+            vat_exempt_amount = netBase;
+            final_subtotal = Math.round((netBase + nonVatableGross) * 100) / 100;
           } else {
-            // Regular discount: straight percentage of the VAT-inclusive total
-            final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+            // Standard discount: percentage or fixed amount
+            if (discountAmount > 0) {
+              final_discount_amount = discountAmount;
+            } else if (discountRecord.discount_type === "Percentage") {
+              final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+            } else {
+              final_discount_amount = Math.min(percentage, calc_total_amount);
+            }
           }
         }
-      } else if (discount_id) {
-        // Use the pre-calculated discount amount from approval request
-        // (already computed correctly on the client before submitting for approval)
-        final_discount_amount = discountAmount;
+      } else if (isScPwdDiscount) {
+        // SC/PWD discount without discount_id (e.g. direct SC/PWD classification)
+        const vatableGross = calcItems
+          .filter((i) => i.tax_type === "VATABLE")
+          .reduce((s, i) => s + i.line_subtotal, 0);
+        const nonVatableGross = calcItems
+          .filter((i) => i.tax_type !== "VATABLE")
+          .reduce((s, i) => s + i.line_subtotal, 0);
+
+        const taxDivisor = 1 + (dbTaxRate / 100);
+        const netBase = dbVatActive && vatableGross > 0
+          ? Math.round((vatableGross / taxDivisor) * 100) / 100
+          : vatableGross;
+
+        const defaultScPercentage = 20;
+        final_discount_amount = Math.round((netBase * (defaultScPercentage / 100)) * 100) / 100;
+        final_vat_amount = 0;
+        vat_exempt_amount = netBase;
+        final_subtotal = Math.round((netBase + nonVatableGross) * 100) / 100;
       }
 
-      const final_total_amount = Math.round((calc_total_amount - final_discount_amount) * 100) / 100;
+      // ── Final Amount Payable calculation ─────────────────────────────────────
+      // For SC/PWD: Final Payable = Net Base − SC/PWD Discount (+ non-vatable items)
+      // For Regular: Final Payable = Gross Amount − Discount
+      let final_total_amount: number;
+      if (isScPwdDiscount) {
+        const nonVatableGross = calcItems
+          .filter((i) => i.tax_type !== "VATABLE")
+          .reduce((s, i) => s + i.line_subtotal, 0);
+        final_total_amount = Math.round((vat_exempt_amount - final_discount_amount + nonVatableGross) * 100) / 100;
+      } else {
+        final_total_amount = Math.round((calc_total_amount - final_discount_amount) * 100) / 100;
+      }
       const calc_change = Math.round((cash_tendered - final_total_amount) * 100) / 100;
 
       // ── 5. Generate invoice number (concurrency-safe) ─────────────────────────
@@ -322,19 +385,23 @@ router.post(
       const [saleResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
-            cashier_id, subtotal, discount, discount_id, vat_amount, total_amount, cash_tendered, change_amount,
+            cashier_id, subtotal, discount, discount_id, sc_pwd_type, sc_pwd_id,
+            vat_amount, vat_exempt_amount, total_amount, cash_tendered, change_amount,
             payment_status, client_transaction_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [
           invoice_number,
           customer_name,
           customer_address ?? null,
           customer_tin ?? null,
           req.user!.id,
-          calc_subtotal,
+          final_subtotal,
           final_discount_amount,
           discount_id ?? null,
-          calc_vat_amount,
+          sc_pwd_type,
+          sc_pwd_id ?? null,
+          final_vat_amount,
+          vat_exempt_amount,
           final_total_amount,
           cash_tendered,
           calc_change >= 0 ? calc_change : 0,
@@ -435,11 +502,14 @@ router.post(
       res.status(201).json({
         invoice_number,
         id: sale_id,
-        subtotal:      calc_subtotal,
+        subtotal:      final_subtotal,
         discount:       final_discount_amount,
         discount_name:  discountName,
         discount_id:    discount_id,
-        vat_amount:    calc_vat_amount,
+        vat_amount:    final_vat_amount,
+        vat_exempt_amount,
+        sc_pwd_type,
+        sc_pwd_id:     sc_pwd_id ?? null,
         total_amount:  final_total_amount,
         change_amount: calc_change >= 0 ? calc_change : 0,
         payment_status: "completed",
@@ -1287,10 +1357,18 @@ router.get(
       const [saleRows] = await pool.execute<any[]>(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
-                s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
-                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at
+                s.subtotal, s.vat_amount, s.vat_exempt_amount, s.total_amount, s.cash_tendered,
+                s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at,
+                s.sc_pwd_type, s.sc_pwd_id, s.discount, s.discount_id,
+                COALESCE(d.discount_name, dr_d.discount_name) AS discount_name,
+                COALESCE(d.discount_type, dr_d.discount_type) AS discount_type,
+                COALESCE(d.value, dr.requested_percentage, dr_d.value) AS discount_percentage,
+                COALESCE(d.is_sc_pwd, dr_d.is_sc_pwd, 0) AS discount_is_sc_pwd
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
+         LEFT JOIN discounts d ON d.id = s.discount_id
+         LEFT JOIN discount_requests dr ON dr.sale_id = s.id
+         LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
          WHERE s.invoice_number = ?
          LIMIT 1`,
         [invoiceNumber]
@@ -1300,6 +1378,34 @@ router.get(
       if (!sale) {
         res.status(404).json({ message: "Invoice not found." });
         return;
+      }
+
+      // Infer missing discount details if not explicitly linked
+      let resolvedDiscountName = sale.discount_name;
+      let resolvedDiscountType = sale.discount_type;
+      let resolvedDiscountPercentage = sale.discount_percentage != null ? Number(sale.discount_percentage) : null;
+      let resolvedIsScPwd = sale.discount_is_sc_pwd === 1 || sale.discount_is_sc_pwd === true;
+
+      const discountAmt = Number(sale.discount ?? 0);
+      if (sale.sc_pwd_type === "SENIOR_CITIZEN") {
+        resolvedDiscountName = resolvedDiscountName ?? "Senior Citizen Discount";
+        resolvedDiscountType = resolvedDiscountType ?? "Percentage";
+        resolvedDiscountPercentage = resolvedDiscountPercentage ?? 20;
+        resolvedIsScPwd = true;
+      } else if (sale.sc_pwd_type === "PWD") {
+        resolvedDiscountName = resolvedDiscountName ?? "PWD Discount";
+        resolvedDiscountType = resolvedDiscountType ?? "Percentage";
+        resolvedDiscountPercentage = resolvedDiscountPercentage ?? 20;
+        resolvedIsScPwd = true;
+      } else if (discountAmt > 0) {
+        if (!resolvedDiscountType) {
+          resolvedDiscountType = resolvedDiscountPercentage ? "Percentage" : "Fixed";
+        }
+        if (!resolvedDiscountName) {
+          resolvedDiscountName = resolvedDiscountType === "Percentage"
+            ? `Percentage Discount (${resolvedDiscountPercentage ?? 0}%)`
+            : "General Discount";
+        }
       }
 
       const [itemRows] = await pool.execute<any[]>(
@@ -1329,11 +1435,20 @@ router.get(
         ...sale,
         subtotal:      Number(sale.subtotal),
         vat_amount:    Number(sale.vat_amount),
+        vat_exempt_amount: Number(sale.vat_exempt_amount ?? 0),
         total_amount:  Number(sale.total_amount),
         cash_tendered: Number(sale.cash_tendered),
         change_amount: Number(sale.change_amount),
         payment_status: sale.payment_status,
         receipt_printed: sale.receipt_printed === 1 || sale.receipt_printed === true,
+        sc_pwd_type: sale.sc_pwd_type ?? "NONE",
+        sc_pwd_id: sale.sc_pwd_id ?? null,
+        discount: discountAmt,
+        discount_id: sale.discount_id ?? null,
+        discount_name: resolvedDiscountName ?? null,
+        discount_type: resolvedDiscountType ?? null,
+        discount_percentage: resolvedDiscountPercentage,
+        discount_is_sc_pwd: resolvedIsScPwd,
         items: itemRows.map((r: any) => ({
           ...r,
           unit_price:      Number(r.unit_price),

@@ -21,6 +21,8 @@ export interface SuspendedSale {
   customer_tin: string | null;
   cart_data: SuspendedCartItem[];
   discount?: { id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null;
+  sc_pwd_type?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  sc_pwd_id?: string | null;
   status: "SUSPENDED" | "COMPLETED" | "CANCELLED";
   label: string | null;
   created_at: string;
@@ -34,6 +36,8 @@ export interface SuspendSalePayload {
   cart_items: SuspendedCartItem[];
   label?: string;
   discount?: { id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null;
+  sc_pwd_type?: "NONE" | "SENIOR_CITIZEN" | "PWD";
+  sc_pwd_id?: string;
 }
 
 export interface CompleteSuspendedSalePayload {
