@@ -193,6 +193,10 @@ export default function Cashier() {
   const [latestVoidDecision, setLatestVoidDecision] = useState<VoidDecisionNotification | null>(null);
   const [pendingVoidRequestsCount, setPendingVoidRequestsCount] = useState(0);
   const [unreadVoidCount, setUnreadVoidCount] = useState(0);
+  // True only during the very first fetchPendingData call. Used to seed the
+  // seen-IDs set so historical void requests never surface as "unread" after
+  // a re-login or hard refresh.
+  const isFirstVoidFetchRef = useRef(true);
 
   // ── Void read-state helpers (persisted in localStorage per user) ──────────
   // Key is scoped to the logged-in user so two cashiers on the same machine
@@ -287,12 +291,23 @@ export default function Cashier() {
     if (voidsResult.status === "fulfilled") {
       const allVoids = voidsResult.value;
       setPendingVoidRequestsCount(allVoids.length);
-      // Unread = IDs that aren't in the persisted "seen" set
-      const seen = getSeenVoidIds();
-      const unreadCount = allVoids.filter((v) => !seen.has(v.id)).length;
-      setUnreadVoidCount(unreadCount);
+
+      if (isFirstVoidFetchRef.current) {
+        // ── First load: seed all existing IDs as already-seen ────────────────
+        // This prevents historical void requests from lighting up the badge
+        // every time the cashier re-logs in or hard-refreshes the page.
+        // Only new IDs that arrive in *subsequent* polls will be counted.
+        isFirstVoidFetchRef.current = false;
+        markVoidIdsAsSeen(allVoids.map((v) => v.id));
+        setUnreadVoidCount(0);
+      } else {
+        // Subsequent polls: count IDs not yet in the persisted seen set.
+        const seen = getSeenVoidIds();
+        const unreadCount = allVoids.filter((v) => !seen.has(v.id)).length;
+        setUnreadVoidCount(unreadCount);
+      }
     }
-  }, [getSeenVoidIds]);
+  }, [getSeenVoidIds, markVoidIdsAsSeen]);
 
   // Initial load + 60 s recurring poll. Pauses when tab is hidden.
   useEffect(() => {
