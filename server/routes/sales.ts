@@ -122,6 +122,16 @@ router.post(
         return;
       }
       discountIsScPwd = discount.is_sc_pwd === 1 || discount.is_sc_pwd === true;
+      if (discountIsScPwd) {
+        if (!sc_pwd_type || (sc_pwd_type !== "SENIOR_CITIZEN" && sc_pwd_type !== "PWD")) {
+          res.status(422).json({ message: "Statutory SC/PWD discounts require selecting Senior Citizen or PWD as the customer type." });
+          return;
+        }
+        if (!sc_pwd_id || !sc_pwd_id.trim()) {
+          res.status(422).json({ message: "Statutory SC/PWD discounts require a valid ID number." });
+          return;
+        }
+      }
 
       // If discount requires approval, validate the approval request
       if (discount.requires_admin_approval) {
@@ -324,7 +334,8 @@ router.post(
             // 3. SC/PWD 20% discount applies on the Net Base
             const computedDiscount = Math.round((netBase * (percentage / 100)) * 100) / 100;
             // Use pre-approved discount amount if approval was required, otherwise computed
-            final_discount_amount = (discountAmount > 0) ? discountAmount : computedDiscount;
+            const rawDiscount = (discountAmount > 0) ? discountAmount : computedDiscount;
+            final_discount_amount = Math.min(rawDiscount, netBase);
 
             // 4. VAT is EXEMPTED for SC/PWD: VAT charged = 0
             final_vat_amount = 0;
@@ -332,13 +343,15 @@ router.post(
             final_subtotal = Math.round((netBase + nonVatableGross) * 100) / 100;
           } else {
             // Standard discount: percentage or fixed amount
+            let rawDiscount = 0;
             if (discountAmount > 0) {
-              final_discount_amount = discountAmount;
+              rawDiscount = discountAmount;
             } else if (discountRecord.discount_type === "Percentage") {
-              final_discount_amount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
+              rawDiscount = Math.round((calc_total_amount * (percentage / 100)) * 100) / 100;
             } else {
-              final_discount_amount = Math.min(percentage, calc_total_amount);
+              rawDiscount = Math.min(percentage, calc_total_amount);
             }
+            final_discount_amount = Math.min(rawDiscount, calc_total_amount);
           }
         }
       } else if (isScPwdDiscount) {
@@ -378,10 +391,13 @@ router.post(
 
       // ── 5. Generate invoice number (concurrency-safe) ─────────────────────────
       const invoice_number = await generateInvoiceNumber(conn);
+      let final_sc_pwd_type = isScPwdDiscount ? sc_pwd_type : "NONE";
+      let final_sc_pwd_id   = isScPwdDiscount ? (sc_pwd_id ?? null) : null;
 
       // ── 6. Insert the sale row using backend-calculated totals ────────────────
       // payment_status starts as 'pending' — it will be updated to 'completed'
       // after the transaction commits successfully.
+
       const [saleResult] = await conn.execute<any>(
         `INSERT INTO sales
            (invoice_number, customer_name, customer_address, customer_tin,
@@ -398,8 +414,8 @@ router.post(
           final_subtotal,
           final_discount_amount,
           discount_id ?? null,
-          sc_pwd_type,
-          sc_pwd_id ?? null,
+          final_sc_pwd_type,
+          final_sc_pwd_id,
           final_vat_amount,
           vat_exempt_amount,
           final_total_amount,
@@ -1204,12 +1220,20 @@ router.get(
       const [rows] = await pool.execute<any[]>(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
-                s.subtotal, s.vat_amount, s.total_amount, s.cash_tendered,
+                s.subtotal, s.discount, s.discount_id, s.sc_pwd_type, s.sc_pwd_id,
+                s.vat_amount, s.vat_exempt_amount, s.total_amount, s.cash_tendered,
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at,
+                COALESCE(d.discount_name, dr_d.discount_name) AS discount_name,
+                COALESCE(d.discount_type, dr_d.discount_type) AS discount_type,
+                COALESCE(d.value, dr.requested_percentage, dr_d.value) AS discount_percentage,
+                COALESCE(d.is_sc_pwd, dr_d.is_sc_pwd, 0) AS discount_is_sc_pwd,
                 (SELECT COUNT(*) FROM returns r WHERE r.sale_id = s.id AND r.status IN ('pending', 'waiting_for_cashier', 'completed')) AS return_count,
                 (SELECT COALESCE(SUM(r.refund_amount), 0) FROM returns r WHERE r.sale_id = s.id AND r.status = 'completed') AS total_refunded
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
+         LEFT JOIN discounts d ON d.id = s.discount_id
+         LEFT JOIN discount_requests dr ON dr.sale_id = s.id
+         LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
          ${where}
          ORDER BY s.created_at DESC
          LIMIT 200`,
@@ -1363,12 +1387,24 @@ router.get(
                 COALESCE(d.discount_name, dr_d.discount_name) AS discount_name,
                 COALESCE(d.discount_type, dr_d.discount_type) AS discount_type,
                 COALESCE(d.value, dr.requested_percentage, dr_d.value) AS discount_percentage,
-                COALESCE(d.is_sc_pwd, dr_d.is_sc_pwd, 0) AS discount_is_sc_pwd
+                COALESCE(d.is_sc_pwd, dr_d.is_sc_pwd, 0) AS discount_is_sc_pwd,
+                dr.id AS discount_request_id,
+                dr.status AS discount_approval_status,
+                dr.approved_by AS discount_approved_by,
+                dr.approved_at AS discount_approved_at,
+                app_u.full_name AS approved_by_name,
+                (
+                  SELECT action FROM audit_logs
+                  WHERE entity_type = 'discount_requests' AND entity_id = dr.id
+                    AND action IN ('DISCOUNT_APPROVED', 'DISCOUNT_APPROVED_LOCAL_OVERRIDE')
+                  ORDER BY id DESC LIMIT 1
+                ) AS approval_action
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
          LEFT JOIN discounts d ON d.id = s.discount_id
          LEFT JOIN discount_requests dr ON dr.sale_id = s.id
          LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
+         LEFT JOIN users app_u ON app_u.id = dr.approved_by
          WHERE s.invoice_number = ?
          LIMIT 1`,
         [invoiceNumber]
@@ -1388,12 +1424,12 @@ router.get(
 
       const discountAmt = Number(sale.discount ?? 0);
       if (sale.sc_pwd_type === "SENIOR_CITIZEN") {
-        resolvedDiscountName = resolvedDiscountName ?? "Senior Citizen Discount";
+        resolvedDiscountName = resolvedDiscountName ?? "Senior Citizen";
         resolvedDiscountType = resolvedDiscountType ?? "Percentage";
         resolvedDiscountPercentage = resolvedDiscountPercentage ?? 20;
         resolvedIsScPwd = true;
       } else if (sale.sc_pwd_type === "PWD") {
-        resolvedDiscountName = resolvedDiscountName ?? "PWD Discount";
+        resolvedDiscountName = resolvedDiscountName ?? "PWD";
         resolvedDiscountType = resolvedDiscountType ?? "Percentage";
         resolvedDiscountPercentage = resolvedDiscountPercentage ?? 20;
         resolvedIsScPwd = true;
@@ -1401,11 +1437,24 @@ router.get(
         if (!resolvedDiscountType) {
           resolvedDiscountType = resolvedDiscountPercentage ? "Percentage" : "Fixed";
         }
-        if (!resolvedDiscountName) {
-          resolvedDiscountName = resolvedDiscountType === "Percentage"
-            ? `Percentage Discount (${resolvedDiscountPercentage ?? 0}%)`
-            : "General Discount";
-        }
+      }
+
+      let approvalInfo: {
+        status: string;
+        approved_by: string;
+        approved_at?: string | null;
+        approval_method: string;
+      } | null = null;
+
+      if (sale.discount_request_id && (sale.discount_approval_status === "approved" || sale.discount_approved_by)) {
+        approvalInfo = {
+          status: "Approved",
+          approved_by: sale.approved_by_name || "Admin",
+          approved_at: sale.discount_approved_at ?? null,
+          approval_method: sale.approval_action === "DISCOUNT_APPROVED_LOCAL_OVERRIDE"
+            ? "Manager Override"
+            : "Remote Admin Approval",
+        };
       }
 
       const [itemRows] = await pool.execute<any[]>(
@@ -1449,6 +1498,7 @@ router.get(
         discount_type: resolvedDiscountType ?? null,
         discount_percentage: resolvedDiscountPercentage,
         discount_is_sc_pwd: resolvedIsScPwd,
+        approval_info: approvalInfo,
         items: itemRows.map((r: any) => ({
           ...r,
           unit_price:      Number(r.unit_price),

@@ -171,13 +171,19 @@ export default function Cashier() {
   // without a stale closure.
   useEffect(() => { discountRequestIdRef.current = discountRequestId; }, [discountRequestId]);
 
-  // ── Reset discount approval modal when discount changes ───────────────────
-  // Guards against stale modal state: if the cashier changes or clears the
-  // discount while a previous approval attempt is in-flight or lingering,
-  // close the modal and reset the request ID so the next attempt starts fresh.
+  // ── Reset discount approval modal & sanitize state when discount changes ─
+  // Guards against stale modal/approval state or lingering SC/PWD fields
+  // when switching between discounts or clearing the discount.
   useEffect(() => {
     setShowDiscountApprovalModal(false);
     setDiscountRequestId(null);
+    if (!selectedDiscount || !selectedDiscount.isScPwd) {
+      setCustomerInfo((prev) => ({
+        ...prev,
+        scPwdType: "NONE",
+        scPwdId: "",
+      }));
+    }
   }, [selectedDiscount]);
 
   // ── Auto-save cart draft after every change ───────────────────────────────
@@ -259,7 +265,7 @@ export default function Cashier() {
   // Calculate discount amount
   // SC/PWD discount (RA 9994/9442): apply percentage on VAT-exclusive base of VATABLE items only
   // Regular discount: apply percentage on VAT-inclusive total
-  const isScPwdSelected = (customerInfo.scPwdType && customerInfo.scPwdType !== "NONE") || (selectedDiscount?.isScPwd ?? false);
+  const isScPwdSelected = selectedDiscount?.isScPwd ?? false;
   // VAT-exclusive base for SC/PWD — only VATABLE items are eligible
   const vatExclusiveCents = isScPwdSelected
     ? Math.round(vatableCents / (1 + taxRate / 100))
@@ -268,8 +274,6 @@ export default function Cashier() {
     ? isScPwdSelected
       ? Math.round((vatExclusiveCents * selectedDiscount.percentage) / 100)
       : Math.round((totalCents * selectedDiscount.percentage) / 100)
-    : isScPwdSelected
-    ? Math.round((vatExclusiveCents * 20) / 100)
     : 0;
   // For SC/PWD: final payable = VAT-exclusive base - discount (+ non-vatable items)
   // For regular: final payable = VAT-inclusive total - discount
@@ -277,7 +281,9 @@ export default function Cashier() {
     ? (vatExclusiveCents - discountCents) + nonVatableCents
     : totalCents - discountCents;
   // SC/PWD identification — required when an SC/PWD discount is selected
-  const scPwdType = isScPwdSelected ? (customerInfo.scPwdType ?? "NONE") : "NONE";
+  const scPwdType = isScPwdSelected
+    ? (customerInfo.scPwdType && customerInfo.scPwdType !== "NONE" ? customerInfo.scPwdType : "NONE")
+    : "NONE";
   const scPwdId = isScPwdSelected ? (customerInfo.scPwdId ?? "") : "";
   const scPwdIdValid = !isScPwdSelected || (scPwdType !== "NONE" && scPwdId.trim().length > 0);
   const showScPwdFields = isScPwdSelected;

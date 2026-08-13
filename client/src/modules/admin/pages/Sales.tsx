@@ -102,31 +102,41 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
           )}
 
           {sale && !loading && (() => {
-            const hasDiscount   = sale.discount > 0;
-            const isScPwd       = sale.sc_pwd_type !== "NONE";
+            const discountVal   = Number(sale.discount ?? 0);
+            const hasDiscount   = discountVal > 0;
+            const isSenior      = sale.sc_pwd_type === "SENIOR_CITIZEN";
+            const isPwd         = sale.sc_pwd_type === "PWD";
+            const isScPwd       = isSenior || isPwd;
+            const totalVal      = Number(sale.total_amount ?? 0);
             const grossTotal    = sale.items && sale.items.length > 0
               ? sale.items.reduce((sum, item) => sum + Number(item.subtotal), 0)
-              : (hasDiscount ? sale.total_amount + sale.discount : sale.total_amount);
-            // BIR-mandated VAT rate for the Philippines.
-            // The `sales` table does not store the rate used at transaction time,
-            // so reverse-computing it from stored amounts produces incorrect labels
-            // (13%, 15%, etc.) due to per-item centavo rounding and historical
-            // settings changes. The vat_amount stored in the DB is the correct
-            // accounting figure — the label is purely informational.
-            const scPwdLabel = sale.sc_pwd_type === "SENIOR_CITIZEN" ? "Senior Citizen" : sale.sc_pwd_type === "PWD" ? "PWD" : null;
-            const discountTypeLabel = isScPwd
-              ? `${scPwdLabel}${sale.discount_percentage ? ` (${sale.discount_percentage}%)` : ""}`
-              : sale.discount_name && sale.discount_type
-              ? `${sale.discount_name} (${sale.discount_percentage ? `${sale.discount_percentage}%` : sale.discount_type})`
-              : sale.discount_name
-              ? `${sale.discount_name}${sale.discount_percentage ? ` (${sale.discount_percentage}%)` : ""}`
-              : sale.discount_type === "Percentage"
-              ? `Percentage ${sale.discount_percentage ? `(${sale.discount_percentage}%)` : "Discount"}`
-              : sale.discount_type === "Fixed"
-              ? "Fixed Amount"
-              : hasDiscount
-              ? "Applied Discount"
-              : null;
+              : (hasDiscount ? totalVal + discountVal : totalVal);
+
+            let discountTypeDisplay = "None";
+            if (isSenior) {
+              discountTypeDisplay = "Senior Citizen";
+            } else if (isPwd) {
+              discountTypeDisplay = "PWD";
+            } else if (hasDiscount) {
+              discountTypeDisplay = sale.discount_name || (sale.discount_is_sc_pwd ? "SC/PWD" : "Discount");
+            }
+
+            let discountRateDisplay: string | null = null;
+            if (isScPwd) {
+              discountRateDisplay = `${sale.discount_percentage ?? 20}%`;
+            } else if (hasDiscount) {
+              if (sale.discount_percentage != null) {
+                discountRateDisplay = `${sale.discount_percentage}%`;
+              } else if (sale.discount_type === "Fixed") {
+                discountRateDisplay = "Fixed Amount";
+              } else {
+                discountRateDisplay = "Not recorded";
+              }
+            }
+
+            const discountAmountDisplay = hasDiscount ? `-${fmt(discountVal)}` : "₱0.00";
+            const idLabel = isSenior ? "SC ID:" : isPwd ? "PWD ID:" : null;
+            const idValue = isScPwd ? (sale.sc_pwd_id || "Not provided") : null;
 
             return (
               <div className="px-6 py-5 space-y-4">
@@ -144,19 +154,56 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                     {sale.customer_tin && (
                       <div><span className="text-gray-500">TIN:</span> <span className="text-gray-700 font-mono ml-1">{sale.customer_tin}</span></div>
                     )}
-                    {/* Discount identification info */}
-                    {(hasDiscount || isScPwd) && (
-                      <>
+                  </div>
+                </div>
+
+                {/* Discount Information */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Discount Information</p>
+                  <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-200/80 space-y-2 text-sm">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                      <div>
+                        <span className="text-gray-500">Discount Type:</span>
+                        <span className="font-bold text-amber-900 ml-1.5">{discountTypeDisplay}</span>
+                      </div>
+                      {discountRateDisplay && (
                         <div>
-                          <span className="text-gray-500">Discount Type:</span>
-                          <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                            {discountTypeLabel}
+                          <span className="text-gray-500">Discount Rate:</span>
+                          <span className="font-semibold text-gray-900 ml-1.5">{discountRateDisplay}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-500">Discount Amount:</span>
+                        <span className={`font-bold ml-1.5 ${hasDiscount ? "text-amber-700" : "text-gray-900"}`}>
+                          {discountAmountDisplay}
+                        </span>
+                      </div>
+                      {idLabel && (
+                        <div>
+                          <span className="text-gray-500">{idLabel}</span>
+                          <span className="font-mono text-gray-900 ml-1.5">{idValue}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Approval Information */}
+                    {sale.approval_info && (
+                      <div className="pt-2.5 mt-2.5 border-t border-amber-200/60 grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
+                        <div>
+                          <span className="text-gray-500">Approval:</span>
+                          <span className="font-semibold text-emerald-700 ml-1.5 px-2 py-0.5 rounded bg-emerald-100/80">
+                            {sale.approval_info.status}
                           </span>
                         </div>
-                        {sale.sc_pwd_id && (
-                          <div><span className="text-gray-500">ID No.:</span> <span className="font-mono text-gray-700 ml-1">{sale.sc_pwd_id}</span></div>
-                        )}
-                      </>
+                        <div>
+                          <span className="text-gray-500">Approved By:</span>
+                          <span className="font-medium text-gray-900 ml-1.5">{sale.approval_info.approved_by}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Approval Method:</span>
+                          <span className="font-medium text-gray-900 ml-1.5">{sale.approval_info.approval_method}</span>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

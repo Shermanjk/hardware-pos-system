@@ -43,40 +43,39 @@ export default function CustomerPanel({ customerInfo, setCustomerInfo, showScPwd
             />
           </div>
 
-          {/* SC/PWD Type Selector — shown when an SC/PWD discount is selected */}
+          {/* Customer Type Selector & ID — shown dynamically when an SC/PWD statutory discount is selected */}
           {showScPwdFields && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-800 mb-1">
-                Discount Type <span className="text-red-500">*</span>
-              </label>
-              <Select
-                value={customerInfo.scPwdType || "NONE"}
-                onValueChange={(v) => setScPwdType(v as "NONE" | "SENIOR_CITIZEN" | "PWD")}
-              >
-                <SelectTrigger className="h-10 text-sm bg-white border-slate-400 text-slate-900">
-                  <SelectValue placeholder="Select discount type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SENIOR_CITIZEN">Senior Citizen</SelectItem>
-                  <SelectItem value="PWD">PWD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  Customer Type <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={customerInfo.scPwdType && customerInfo.scPwdType !== "NONE" ? customerInfo.scPwdType : ""}
+                  onValueChange={(v) => setScPwdType(v as "NONE" | "SENIOR_CITIZEN" | "PWD")}
+                >
+                  <SelectTrigger className="h-10 text-sm bg-white border-slate-400 text-slate-900">
+                    <SelectValue placeholder="Select customer type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SENIOR_CITIZEN">Senior Citizen</SelectItem>
+                    <SelectItem value="PWD">PWD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* SC/PWD ID — required when SC/PWD type is selected */}
-          {showScPwdFields && customerInfo.scPwdType && customerInfo.scPwdType !== "NONE" && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-800 mb-1">
-                {customerInfo.scPwdType === "SENIOR_CITIZEN" ? "OSCA / Senior Citizen ID" : "PWD ID"} <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={customerInfo.scPwdId || ""}
-                onChange={(e) => set("scPwdId", e.target.value)}
-                placeholder={customerInfo.scPwdType === "SENIOR_CITIZEN" ? "Enter OSCA / SC ID number" : "Enter PWD ID number"}
-                className="h-10 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  {customerInfo.scPwdType === "PWD" ? "PWD ID Number" : "OSCA / Senior Citizen ID Number"} <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={customerInfo.scPwdId || ""}
+                  onChange={(e) => set("scPwdId", e.target.value)}
+                  placeholder={customerInfo.scPwdType === "PWD" ? "Enter PWD ID number" : "Enter OSCA / SC ID number"}
+                  className="h-10 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </>
           )}
 
           <div>

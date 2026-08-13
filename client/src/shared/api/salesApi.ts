@@ -18,6 +18,13 @@ export interface SaleItem {
   quantity_returned: number;
 }
 
+export interface SaleApprovalInfo {
+  status: string;
+  approved_by: string;
+  approved_at?: string | null;
+  approval_method: "Remote Admin Approval" | "Manager Override" | string;
+}
+
 export interface Sale {
   id: number;
   invoice_number: string;
@@ -48,6 +55,7 @@ export interface Sale {
   discount_percentage: number | null;
   /** True when the applied discount is an SC/PWD type discount. */
   discount_is_sc_pwd: boolean;
+  approval_info?: SaleApprovalInfo | null;
   items: SaleItem[];
 }
 
