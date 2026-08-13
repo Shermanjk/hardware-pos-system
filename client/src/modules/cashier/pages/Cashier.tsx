@@ -406,6 +406,7 @@ export default function Cashier() {
       setSelectedDiscount(null);
       setDiscountRequestId(null);
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
+      barcodeRef.current?.focus();
     } catch (err: unknown) { toast.error(getErrorMessage(err, "Failed to suspend sale.")); }
   }, [cartItems, customerInfo, holdCounter, loadSuspendedSales, selectedDiscount]);
 
@@ -426,6 +427,7 @@ export default function Cashier() {
     try { await discardSuspendedSale(holdId); loadSuspendedSales(); }
     catch (err: unknown) { toast.error(getErrorMessage(err, "Failed to remove held order.")); }
     toast.success(`Resumed: ${held.label || held.suspended_order_id}`);
+    barcodeRef.current?.focus();
   }, [suspendedSales, loadSuspendedSales]);
 
   const handleDiscard = useCallback(async (holdId: string) => {
@@ -563,6 +565,7 @@ export default function Cashier() {
         toast.info(`Sale already processed: ${saleResult.invoice_number}`, { description: "This transaction was already completed. No duplicate was created.", duration: 8000 });
       else
         toast.success(`Sale completed: ${saleResult.invoice_number}`, { description: receiptPrinted ? "Receipt printed." : "Receipt not printed.", duration: 5000 });
+      barcodeRef.current?.focus();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Payment failed. No changes were saved."));
     } finally { setIsProcessing(false); }
@@ -582,6 +585,7 @@ export default function Cashier() {
     setDiscountRequestId(null); // approval must be re-obtained
     setRecoverableDraft(null);
     toast.success("Draft restored — continue where you left off.");
+    barcodeRef.current?.focus();
   };
 
   const handleDiscardDraft = () => {
@@ -785,7 +789,7 @@ export default function Cashier() {
       <EndShiftModal
         open={showEndShift}
         onClose={() => setShowEndShift(false)}
-        onShiftOpened={() => setHasOpenSession(true)}
+        onShiftOpened={() => { setHasOpenSession(true); barcodeRef.current?.focus(); }}
         onShiftClosed={() => setHasOpenSession(false)}
       />
 

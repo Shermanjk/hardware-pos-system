@@ -9,6 +9,15 @@ import { toast } from "sonner";
 import { fmtCents, toCentavos } from "../utils/money";
 import type { CartItem } from "../utils/receipt";
 
+// ─── Scanner constants ───────────────────────────────────────────────────────
+// Max gap (ms) between keystrokes for them to be treated as one barcode scan.
+// Real keyboard-wedge scanners burst keystrokes well under this; manual typing
+// is slower.
+const SCAN_GAP_MS = 60;
+// If a burst goes quiet this long without a trailing Enter (some scanners don't
+// send one), process what we have as a completed scan.
+const SCAN_IDLE_MS = 150;
+
 /** Per-item qty input draft state (keyed by item id) */
 type QtyDraft = Record<number, string>;
 
@@ -55,6 +64,14 @@ export default function CartPanel({
   const [discountsLoading, setDiscountsLoading] = useState(false);
   const [qtyDraft, setQtyDraft] = useState<QtyDraft>({});
 
+  // ── Global scanner refs (keyboard-wedge capture) ─────────────────────────
+  // Backing refs for the document-level keydown capture that lets a scan work
+  // even when the scan input is not focused. Real keyboard-wedge scanners burst
+  // keystrokes well under SCAN_GAP_MS; slow manual typing is much slower.
+  const scanBufferRef = useRef("");
+  const lastScanKeyTimeRef = useRef(0);
+  const scanIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const loadDiscounts = async () => {
     setDiscountsLoading(true);
     try {
@@ -82,6 +99,57 @@ export default function CartPanel({
     }
     wasEmptyRef.current = isEmpty;
   }, [cartItems.length]);
+
+  // ── Always-hot scan input ─────────────────────────────────────────────────
+  // The barcode scanner is a keyboard-wedge device: it types into whatever
+  // element has focus. To let the cashier scan without clicking the search
+  // bar, silently return focus to the barcode input whenever it lands on a
+  // non-interactive area (page background, cart, panels, plain buttons).
+  // We deliberately do NOT steal focus from:
+  //   - real text fields (Customer Name, Cash, cart qty) — user is typing
+  //   - modal dialogs / popovers / dropdown menus / select lists (Radix portals)
+  //   - popover/menu/select triggers (aria-haspopup) — Radix needs them
+  useEffect(() => {
+    if (noShift) return;
+    const inputEl = barcodeRef.current;
+    if (!inputEl) return;
+    const input: HTMLInputElement = inputEl;
+
+    function handleFocusIn(e: FocusEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // Already focused on the scan input — nothing to do.
+      if (target === input) return;
+      // Don't steal focus from real text-entry fields.
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) return;
+      // Don't steal focus from Radix popover/menu/select triggers.
+      if (target.hasAttribute("aria-haspopup")) return;
+      // Don't steal focus from anything inside a modal dialog, popover, or menu.
+      if (
+        target.closest(
+          '[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]'
+        )
+      ) return;
+      // Otherwise, snap focus back to the scan input.
+      input.focus();
+    }
+
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
+  }, [noShift, barcodeRef]);
+
+  // When a shift is started (noShift flips to false), focus the scan input so
+  // the very next scan works without clicking the search bar.
+  useEffect(() => {
+    if (!noShift) {
+      barcodeRef.current?.focus();
+    }
+  }, [noShift, barcodeRef]);
 
   const addProductToCart = useCallback((product: CashierProduct) => {
     if (product.quantity <= 0) {
@@ -119,38 +187,171 @@ export default function CartPanel({
     barcodeRef.current?.focus();
   }, [setCartItems, setBarcodeInput, setShowDropdown, setSearchResults, barcodeRef]);
 
+  // ── Shared barcode/product lookup ──────────────────────────────────────────
+  // Used by both the manual search-as-you-type path (input focused) and the
+  // global scanner capture path (scan input NOT focused).
+  const lookupAndMaybeAdd = useCallback(async (query: string) => {
+    setSearchLoading(true);
+    try {
+      const results = await lookupProduct(query);
+      const filteredResults = results.filter(r => r.pricing_type !== "MARKET_BASED");
+      if (filteredResults.length === 1 && filteredResults[0].barcode === query) {
+        addProductToCart(filteredResults[0]);
+        return;
+      }
+      setSearchResults(filteredResults);
+      setShowDropdown(filteredResults.length > 0);
+    } catch {
+      toast.error("Product lookup failed. Check your connection.");
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [addProductToCart]);
+
   const handleBarcodeChange = (value: string) => {
     setBarcodeInput(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     if (!value.trim()) { setShowDropdown(false); setSearchResults([]); return; }
-    searchTimeoutRef.current = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const results = await lookupProduct(value.trim());
-        const filteredResults = results.filter(r => r.pricing_type !== "MARKET_BASED");
-        if (filteredResults.length === 1 && filteredResults[0].barcode === value.trim()) {
-          addProductToCart(filteredResults[0]);
-          setSearchLoading(false);
-          return;
-        }
-        setSearchResults(filteredResults);
-        setShowDropdown(filteredResults.length > 0);
-      } catch {
-        toast.error("Product lookup failed. Check your connection.");
-      } finally {
-        setSearchLoading(false);
-      }
+    searchTimeoutRef.current = setTimeout(() => {
+      lookupAndMaybeAdd(value.trim());
     }, 300);
   };
+
+  // ── Global keyboard-wedge capture ─────────────────────────────────────────
+  // A USB barcode scanner is a keyboard-wedge device: it fires keyboard events
+  // into whatever element currently has focus. If the cashier isn't typing in
+  // the scan input (a button/panel has focus), those keystrokes would be lost.
+  // This capture-phase listener buffers a fast burst of printable characters
+  // from anywhere in the app and — on the trailing Enter (most scanners send
+  // one) or a short idle gap — performs the lookup directly. No clicking the
+  // search bar required.
+  const handleScanComplete = useCallback((raw: string) => {
+    const code = raw.trim();
+    scanBufferRef.current = "";
+    if (!code) return;
+    setBarcodeInput(code);
+    // Cancel any in-flight debounce from the input's own onChange so we don't
+    // fire two concurrent lookups for the same scan.
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    lookupAndMaybeAdd(code);
+  }, [lookupAndMaybeAdd, setBarcodeInput, searchTimeoutRef]);
+
+  useEffect(() => {
+    if (noShift) return;
+
+    // Radix renders popovers/menus/dialogs/selects into body-level portals. If
+    // any overlay is open, don't treat keystrokes as scans — the cashier might
+    // be interacting with a modal (End Shift, Returns, Void) or a dropdown.
+    const OVERLAY_SELECTOR =
+      '[data-radix-popper-content-wrapper], [data-radix-dialog-content], [data-radix-menu-content], [data-radix-select-content], [data-radix-popover-content]';
+
+    function isTypingArea(el: Element | null): boolean {
+      if (!el) return false;
+      if (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        (el as HTMLElement).isContentEditable
+      ) return true;
+      // Radix popovers, menus, dialogs, select lists
+      return !!el.closest(
+        '[role="dialog"], [role="menu"], [role="listbox"], ' + OVERLAY_SELECTOR
+      );
+    }
+
+    function handleScannerKeyDown(e: KeyboardEvent) {
+      if (noShift) return;
+
+      // If a Radix overlay is currently open, skip scanning entirely.
+      if (document.querySelector(OVERLAY_SELECTOR)) return;
+
+      const activeEl = document.activeElement as HTMLElement | null;
+
+      // If the scan input itself is focused, its own onChange + handleKeyDown
+      // already handle the scan — don't double-process here.
+      if (activeEl === barcodeRef.current) return;
+
+      // Never hijack typing in a real text field or Radix portal.
+      if (isTypingArea(activeEl)) return;
+
+      // Ignore modifier/navigation keys — they never start a scan burst.
+      if (
+        e.key === "Shift" || e.key === "Control" || e.key === "Alt" ||
+        e.key === "Meta" || e.key === "CapsLock" || e.key === "Tab"
+      ) return;
+
+      // Trailing Enter terminates the burst (most scanners send Enter).
+      if (e.key === "Enter") {
+        if (scanBufferRef.current.trim()) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (scanIdleTimerRef.current) {
+            clearTimeout(scanIdleTimerRef.current);
+            scanIdleTimerRef.current = null;
+          }
+          handleScanComplete(scanBufferRef.current);
+        }
+        return;
+      }
+
+      // Only buffer printable characters.
+      if (e.key.length !== 1) return;
+
+      const now = Date.now();
+      if (lastScanKeyTimeRef.current > 0 && now - lastScanKeyTimeRef.current > SCAN_GAP_MS) {
+        // Slow typing (>SCAN_GAP_MS between keys) — treat as a fresh burst so
+        // human typing doesn't accidentally merge into a barcode.
+        scanBufferRef.current = "";
+      }
+      lastScanKeyTimeRef.current = now;
+      scanBufferRef.current += e.key;
+
+      // Some scanners don't send a trailing Enter. If the burst goes quiet
+      // for SCAN_IDLE_MS, assume the scan is complete.
+      if (scanIdleTimerRef.current) clearTimeout(scanIdleTimerRef.current);
+      scanIdleTimerRef.current = setTimeout(() => {
+        scanIdleTimerRef.current = null;
+        if (scanBufferRef.current.trim()) {
+          handleScanComplete(scanBufferRef.current);
+        }
+      }, SCAN_IDLE_MS);
+    }
+
+    document.addEventListener("keydown", handleScannerKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleScannerKeyDown, true);
+      if (scanIdleTimerRef.current) clearTimeout(scanIdleTimerRef.current);
+    };
+  }, [noShift, barcodeRef, handleScanComplete]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
+
+    const query = barcodeInput.trim();
+    if (!query) return;
+
     if (searchResults.length === 1) {
+      // Exactly one result — add it regardless of barcode match.
       addProductToCart(searchResults[0]);
     } else if (searchResults.length > 1) {
-      const exact = searchResults.find((r) => r.barcode === barcodeInput.trim());
+      // Multiple results — only auto-add on exact barcode match.
+      const exact = searchResults.find((r) => r.barcode === query);
       if (exact) addProductToCart(exact);
+    } else {
+      // ── Scanner race-condition fix ──────────────────────────────────────
+      // Barcode scanners fire all characters + Enter in < 100 ms. The 300 ms
+      // debounce in handleBarcodeChange hasn't fired yet, so searchResults is
+      // still empty when Enter arrives. Cancel the pending debounce and do an
+      // immediate lookup instead so the scan isn't silently dropped.
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+      lookupAndMaybeAdd(query);
     }
   };
 
