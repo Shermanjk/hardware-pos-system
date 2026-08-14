@@ -80,7 +80,7 @@ export default function PaymentPanel({
           <span className="font-medium tabular-nums">₱{fmtCents(isScPwd ? vatExemptCents : subtotalCents)}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-700">
-          <span>VAT ({taxRate}%)</span>
+          <span>{isScPwd ? "VAT (Exempt)" : `VAT (${taxRate}%)`}</span>
           <span className="font-medium tabular-nums">₱{fmtCents(displayTaxCents)}</span>
         </div>
         
@@ -102,10 +102,16 @@ export default function PaymentPanel({
         </div>
 
         <div className="border-t border-dashed border-slate-300 pt-3 space-y-2">
-          <label className="block text-xs font-semibold text-slate-800 uppercase tracking-wide">Cash Tendered</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-slate-800 uppercase tracking-wide">Cash Tendered</label>
+            <span className="text-[10px] font-mono text-slate-500 bg-slate-200 px-1 py-0.5 rounded font-medium">
+              F8 / Alt+P
+            </span>
+          </div>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold pointer-events-none select-none" style={{ fontSize: "1.4rem", lineHeight: 1, color: "#475569" }}>₱</span>
             <input
+              id="cash-tendered-input"
               type="text"
               inputMode="decimal"
               value={cashTendered}
@@ -134,18 +140,18 @@ export default function PaymentPanel({
           </div>
 
           {cashCents > 0 && cashCents < finalTotalCents && (
-            <div className="flex justify-between text-xs text-red-600 font-medium bg-red-50 rounded-lg px-3 py-1.5">
-              <span>Short by</span>
-              <span className="tabular-nums">₱{fmtCents(finalTotalCents - cashCents)}</span>
+            <div className="flex justify-between items-center text-xs text-rose-700 font-semibold bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 shadow-xs">
+              <span className="flex items-center gap-1">⚠️ Short by</span>
+              <span className="tabular-nums font-bold text-rose-700 text-sm">₱{fmtCents(finalTotalCents - cashCents)}</span>
             </div>
           )}
 
           {changeCents !== null && (
-            <div className={`flex justify-between items-baseline rounded-lg px-3 py-2 ${isExact ? "bg-blue-50 border border-blue-200" : "bg-green-50 border border-green-200"}`}>
-              <span className={`text-sm font-bold ${isExact ? "text-blue-700" : "text-green-700"}`}>
-                {isExact ? "Exact Change" : "Change"}
+            <div className={`flex justify-between items-baseline rounded-lg px-3.5 py-2.5 shadow-xs border ${isExact ? "bg-blue-50/90 border-blue-200" : "bg-emerald-50 border-emerald-300"}`}>
+              <span className={`text-xs font-bold uppercase tracking-wider ${isExact ? "text-blue-800" : "text-emerald-800"}`}>
+                {isExact ? "Exact Payment" : "Change Due"}
               </span>
-              <span className={`text-2xl font-bold tabular-nums ${isExact ? "text-blue-600" : "text-green-600"}`}>
+              <span className={`text-2xl font-black tabular-nums tracking-tight ${isExact ? "text-blue-600" : "text-emerald-600"}`}>
                 ₱{fmtCents(changeCents)}
               </span>
             </div>
@@ -153,13 +159,13 @@ export default function PaymentPanel({
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-end gap-2">
+      <div className="flex-1 flex flex-col justify-end gap-2.5">
         <Button
-          className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl gap-2 disabled:opacity-50"
+          className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-lg gap-2 shadow-sm border border-emerald-700/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={noShift || cartLength === 0 || cashCents < finalTotalCents || !customerName.trim() || isProcessing || isOffline || pendingApproval}
           onClick={onProcessPayment}
         >
-          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center">₱</span>}
+          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-5 w-5 flex items-center justify-center font-bold text-base">₱</span>}
           {isProcessing
             ? "Processing..."
             : noShift
@@ -172,54 +178,76 @@ export default function PaymentPanel({
             ? "Enter Customer Name"
             : cashCents > 0 && cashCents < finalTotalCents
             ? "Insufficient Cash"
-            : "Process Payment"}
+            : "Process Payment (Enter ↵)"}
         </Button>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <Button
-              className="relative h-10 text-sm rounded-xl gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-11 text-xs font-semibold rounded-lg gap-1.5 bg-amber-50 hover:bg-amber-100/90 active:bg-amber-200/80 text-amber-900 border border-amber-300 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed justify-between px-3"
               onClick={onHold}
               disabled={noShift || cartLength === 0 || !customerName.trim()}
             >
-              <PauseCircle className="h-4 w-4" /> Hold
+              <div className="flex items-center gap-1.5">
+                <PauseCircle className="h-4 w-4 text-amber-700 shrink-0" />
+                <span>Hold</span>
+              </div>
+              <span className="font-mono text-[10px] bg-amber-200/80 text-amber-900 px-1 py-0.5 rounded">F5</span>
             </Button>
             <Button
-              className="relative h-10 text-sm rounded-xl gap-1.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-11 text-xs font-semibold rounded-lg gap-1.5 bg-orange-50 hover:bg-orange-100/90 active:bg-orange-200/80 text-orange-900 border border-orange-300 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed justify-between px-3"
               onClick={onHoldOrders}
               disabled={noShift}
             >
-              <PauseCircle className="h-4 w-4" /> Held Transactions
-              {pendingHeldOrdersCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-orange-600 text-xs font-bold">
-                  {pendingHeldOrdersCount}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <PauseCircle className="h-4 w-4 text-orange-700 shrink-0" />
+                <span className="truncate">Held Orders</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="font-mono text-[10px] bg-orange-200/80 text-orange-900 px-1 py-0.5 rounded">F6</span>
+                {pendingHeldOrdersCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-orange-600 text-white text-[10px] font-bold">
+                    {pendingHeldOrdersCount}
+                  </span>
+                )}
+              </div>
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button
-              className="relative h-10 text-sm rounded-xl gap-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-11 text-xs font-semibold rounded-lg gap-1.5 bg-indigo-50 hover:bg-indigo-100/90 active:bg-indigo-200/80 text-indigo-900 border border-indigo-300 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed justify-between px-3"
               onClick={hasApprovedReturns ? onPendingReturns : onReturn}
               disabled={noShift}
             >
-              <RotateCcw className="h-4 w-4" /> {hasApprovedReturns ? "Process Return" : "Return"}
-              {pendingReturnsCount > 0 && (
-                <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-xs font-bold ${hasApprovedReturns ? "bg-green-500" : "bg-white text-purple-600"}`}>
-                  {pendingReturnsCount}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <RotateCcw className="h-4 w-4 text-indigo-700 shrink-0" />
+                <span className="truncate">{hasApprovedReturns ? "Returns" : "Return"}</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="font-mono text-[10px] bg-indigo-200/80 text-indigo-900 px-1 py-0.5 rounded">F7</span>
+                {pendingReturnsCount > 0 && (
+                  <span className={`inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-white text-[10px] font-bold ${hasApprovedReturns ? "bg-emerald-600" : "bg-indigo-600"}`}>
+                    {pendingReturnsCount}
+                  </span>
+                )}
+              </div>
             </Button>
             <Button
-              className="relative h-10 text-sm rounded-xl gap-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold border-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="relative h-11 text-xs font-semibold rounded-lg gap-1.5 bg-rose-50 hover:bg-rose-100/90 active:bg-rose-200/80 text-rose-900 border border-rose-300 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed justify-between px-3"
               onClick={onVoidRequests}
               disabled={noShift}
             >
-              <Ban className="h-4 w-4" /> Void Requests
-              {pendingVoidRequestsCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-red-600 text-xs font-bold">
-                  {pendingVoidRequestsCount}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Ban className="h-4 w-4 text-rose-700 shrink-0" />
+                <span className="truncate">Void Reqs</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="font-mono text-[10px] bg-rose-200/80 text-rose-900 px-1 py-0.5 rounded">F9</span>
+                {pendingVoidRequestsCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold">
+                    {pendingVoidRequestsCount}
+                  </span>
+                )}
+              </div>
             </Button>
           </div>
           {noShift && (

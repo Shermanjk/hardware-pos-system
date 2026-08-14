@@ -5,7 +5,11 @@ import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
-import { broadcastDiscountRequest, sendDiscountDecision } from "../ws.js";
+import {
+  broadcastDiscountCancellation,
+  broadcastDiscountRequest,
+  sendDiscountDecision,
+} from "../ws.js";
 
 const router = Router();
 
@@ -536,9 +540,11 @@ router.delete(
         await conn.beginTransaction();
 
         const [rows] = await conn.execute<any[]>(
-          `SELECT dr.id, dr.cashier_id, dr.status, dr.discount_id, d.discount_name
+          `SELECT dr.id, dr.cashier_id, dr.status, dr.discount_id, d.discount_name,
+                  u.full_name AS cashier_name, u.username AS cashier_username
            FROM discount_requests dr
            JOIN discounts d ON d.id = dr.discount_id
+           JOIN users u ON u.id = dr.cashier_id
            WHERE dr.id = ? FOR UPDATE`,
           [requestId]
         );
@@ -578,6 +584,17 @@ router.delete(
             discount_id: request.discount_id,
             discount_name: request.discount_name,
           },
+        });
+
+        // Broadcast cancellation event to all connected admin terminals
+        broadcastDiscountCancellation({
+          type: "discount_cancelled",
+          request_id: requestId,
+          discount_id: request.discount_id,
+          discount_name: request.discount_name,
+          cashier_name: request.cashier_name ?? request.cashier_username ?? "Cashier",
+          cashier_user_id: request.cashier_id,
+          cancelled_at: new Date().toISOString(),
         });
 
         res.status(200).json({ message: "Discount request cancelled successfully." });

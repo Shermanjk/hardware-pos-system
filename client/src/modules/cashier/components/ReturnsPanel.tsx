@@ -223,10 +223,25 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     toast.success("Return approved! You can now process it.");
   };
 
+  useEffect(() => {
+    if (!show) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if an auth modal or dialog is open
+      if (showAuthModal) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        resetPanel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [show, showAuthModal, onClose]);
+
   return (
     <>
       {show && <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { onClose(); resetPanel(); }} />}
-      <div className={`fixed top-0 right-0 h-full w-[480px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${show ? "translate-x-0" : "translate-x-full"}`}>
+      <div data-drawer="true" className={`fixed top-0 right-0 h-full w-[480px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${show ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-2"><RotateCcw className="h-5 w-5 text-blue-500" /><h2 className="text-base font-bold text-gray-900">Process Return</h2></div>
           <button onClick={() => { onClose(); resetPanel(); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><X className="h-4 w-4" /></button>

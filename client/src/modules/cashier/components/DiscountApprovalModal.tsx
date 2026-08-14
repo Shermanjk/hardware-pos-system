@@ -49,6 +49,7 @@ export default function DiscountApprovalModal({
 
   // ── Remote-flow state ──────────────────────────────────────────────────────
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [requestId, setRequestId]       = useState<number | null>(null);
 
   // ── Local override state ───────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export default function DiscountApprovalModal({
       setAdminName("");
       setRejectionReason("");
       setIsRequesting(false);
+      setIsCancelling(false);
       setRequestId(null);
       setLocalRequestId(null);
       setManagerUsername("");
@@ -219,7 +221,8 @@ export default function DiscountApprovalModal({
   };
 
   const handleCancelRequest = async () => {
-    if (!requestId) return;
+    if (!requestId || isCancelling) return;
+    setIsCancelling(true);
     try {
       await httpClient.delete(`/api/discount-approvals/${requestId}`);
       if (!mountedRef.current) return;
@@ -228,6 +231,8 @@ export default function DiscountApprovalModal({
     } catch (err: any) {
       if (!mountedRef.current) return;
       toast.error(err?.response?.data?.message ?? "Failed to cancel request.");
+    } finally {
+      if (mountedRef.current) setIsCancelling(false);
     }
   };
 
@@ -570,9 +575,11 @@ export default function DiscountApprovalModal({
             <Button
               variant="outline"
               onClick={handleCancelRequest}
-              className="w-full border-red-200 text-red-600 hover:bg-red-50"
+              disabled={isCancelling}
+              className="w-full border-red-200 text-red-600 hover:bg-red-50 gap-2"
             >
-              Cancel Request
+              {isCancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isCancelling ? "Cancelling…" : "Cancel Request"}
             </Button>
           )}
 

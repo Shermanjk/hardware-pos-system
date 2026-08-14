@@ -190,6 +190,18 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision, o
     });
   }, [newDecision, load]);
 
+  useEffect(() => {
+    if (!show) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [show, onClose]);
+
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const newCount = requests.filter((r) => r.status !== "pending").length;
 
@@ -198,6 +210,7 @@ export default function CashierVoidRequestsPanel({ show, onClose, newDecision, o
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div
+        data-drawer="true"
         className="w-96 bg-white h-full shadow-2xl flex flex-col border-l-2 border-gray-300"
         onClick={(e) => e.stopPropagation()}
       >

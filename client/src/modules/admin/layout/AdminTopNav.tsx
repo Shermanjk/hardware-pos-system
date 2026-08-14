@@ -17,7 +17,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/shared/contexts/AuthContext";
-import { useReturnNotifications, useVoidRequestNotifications } from "@/shared/hooks/useReturnNotifications";
+import {
+  useDiscountNotifications,
+  useReturnNotifications,
+  useVoidRequestNotifications,
+} from "@/shared/hooks/useReturnNotifications";
 import { useLocation } from "wouter";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
@@ -34,6 +38,7 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
   const [date, setDate] = useState("");
   const { notifications, unreadCount, clearAll } = useReturnNotifications();
   const { notifications: voidNotifications, unreadCount: voidUnreadCount, clearAll: clearAllVoid } = useVoidRequestNotifications();
+  useDiscountNotifications();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{
     exists: boolean;

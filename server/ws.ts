@@ -75,6 +75,16 @@ export interface DiscountDecisionNotification {
   cashier_user_id: number;
 }
 
+export interface DiscountCancellationNotification {
+  type: "discount_cancelled";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  cancelled_at: string;
+}
+
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
@@ -214,11 +224,24 @@ export function broadcastDiscountRequest(notification: DiscountRequestNotificati
   }
 }
 
-export function sendDiscountDecision(notification: DiscountDecisionNotification): void {
-  const sockets = cashierClients.get(notification.cashier_user_id);
-  if (!sockets) return;
+export function broadcastDiscountCancellation(notification: DiscountCancellationNotification): void {
   const message = JSON.stringify(notification);
-  for (const client of Array.from(sockets)) {
+  for (const client of Array.from(adminClients)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function sendDiscountDecision(notification: DiscountDecisionNotification): void {
+  const message = JSON.stringify(notification);
+  // Send decision to the requesting cashier client(s)
+  const sockets = cashierClients.get(notification.cashier_user_id);
+  if (sockets) {
+    for (const client of Array.from(sockets)) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
+    }
+  }
+  // Also broadcast to all admin clients so other admin terminals update in real time
+  for (const client of Array.from(adminClients)) {
     if (client.readyState === WebSocket.OPEN) client.send(message);
   }
 }

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
+import { toast } from "sonner";
 
 interface DiscountRequest {
   id: number;
@@ -47,6 +48,16 @@ interface DiscountRequestNotification {
   cashier_name: string;
   cashier_user_id: number;
   created_at: string;
+}
+
+interface DiscountCancellationNotification {
+  type: "discount_cancelled";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  cancelled_at: string;
 }
 
 export default function DiscountApprovals() {
@@ -96,12 +107,35 @@ export default function DiscountApprovals() {
       ws.onopen = () => {
         retryDelay = 1000;
         loadRequests(); // Refresh on reconnect
+        window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === "discount_request" || data.type === "discount_decision") {
+          if (data.type === "discount_cancelled") {
+            const cancelledId = Number(data.request_id);
+            // Immediately remove the cancelled request from local state without clearing all
+            setRequests((prev) => prev.filter((r) => r.id !== cancelledId));
+            toast.info(`Discount request #${cancelledId} cancelled`, {
+              id: `discount-cancel-${cancelledId}`,
+              description: `${data.cashier_name || "Cashier"} cancelled the request for ${data.discount_name || "discount"}.`,
+              duration: 5000,
+            });
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+            loadRequests();
+          } else if (data.type === "discount_decision") {
+            const decidedId = Number(data.request_id);
+            setRequests((prev) => prev.filter((r) => r.id !== decidedId));
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+            loadRequests();
+          } else if (data.type === "discount_request") {
+            toast.warning(`New Discount Request`, {
+              id: `discount-req-${data.request_id}`,
+              description: `${data.cashier_name} requested ${data.requested_percentage}% on ${data.discount_name}`,
+              duration: 6000,
+            });
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
             loadRequests();
           }
         } catch {
@@ -159,10 +193,13 @@ export default function DiscountApprovals() {
 
   const handleApprove = async (requestId: number) => {
     try {
+      setRequests((prev) => prev.filter((r) => r.id !== requestId));
       await axios.patch(`/api/discount-approvals/${requestId}/approve`);
+      window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       loadRequests();
     } catch (err) {
       setError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to approve request" : "An error occurred");
+      loadRequests();
     }
   };
 
@@ -174,16 +211,20 @@ export default function DiscountApprovals() {
 
   const handleReject = async () => {
     if (!selectedRequest) return;
+    const targetId = selectedRequest.id;
     try {
-      await axios.patch(`/api/discount-approvals/${selectedRequest.id}/reject`, {
+      setRequests((prev) => prev.filter((r) => r.id !== targetId));
+      await axios.patch(`/api/discount-approvals/${targetId}/reject`, {
         rejection_reason: rejectionReason || null,
       });
       setIsRejectDialogOpen(false);
       setSelectedRequest(null);
       setRejectionReason("");
+      window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       loadRequests();
     } catch (err) {
       setError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to reject request" : "An error occurred");
+      loadRequests();
     }
   };
 

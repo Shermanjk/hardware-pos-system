@@ -48,6 +48,42 @@ export interface VoidDecisionNotification {
   cashier_user_id: number;
 }
 
+export interface DiscountRequestNotification {
+  type: "discount_request";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  requested_percentage: number;
+  discount_amount: number;
+  reason: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  created_at: string;
+}
+
+export interface DiscountDecisionNotification {
+  type: "discount_decision";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  requested_percentage: number;
+  discount_amount: number;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason: string | null;
+  cashier_user_id: number;
+}
+
+export interface DiscountCancellationNotification {
+  type: "discount_cancelled";
+  request_id: number;
+  discount_id: number;
+  discount_name: string;
+  cashier_name: string;
+  cashier_user_id: number;
+  cancelled_at: string;
+}
+
 // ─── Shared reconnecting WebSocket factory ────────────────────────────────────
 //
 // Creates a WebSocket that automatically reconnects after disconnection using
@@ -231,6 +267,38 @@ export function useVoidDecisions(
           const data: VoidDecisionNotification = JSON.parse(event.data);
           if (data.type !== "void_decision") return;
           onDecisionRef.current(data);
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
+  }, []);
+}
+
+// ─── Admin hook: receives discount request & cancellation notifications ────────
+
+export function useDiscountNotifications() {
+  useEffect(() => {
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "discount_request") {
+            toast.warning(`Discount Request`, {
+              id: `discount-req-${data.request_id}`,
+              description: `${data.cashier_name} · ${data.discount_name} (${data.requested_percentage}%) · ₱${Number(data.discount_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`,
+              duration: 6000,
+            });
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+          } else if (data.type === "discount_cancelled") {
+            toast.info(`Discount Request Cancelled`, {
+              id: `discount-cancel-${data.request_id}`,
+              description: `${data.cashier_name} cancelled request #${data.request_id} for ${data.discount_name}`,
+              duration: 5000,
+            });
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+          } else if (data.type === "discount_decision") {
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+          }
         } catch { /* ignore malformed */ }
       },
     });

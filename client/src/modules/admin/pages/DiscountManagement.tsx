@@ -125,12 +125,24 @@ export default function DiscountManagement() {
       ws.onopen = () => {
         retryDelay = 1000;
         loadRequests();
+        window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === "discount_request" || data.type === "discount_decision") {
+          if (data.type === "discount_cancelled") {
+            const cancelledId = Number(data.request_id);
+            setRequests((prev) => prev.filter((r) => r.id !== cancelledId));
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+            loadRequests();
+          } else if (data.type === "discount_decision") {
+            const decidedId = Number(data.request_id);
+            setRequests((prev) => prev.filter((r) => r.id !== decidedId));
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+            loadRequests();
+          } else if (data.type === "discount_request") {
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
             loadRequests();
           }
         } catch {
@@ -241,11 +253,13 @@ export default function DiscountManagement() {
 
   const handleApprove = async (id: number) => {
     try {
-      // FIX-E: Route is PATCH /:id/approve, not POST
+      setRequests((prev) => prev.filter((r) => r.id !== id));
       await httpClient.patch(`/api/discount-approvals/${id}/approve`);
+      window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       loadRequests();
     } catch (err) {
       setRequestsError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to approve request" : "An error occurred");
+      loadRequests();
     }
   };
 
@@ -257,15 +271,18 @@ export default function DiscountManagement() {
 
   const handleReject = async () => {
     if (!selectedRequest) return;
+    const targetId = selectedRequest.id;
     try {
-      // FIX-E+F: Route is PATCH /:id/reject and body field is `rejection_reason`
-      await httpClient.patch(`/api/discount-approvals/${selectedRequest.id}/reject`, { rejection_reason: rejectionReason });
+      setRequests((prev) => prev.filter((r) => r.id !== targetId));
+      await httpClient.patch(`/api/discount-approvals/${targetId}/reject`, { rejection_reason: rejectionReason });
       setIsRejectDialogOpen(false);
       setSelectedRequest(null);
       setRejectionReason("");
+      window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
       loadRequests();
     } catch (err) {
       setRequestsError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to reject request" : "An error occurred");
+      loadRequests();
     }
   };
 

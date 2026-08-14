@@ -22,6 +22,7 @@ import EndShiftModal from "../components/EndShiftModal";
 import type { HeldOrder } from "../components/HeldOrdersPanel";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
 import PaymentPanel from "../components/PaymentPanel";
+import PaymentSuccessModal, { type PaymentSuccessData } from "../components/PaymentSuccessModal";
 import type { HeldReturn } from "../components/PendingReturnsPanel";
 import PendingReturnsPanel from "../components/PendingReturnsPanel";
 import ReturnsPanel from "../components/ReturnsPanel";
@@ -253,6 +254,9 @@ export default function Cashier() {
   const [showHeldReturns, setShowHeldReturns] = useState(false);
   const [showReturns, setShowReturns]         = useState(false);
   const [returnToProcessId, setReturnToProcessId] = useState<number | null>(null);
+
+  // ── Payment success / change confirmation modal ───────────────────────────
+  const [paymentSuccessData, setPaymentSuccessData] = useState<PaymentSuccessData | null>(null);
 
   // ── Calculations ──────────────────────────────────────────────────────────
   const totalCents    = cartItems.reduce((s, i) => s + toCentavos(i.subtotal), 0);
@@ -662,6 +666,16 @@ export default function Cashier() {
         toast.info(`Sale already processed: ${saleResult.invoice_number}`, { description: "This transaction was already completed. No duplicate was created.", duration: 8000 });
       else
         toast.success(`Sale completed: ${saleResult.invoice_number}`, { description: receiptPrinted ? "Receipt printed." : "Receipt not printed.", duration: 5000 });
+
+      // Display prominent post-sale change confirmation dialog
+      setPaymentSuccessData({
+        invoiceNumber: saleResult.invoice_number,
+        totalAmount: Number(saleResult.total_amount),
+        cashTendered: cashCents / 100,
+        changeAmount: Number(saleResult.change_amount),
+        customerName: printedCustomerInfo.name || undefined,
+      });
+
       barcodeRef.current?.focus();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Payment failed. No changes were saved."));
@@ -690,6 +704,206 @@ export default function Cashier() {
     setRecoverableDraft(null);
     toast.info("Draft discarded.");
   };
+
+  const hasApprovedReturns = heldReturns.some(
+    (r) => r.decision === "waiting_for_cashier" || r.decision === "approved"
+  );
+
+  // ── Centralized POS Keyboard Shortcut Coordinator ──────────────────────────
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const OVERLAY_SELECTOR =
+        '[data-radix-popper-content-wrapper], [data-radix-dialog-content], [data-radix-menu-content], [data-radix-select-content]';
+      const isRadixOpen = !!document.querySelector(OVERLAY_SELECTOR);
+
+      // ── Escape handling (closes drawers/modals/popups) ──────────────────────
+      if (e.key === "Escape") {
+        if (showHolds) {
+          e.preventDefault();
+          setShowHolds(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (showReturns) {
+          e.preventDefault();
+          setShowReturns(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (showHeldReturns) {
+          e.preventDefault();
+          setShowHeldReturns(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (showVoidRequests) {
+          e.preventDefault();
+          setShowVoidRequests(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (showVoidDialog) {
+          e.preventDefault();
+          setShowVoidDialog(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (showDiscountApprovalModal) {
+          e.preventDefault();
+          setShowDiscountApprovalModal(false);
+          barcodeRef.current?.focus();
+          return;
+        }
+        if (paymentSuccessData) {
+          e.preventDefault();
+          setPaymentSuccessData(null);
+          barcodeRef.current?.focus();
+          return;
+        }
+        return;
+      }
+
+      // If a modal dialog is open, do not execute global POS function keys
+      if (isRadixOpen || showDiscountApprovalModal || showVoidDialog) {
+        return;
+      }
+
+      // ── Prevent browser default for function keys ───────────────────────────
+      if (
+        e.key === "F1" || e.key === "F2" || e.key === "F3" || e.key === "F4" ||
+        e.key === "F5" || e.key === "F6" || e.key === "F7" || e.key === "F8" ||
+        e.key === "F9" || e.key === "F10"
+      ) {
+        e.preventDefault();
+      }
+
+      // ── F1 / Alt+S: Focus Product Search / Barcode Input ────────────────────
+      if (e.key === "F1" || (e.altKey && (e.key === "s" || e.key === "S"))) {
+        e.preventDefault();
+        barcodeRef.current?.focus();
+        barcodeRef.current?.select();
+        return;
+      }
+
+      // ── F2 / Alt+C: Focus Cart items ───────────────────────────────────────
+      if (e.key === "F2" || (e.altKey && (e.key === "c" || e.key === "C"))) {
+        e.preventDefault();
+        const firstRow = document.querySelector<HTMLElement>('[data-cart-row="true"]');
+        if (firstRow) {
+          firstRow.focus();
+        } else {
+          toast.info("Cart is empty.");
+          barcodeRef.current?.focus();
+        }
+        return;
+      }
+
+      // ── F3 / Alt+W: 1-Click Walk-In Customer ────────────────────────────────
+      if (e.key === "F3" || (e.altKey && (e.key === "w" || e.key === "W"))) {
+        e.preventDefault();
+        if (sessionChecked && !hasOpenSession) {
+          toast.warning("Start shift first before entering customer info.");
+          return;
+        }
+        setCustomerInfo((prev) => ({ ...prev, name: "Walk-in Customer" }));
+        toast.success("Customer set to Walk-in Customer");
+        const cashInput = document.getElementById("cash-tendered-input");
+        if (cashInput) {
+          cashInput.focus();
+          (cashInput as HTMLInputElement).select?.();
+        }
+        return;
+      }
+
+      // ── F4 / Alt+D: Open / Focus Discount Selector ──────────────────────────
+      if (e.key === "F4" || (e.altKey && (e.key === "d" || e.key === "D"))) {
+        e.preventDefault();
+        const discountTrigger = document.getElementById("discount-select-trigger");
+        if (discountTrigger) {
+          discountTrigger.focus();
+          discountTrigger.click();
+        } else {
+          toast.info("Add items to cart before selecting a discount.");
+        }
+        return;
+      }
+
+      // ── F5: Hold Transaction ────────────────────────────────────────────────
+      if (e.key === "F5") {
+        e.preventDefault();
+        if (sessionChecked && !hasOpenSession) {
+          toast.error("You must Start Shift before holding transactions.");
+          return;
+        }
+        if (cartItems.length === 0) {
+          toast.info("Cart is empty — nothing to hold.");
+          return;
+        }
+        if (!customerInfo.name.trim()) {
+          toast.warning("Please enter customer name (or press F3 for Walk-In) to hold.");
+          document.getElementById("customer-name-input")?.focus();
+          return;
+        }
+        handleHold();
+        return;
+      }
+
+      // ── F6: Open / Toggle Held Transactions ─────────────────────────────────
+      if (e.key === "F6") {
+        e.preventDefault();
+        if (sessionChecked && !hasOpenSession) {
+          toast.error("Start shift to view held transactions.");
+          return;
+        }
+        setShowHolds((prev) => !prev);
+        return;
+      }
+
+      // ── F7: Open / Toggle Returns ───────────────────────────────────────────
+      if (e.key === "F7") {
+        e.preventDefault();
+        if (sessionChecked && !hasOpenSession) {
+          toast.error("Start shift to process returns.");
+          return;
+        }
+        if (hasApprovedReturns) {
+          setShowHeldReturns((prev) => !prev);
+        } else {
+          setShowReturns((prev) => !prev);
+        }
+        return;
+      }
+
+      // ── F8 / Alt+P: Focus Cash Tendered Input ───────────────────────────────
+      if (e.key === "F8" || (e.altKey && (e.key === "p" || e.key === "P"))) {
+        e.preventDefault();
+        const cashInput = document.getElementById("cash-tendered-input") as HTMLInputElement | null;
+        if (cashInput) {
+          cashInput.focus();
+          cashInput.select();
+        }
+        return;
+      }
+
+      // ── F9: Open Void Requests / Void Sale ──────────────────────────────────
+      if (e.key === "F9") {
+        e.preventDefault();
+        if (sessionChecked && !hasOpenSession) {
+          toast.error("Start shift to view void requests.");
+          return;
+        }
+        setShowVoidRequests((prev) => !prev);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    sessionChecked, hasOpenSession, cartItems.length, customerInfo.name,
+    showHolds, showReturns, showHeldReturns, showVoidRequests, showVoidDialog,
+    showDiscountApprovalModal, paymentSuccessData, hasApprovedReturns, handleHold, barcodeRef
+  ]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-300 overflow-hidden">
@@ -891,6 +1105,15 @@ export default function Cashier() {
         onClose={() => setShowEndShift(false)}
         onShiftOpened={() => { setHasOpenSession(true); barcodeRef.current?.focus(); }}
         onShiftClosed={() => setHasOpenSession(false)}
+      />
+
+      <PaymentSuccessModal
+        open={Boolean(paymentSuccessData)}
+        onClose={() => {
+          setPaymentSuccessData(null);
+          barcodeRef.current?.focus();
+        }}
+        data={paymentSuccessData}
       />
 
     </div>

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { PauseCircle, PlayCircle, Trash2, X } from "lucide-react";
+import { useEffect } from "react";
 import { toCentavos, fmtCents } from "../utils/money";
 import type { CartItem, CustomerInfo } from "../utils/receipt";
 
@@ -23,10 +24,22 @@ interface HeldOrdersPanelProps {
 export default function HeldOrdersPanel({
   show, onClose, heldOrders, taxRate, onRecall, onDiscard,
 }: HeldOrdersPanelProps) {
+  useEffect(() => {
+    if (!show) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [show, onClose]);
+
   return (
     <>
       {show && <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />}
-      <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${show ? "translate-x-0" : "translate-x-full"}`}>
+      <div data-drawer="true" className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${show ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-gray-300 shrink-0">
           <div className="flex items-center gap-2">
             <PauseCircle className="h-5 w-5 text-amber-500" />
@@ -61,9 +74,9 @@ export default function HeldOrdersPanel({
                   </div>
                   <div className="space-y-1">
                     {hold.cartItems.map((item) => (
-                      <div key={item.id} className="flex justify-between text-xs text-gray-600">
-                        <span className="truncate mr-2">{item.quantity}× {item.name}</span>
-                        <span className="tabular-nums shrink-0">₱{fmtCents(toCentavos(item.subtotal))}</span>
+                      <div key={item.id} className="flex justify-between text-xs text-gray-600 gap-2">
+                        <span className="break-words" title={`${item.quantity}× ${item.name}`}>{item.quantity}× {item.name}</span>
+                        <span className="tabular-nums shrink-0 font-medium">₱{fmtCents(toCentavos(item.subtotal))}</span>
                       </div>
                     ))}
                   </div>
