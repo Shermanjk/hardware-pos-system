@@ -55,7 +55,30 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   private _openAndPrint(title: string, html: string): void {
-    const popup = window.open("", "_blank", "width=400,height=300,toolbar=no,menubar=no");
+    // ── Diagnostic: log exact dimensions before any browser interaction ──────
+    // These values are what is written into @page and .label in the HTML.
+    // If these match what you entered (e.g. 50×30), the application is correct.
+    // Open browser DevTools (F12) → Console to see this log when printing.
+    const pageMatch   = html.match(/@page\s*\{[^}]*size:\s*([\d.]+mm)\s+([\d.]+mm)/);
+    const labelMatch  = html.match(/\.label\s*\{[^}]*width:\s*([\d.]+mm)/);
+    console.log(
+      "%c[BarcodePrinter] Print job dispatched",
+      "color:#2563eb;font-weight:bold"
+    );
+    console.log(
+      "  @page size in generated HTML:",
+      pageMatch ? `${pageMatch[1]} × ${pageMatch[2]}` : "(not found — check _buildPrintDocument)"
+    );
+    console.log(
+      "  .label width in generated HTML:",
+      labelMatch ? labelMatch[1] : "(not found)"
+    );
+    console.log(
+      "  Full generated HTML (copy to verify):",
+      html
+    );
+
+    const popup = window.open("", "_blank", "width=600,height=400,toolbar=no,menubar=no");
     if (!popup) {
       throw new Error(
         "Pop-up blocked. Please allow pop-ups for this site in your browser settings and try again."
@@ -154,7 +177,20 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     /* ── Page = exactly one physical label ── */
     @page {
       size: ${label_width_mm}mm ${label_height_mm}mm;
-      margin: 0;
+      margin: 0mm;
+    }
+
+    @media print {
+      @page {
+        size: ${label_width_mm}mm ${label_height_mm}mm;
+        margin: 0mm;
+      }
+      html, body {
+        width:  ${label_width_mm}mm !important;
+        height: ${label_height_mm}mm !important;
+        margin: 0mm !important;
+        padding: 0mm !important;
+      }
     }
 
     html, body {
@@ -172,7 +208,9 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       align-items: center;
       justify-content: center;
       page-break-after: always;
+      page-break-inside: avoid;
       overflow: hidden;
+      box-sizing: border-box;
     }
     .label:last-child { page-break-after: auto; }
 
@@ -185,6 +223,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       align-items: center;
       justify-content: space-between;
       overflow: hidden;
+      box-sizing: border-box;
     }
 
     /* ── Store name — pinned to top, never shrinks ── */
@@ -201,10 +240,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       letter-spacing: 0.3px;
     }
 
-    /* ── Barcode SVG — fills remaining space ── */
+    /* ── Barcode SVG — fills remaining space, dynamically constrained ── */
     .barcode-svg {
       flex:      1;
       width:     100%;
+      max-width: ${printW}mm;
       display:   flex;
       align-items: center;
       justify-content: center;
@@ -212,10 +252,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       min-height: 0;
     }
     .barcode-svg svg {
-      width:     100%;
-      height:    auto;
-      display:   block;
-      max-width: ${printW}mm;
+      width:      100%;
+      height:     auto;
+      max-height: 100%;
+      max-width:  ${printW}mm;
+      display:    block;
     }
 
     /* ── Human-readable barcode number — pinned to bottom, never shrinks ── */

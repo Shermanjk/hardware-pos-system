@@ -51,15 +51,15 @@ export interface BarcodePrinterConfig {
 export const BARCODE_PRINTER_CONFIG: BarcodePrinterConfig = {
   printerName:      "",               // leave blank → Windows print dialog appears
   printerType:      "windows_driver",
-  labelWidthMm:     30,
-  labelHeightMm:    20,
+  labelWidthMm:     50,
+  labelHeightMm:    30,
   dpi:              203,
   marginTopMm:      2,
   marginBottomMm:   2,
   marginLeftMm:     2,
   marginRightMm:    2,
   barcodeSymbology: "CODE128",
-  barcodeHeightMm:  10,
+  barcodeHeightMm:  14,
   storeName:        "ISRA HARDWARE TRADING",
   showStoreName:    true,
   showBarcodeText:  true,

@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getInventoryLogs, type InventoryLog } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
-import { BARCODE_PRINTER_CONFIG } from "@/shared/services/barcodePrinter";
+import { BARCODE_PRINTER_CONFIG, getPrinterEngine } from "@/shared/services/barcodePrinter";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import JsBarcode from "jsbarcode";
 import {
@@ -188,56 +188,24 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
     } catch { /* invalid barcode — leave blank */ }
   }, [product?.barcode, open]); // re-run when product or open state changes
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!product) return;
     const clampedCount = Math.max(1, Math.min(100, labelCount));
-    const storeName = BARCODE_PRINTER_CONFIG.storeName;
-
-    const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     try {
-      JsBarcode(svgEl, product.barcode, {
-        format: "CODE128",
-        displayValue: false,
-        height: 40,
-        margin: 2,
-        background: "#ffffff",
-      });
-    } catch {
-      toast.error("Invalid barcode — cannot print");
-      return;
+      const engine = getPrinterEngine(BARCODE_PRINTER_CONFIG);
+      await engine.print(
+        {
+          barcode: product.barcode,
+          storeName: BARCODE_PRINTER_CONFIG.storeName,
+          quantity: clampedCount,
+        },
+        BARCODE_PRINTER_CONFIG
+      );
+      toast.success(`Printed ${clampedCount} label${clampedCount !== 1 ? "s" : ""} for "${product.product_name}"`);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Print failed");
     }
-    const svgHTML = svgEl.outerHTML;
-    const label = `
-      <div class="label">
-        <div class="store-name">${storeName}</div>
-        <div class="barcode-wrap">${svgHTML}</div>
-        <div class="code">${product.barcode}</div>
-      </div>`;
-
-    const w = window.open("", "_blank", "width=600,height=400");
-    if (!w) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
-    w.document.write(`<!DOCTYPE html><html><head><title>${product.barcode}</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #fff; font-family: monospace; padding: 4px; }
-        .label { display: inline-flex; flex-direction: column; align-items: center;
-                 width: 50mm; height: 30mm; padding: 1mm;
-                 page-break-inside: avoid; overflow: hidden; }
-        .store-name { font-size: 6pt; font-weight: 700; text-align: center;
-                      letter-spacing: 0.3px; white-space: nowrap; overflow: hidden;
-                      text-overflow: ellipsis; width: 100%; line-height: 1.2; }
-        .barcode-wrap { width: 100%; flex: 1; display: flex; align-items: center; }
-        .barcode-wrap svg { display: block; width: 100%; height: auto; }
-        .code { font-size: 6pt; letter-spacing: 1px; margin-top: 1px; text-align: center; }
-        @media print { @page { size: 50mm 30mm; margin: 0; } body { padding: 0; } }
-      </style></head><body>
-      ${Array.from({ length: clampedCount }).map(() => label).join("")}
-      <script>window.onload=function(){window.print();window.close();}<\/script>
-    </body></html>`);
-    w.document.close();
-
-    toast.success(`Printed ${clampedCount} label${clampedCount !== 1 ? "s" : ""} for "${product.product_name}"`);
-    onClose();
   };
 
   if (!product) return null;

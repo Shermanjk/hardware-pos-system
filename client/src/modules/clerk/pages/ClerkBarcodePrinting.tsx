@@ -76,18 +76,26 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 
   return (
     <div
-      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-center overflow-hidden"
-      style={{ width: w, height: h, padding: `${pt}px ${pr}px ${pb}px ${pl}px` }}
+      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-sm rounded-sm"
+      style={{
+        width: w,
+        height: h,
+        paddingTop: pt,
+        paddingBottom: pb,
+        paddingLeft: pl,
+        paddingRight: pr,
+        boxSizing: "border-box",
+      }}
     >
       {config.showStoreName && config.storeName && (
         <p
-          className="font-bold text-center leading-tight truncate w-full"
+          className="font-bold text-center leading-tight truncate w-full flex-shrink-0"
           style={{ fontFamily: config.fontFamily, fontSize: fs }}
         >
           {config.storeName}
         </p>
       )}
-      <div className="w-full" style={{ height: bh }}>
+      <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden" style={{ maxHeight: bh }}>
         <BarcodePreview
           code={product.barcode}
           heightMm={config.barcodeHeightMm}
@@ -96,7 +104,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       </div>
       {config.showBarcodeText && (
         <p
-          className="font-mono text-center tracking-widest"
+          className="font-mono text-center tracking-widest leading-none flex-shrink-0"
           style={{ fontFamily: config.fontFamily, fontSize: fs * 0.85 }}
         >
           {product.barcode}
@@ -109,12 +117,12 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 // ─── Label size presets ───────────────────────────────────────────────────────
 
 const SIZE_PRESETS = [
-  { label: "30 × 20 mm (default)", w: 30, h: 20 },
-  { label: "50 × 30 mm",           w: 50, h: 30 },
-  { label: "38 × 25 mm (small)",   w: 38, h: 25 },
-  { label: "60 × 40 mm (medium)",  w: 60, h: 40 },
-  { label: "100 × 50 mm (large)",  w: 100, h: 50 },
-  { label: "Custom",               w: 0,  h: 0  },
+  { label: "50 × 30 mm (Standard)", w: 50, h: 30 },
+  { label: "30 × 20 mm (Small)",    w: 30, h: 20 },
+  { label: "38 × 25 mm",            w: 38, h: 25 },
+  { label: "60 × 40 mm (Medium)",   w: 60, h: 40 },
+  { label: "100 × 50 mm (Large)",   w: 100, h: 50 },
+  { label: "Custom",                w: 0,  h: 0  },
 ] as const;
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────
@@ -129,30 +137,31 @@ interface PrintModalProps {
 function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
   const [quantity,   setQuantity]   = useState(1);
   const [printing,   setPrinting]   = useState(false);
-  const [presetKey,  setPresetKey]  = useState("30×20");
+  const [presetKey,  setPresetKey]  = useState("50×30");
   const [customW,    setCustomW]    = useState(BARCODE_PRINTER_CONFIG.labelWidthMm);
   const [customH,    setCustomH]    = useState(BARCODE_PRINTER_CONFIG.labelHeightMm);
 
   useEffect(() => {
     if (open) {
       setQuantity(1);
-      setPresetKey("30×20");
+      setPresetKey("50×30");
       setCustomW(BARCODE_PRINTER_CONFIG.labelWidthMm);
       setCustomH(BARCODE_PRINTER_CONFIG.labelHeightMm);
     }
   }, [open, product?.id]);
 
-  // Build the active config, merging the selected size into the base config
+  // Build the active config, merging the selected physical dimensions directly
   const activeConfig: BarcodePrinterConfig = (() => {
     if (presetKey === "custom") {
+      const w = Math.max(10, customW);
+      const h = Math.max(5, customH);
       return {
         ...BARCODE_PRINTER_CONFIG,
-        labelWidthMm:     Math.max(10, customW),
-        labelHeightMm:    Math.max(5,  customH),
-        // Scale barcode height proportionally so it always fits
+        labelWidthMm:     w,
+        labelHeightMm:    h,
         barcodeHeightMm:  Math.min(
           BARCODE_PRINTER_CONFIG.barcodeHeightMm,
-          Math.max(5, customH - BARCODE_PRINTER_CONFIG.marginTopMm - BARCODE_PRINTER_CONFIG.marginBottomMm - 6)
+          Math.max(5, h - BARCODE_PRINTER_CONFIG.marginTopMm - BARCODE_PRINTER_CONFIG.marginBottomMm - 6)
         ),
       };
     }
@@ -275,11 +284,22 @@ function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
           </div>
 
           {/* Live label preview */}
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1.5 py-1 bg-gray-50/60 rounded-lg border border-gray-100">
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">
               Preview ({activeConfig.labelWidthMm} × {activeConfig.labelHeightMm} mm)
             </p>
             <LabelCard product={product} config={activeConfig} />
+          </div>
+
+          {/* Print Checklist Notice */}
+          <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-1">
+            <p className="font-semibold flex items-center gap-1">
+              <span>💡</span> Browser Print Settings Checklist:
+            </p>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-blue-700 pl-4">
+              <p>• <b>Margins:</b> None</p>
+              <p>• <b>Headers & footers:</b> Unchecked</p>
+            </div>
           </div>
 
           {/* Quantity */}
