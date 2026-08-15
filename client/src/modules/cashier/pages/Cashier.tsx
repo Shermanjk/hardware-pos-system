@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getMySession } from "@/shared/api/cashReconciliationApi";
 import httpClient from "@/shared/api/httpClient";
@@ -12,7 +13,7 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
 import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
-import { ChevronDown, Clock, LogOut, PowerOff, User, WifiOff } from "lucide-react";
+import { ChevronDown, Clock, CreditCard, HandCoins, LogOut, PowerOff, Printer, User, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import CartPanel from "../components/CartPanel";
@@ -25,13 +26,14 @@ import CreditLimitOverrideModal from "../components/CreditLimitOverrideModal";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
 import PaymentPanel from "../components/PaymentPanel";
 import PaymentSuccessModal, { type PaymentSuccessData } from "../components/PaymentSuccessModal";
+import { recordCreditPayment, type CustomerSearchResult } from "@/shared/api/customersApi";
 import type { HeldReturn } from "../components/PendingReturnsPanel";
 import PendingReturnsPanel from "../components/PendingReturnsPanel";
 import ReturnsPanel from "../components/ReturnsPanel";
 import VoidSaleDialog from "../components/VoidSaleDialog";
 import { parseCashInput, toCentavos } from "../utils/money";
-import type { CartItem, CustomerInfo } from "../utils/receipt";
-import { printSaleReceipt } from "../utils/receipt";
+import type { CartItem, CustomerInfo, SaleReceiptParams } from "../utils/receipt";
+import { printCreditPaymentReceipt, printSaleReceipt } from "../utils/receipt";
 
 // ─── Polling constants ────────────────────────────────────────────────────────
 const HEALTH_POLL_MS   = 15_000; // check server reachability every 15 s
@@ -171,24 +173,41 @@ export default function Cashier() {
   const [showDiscountApprovalModal, setShowDiscountApprovalModal] = useState(false);
 
   // ── Credit / Utang state ──────────────────────────────────────────────────
-  const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT">("CASH");
-  const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<any | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT" | "COLLECT_UTANG">("CASH");
+  const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<CustomerSearchResult | null>(null);
   const [downPayment, setDownPayment] = useState("");
   const [overrideRequestId, setOverrideRequestId] = useState<number | null>(null);
   const [showCreditOverrideModal, setShowCreditOverrideModal] = useState(false);
   const [latestCreditOverrideDecision, setLatestCreditOverrideDecision] = useState<any | null>(null);
+  const [utangPaymentAmount, setUtangPaymentAmount] = useState("");
+  const [utangPaymentNotes, setUtangPaymentNotes] = useState("");
 
-  // Handle payment mode switch — reset credit-specific state
-  const handleSetPaymentMode = (mode: "CASH" | "CREDIT") => {
+  // Handle payment mode switch — reset mode-specific state
+  const handleSetPaymentMode = (mode: "CASH" | "CREDIT" | "COLLECT_UTANG") => {
     setPaymentMode(mode);
     if (mode === "CASH") {
       setSelectedCreditCustomer(null);
       setDownPayment("");
+      setUtangPaymentAmount("");
+      setUtangPaymentNotes("");
       setOverrideRequestId(null);
       setShowCreditOverrideModal(false);
-    } else {
-      // Switching to credit — clear cash tendered so the field resets
+    } else if (mode === "CREDIT") {
       setCashTendered("");
+      setUtangPaymentAmount("");
+      setUtangPaymentNotes("");
+    } else if (mode === "COLLECT_UTANG") {
+      setCashTendered("");
+      setDownPayment("");
+      setTimeout(() => {
+        const utangInput = document.getElementById("utang-payment-input");
+        const custSearch = document.getElementById("credit-customer-search");
+        if (selectedCreditCustomer) {
+          utangInput?.focus();
+        } else {
+          custSearch?.focus();
+        }
+      }, 60);
     }
   };
 
@@ -226,6 +245,23 @@ export default function Cashier() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartItems, cashTendered, customerInfo, selectedDiscount]);
+
+  // ── Last completed sale receipt (for immediate 1-click reprinting if paper ran out) ──
+  const [lastSaleReceiptParams, setLastSaleReceiptParams] = useState<SaleReceiptParams | null>(null);
+
+  const handleReprintLastReceipt = useCallback(() => {
+    if (!lastSaleReceiptParams) {
+      toast.info("No transaction has been processed in this session yet.");
+      return;
+    }
+    try {
+      printSaleReceipt(lastSaleReceiptParams);
+      toast.success(`Receipt for ${lastSaleReceiptParams.invoiceNumber} re-sent to printer.`);
+    } catch (err) {
+      console.error("Reprint receipt error:", err);
+      toast.error("Failed to reprint receipt.");
+    }
+  }, [lastSaleReceiptParams]);
 
   // ── Void state ────────────────────────────────────────────────────────────
   const [showVoidDialog, setShowVoidDialog]         = useState(false);
@@ -667,7 +703,7 @@ export default function Cashier() {
         sc_pwd_type: scPwdType,
         sc_pwd_id: scPwdId || undefined,
         // Credit fields
-        payment_type: paymentMode,
+        payment_type: paymentMode === "CREDIT" ? "CREDIT" : "CASH",
         customer_id: paymentMode === "CREDIT" ? selectedCreditCustomer?.id : undefined,
         down_payment: paymentMode === "CREDIT" ? downPaymentAmt : undefined,
         credit_limit_override_id: paymentMode === "CREDIT" ? (overrideRequestId ?? undefined) : undefined,
@@ -715,7 +751,7 @@ export default function Cashier() {
           );
         }
 
-        printSaleReceipt({
+        const receiptParams: SaleReceiptParams = {
           invoiceNumber: saleResult.invoice_number,
           cartItems: printedCartItems,
           customerInfo: printedCustomerInfo,
@@ -738,7 +774,10 @@ export default function Cashier() {
           paymentType: saleResult.payment_type ?? "CASH",
           creditBalance: saleResult.credit_balance !== null ? Math.round((saleResult.credit_balance ?? 0) * 100) : null,
           downPaymentCents: paymentMode === "CREDIT" ? Math.round(downPaymentAmt * 100) : undefined,
-        });
+        };
+
+        setLastSaleReceiptParams(receiptParams);
+        printSaleReceipt(receiptParams);
         receiptPrinted = true;
       } catch (printErr) {
         console.error("Receipt print error:", printErr);
@@ -769,6 +808,72 @@ export default function Cashier() {
   };
 
   const handleProcessPayment = () => handleProcessPaymentWithRequest();
+
+  // ── Utang / Credit payment processing (Main Screen Mode) ───────────────────
+  const handleProcessUtangPayment = async () => {
+    if (!selectedCreditCustomer) {
+      toast.error("Please select a customer to record payment.");
+      return;
+    }
+    const paymentCents = parseCashInput(utangPaymentAmount);
+    if (paymentCents <= 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+    const currentBalanceCents = Math.round((selectedCreditCustomer.current_balance || 0) * 100);
+    if (paymentCents > currentBalanceCents) {
+      toast.error(`Payment amount cannot exceed current balance of ₱${(currentBalanceCents / 100).toFixed(2)}`);
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const amountPaid = paymentCents / 100;
+      const res = await recordCreditPayment(selectedCreditCustomer.id, {
+        amount: amountPaid,
+        notes: utangPaymentNotes.trim() || undefined,
+      });
+
+      // Silently print official thermal Collection Receipt
+      try {
+        const settingsRes = await httpClient.get("/api/settings");
+        printCreditPaymentReceipt({
+          receiptNumber: res.reference,
+          customerName: selectedCreditCustomer.full_name,
+          customerCode: selectedCreditCustomer.customer_code,
+          amountPaidCents: paymentCents,
+          newBalanceCents: Math.round(res.new_balance * 100),
+          cashierName: user?.username || "Cashier",
+          notes: utangPaymentNotes.trim() || undefined,
+          settings: settingsRes.data || {},
+        });
+      } catch (printErr) {
+        console.error("Collection receipt print error:", printErr);
+      }
+
+      toast.success(`Payment of ₱${amountPaid.toLocaleString("en-PH", { minimumFractionDigits: 2 })} recorded for ${selectedCreditCustomer.full_name}`);
+
+      // Update selectedCreditCustomer balance locally
+      setSelectedCreditCustomer((prev) => prev ? { ...prev, current_balance: res.new_balance } : null);
+
+      // Reset utang fields
+      setUtangPaymentAmount("");
+      setUtangPaymentNotes("");
+
+      // Show PaymentSuccessModal
+      setPaymentSuccessData({
+        invoiceNumber: res.reference,
+        totalAmount: amountPaid,
+        cashTendered: amountPaid,
+        changeAmount: 0,
+        customerName: selectedCreditCustomer.full_name,
+      });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to record payment."));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const today = new Date().toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 
@@ -858,7 +963,7 @@ export default function Cashier() {
       if (
         e.key === "F1" || e.key === "F2" || e.key === "F3" || e.key === "F4" ||
         e.key === "F5" || e.key === "F6" || e.key === "F7" || e.key === "F8" ||
-        e.key === "F9" || e.key === "F10"
+        e.key === "F9" || e.key === "F10" || e.key === "F11"
       ) {
         e.preventDefault();
       }
@@ -960,13 +1065,17 @@ export default function Cashier() {
         return;
       }
 
-      // ── F8 / Alt+P: Focus Cash Tendered Input ───────────────────────────────
+      // ── F8 / Alt+P: Focus Cash / Payment Input ──────────────────────────────
       if (e.key === "F8" || (e.altKey && (e.key === "p" || e.key === "P"))) {
         e.preventDefault();
-        const cashInput = document.getElementById("cash-tendered-input") as HTMLInputElement | null;
-        if (cashInput) {
-          cashInput.focus();
-          cashInput.select();
+        const activeInput = (paymentMode === "COLLECT_UTANG"
+          ? document.getElementById("utang-payment-input")
+          : paymentMode === "CREDIT"
+          ? document.getElementById("down-payment-input")
+          : document.getElementById("cash-tendered-input")) as HTMLInputElement | null;
+        if (activeInput) {
+          activeInput.focus();
+          activeInput.select();
         }
         return;
       }
@@ -981,6 +1090,20 @@ export default function Cashier() {
         setShowVoidRequests((prev) => !prev);
         return;
       }
+
+      // ── F10 / Alt+R: Reprint Last Receipt ───────────────────────────────────
+      if (e.key === "F10" || (e.altKey && (e.key === "r" || e.key === "R"))) {
+        e.preventDefault();
+        handleReprintLastReceipt();
+        return;
+      }
+
+      // ── F11 / Alt+U: Switch to Pay Utang Mode ────────────────────────────────
+      if (e.key === "F11" || (e.altKey && (e.key === "u" || e.key === "U"))) {
+        e.preventDefault();
+        handleSetPaymentMode("COLLECT_UTANG");
+        return;
+      }
     };
 
     window.addEventListener("keydown", handleGlobalKeyDown);
@@ -988,7 +1111,8 @@ export default function Cashier() {
   }, [
     sessionChecked, hasOpenSession, cartItems.length, customerInfo.name,
     showHolds, showReturns, showHeldReturns, showVoidRequests, showVoidDialog,
-    showDiscountApprovalModal, paymentSuccessData, hasApprovedReturns, handleHold, barcodeRef
+    showDiscountApprovalModal, paymentSuccessData, hasApprovedReturns, handleHold, barcodeRef,
+    handleReprintLastReceipt, paymentMode, handleSetPaymentMode
   ]);
 
   return (
@@ -1026,6 +1150,38 @@ export default function Cashier() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Quick Collect Utang / Customer Credit Payment Button */}
+          <Button
+            type="button"
+            variant={paymentMode === "COLLECT_UTANG" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleSetPaymentMode("COLLECT_UTANG")}
+            className={`h-8 text-xs font-bold gap-1.5 shadow-xs ${
+              paymentMode === "COLLECT_UTANG"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+            }`}
+            title="Switch to Pay Utang Mode (F11 / Alt+U)"
+          >
+            <HandCoins className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Pay Utang</span>
+            <span className={`text-[10px] px-1 py-0.2 rounded font-mono hidden md:inline ${paymentMode === "COLLECT_UTANG" ? "bg-blue-700 text-white" : "bg-blue-200/80 text-blue-800"}`}>F11</span>
+          </Button>
+
+          {/* Quick Reprint Last Receipt Button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleReprintLastReceipt}
+            disabled={!lastSaleReceiptParams}
+            className="h-8 text-xs font-semibold bg-white border-slate-300 text-slate-700 hover:bg-slate-50 gap-1.5 shadow-xs"
+            title={lastSaleReceiptParams ? `Reprint Last Receipt: ${lastSaleReceiptParams.invoiceNumber} (F10 / Alt+R)` : "No transaction processed in this session yet"}
+          >
+            <Printer className="h-3.5 w-3.5 text-slate-500" />
+            <span className="hidden sm:inline">Reprint Last</span>
+          </Button>
+
           {/* Offline badge in header (compact) */}
           {isOffline && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-100 border border-red-300 rounded-lg">
@@ -1118,6 +1274,10 @@ export default function Cashier() {
           paymentMode={paymentMode}
           selectedCreditCustomer={selectedCreditCustomer}
           setSelectedCreditCustomer={setSelectedCreditCustomer}
+          onCollectPayment={(c) => {
+            setSelectedCreditCustomer(c);
+            handleSetPaymentMode("COLLECT_UTANG");
+          }}
         />
         <PaymentPanel
           subtotalCents={subtotalCents} taxCents={taxCents}
@@ -1155,6 +1315,11 @@ export default function Cashier() {
           creditBalance={selectedCreditCustomer?.current_balance ?? 0}
           creditEnabled={selectedCreditCustomer?.is_credit_enabled ?? false}
           pendingCreditOverride={showCreditOverrideModal}
+          utangPaymentAmount={utangPaymentAmount}
+          setUtangPaymentAmount={setUtangPaymentAmount}
+          utangPaymentNotes={utangPaymentNotes}
+          setUtangPaymentNotes={setUtangPaymentNotes}
+          onProcessUtangPayment={handleProcessUtangPayment}
         />
       </div>
 
@@ -1235,6 +1400,7 @@ export default function Cashier() {
           barcodeRef.current?.focus();
         }}
         data={paymentSuccessData}
+        onReprint={handleReprintLastReceipt}
       />
 
     </div>

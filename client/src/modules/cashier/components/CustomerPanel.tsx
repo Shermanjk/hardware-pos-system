@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { searchCustomers, type CustomerSearchResult } from "@/shared/api/customersApi";
-import { Building2, CreditCard, Plus, Search, User, X, Zap } from "lucide-react";
+import { createCustomer, searchCustomers, type CustomerSearchResult } from "@/shared/api/customersApi";
+import { Building2, CreditCard, HandCoins, Plus, Search, User, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CustomerInfo } from "../utils/receipt";
@@ -12,13 +12,15 @@ interface CustomerPanelProps {
   setCustomerInfo: React.Dispatch<React.SetStateAction<CustomerInfo>>;
   /** When true, show SC/PWD identification fields (selected discount is SC/PWD). */
   showScPwdFields?: boolean;
-  /** When "CREDIT", show the customer search / credit-mode UI */
-  paymentMode?: "CASH" | "CREDIT";
+  /** When "CREDIT" or "COLLECT_UTANG", show the customer search / credit-mode UI */
+  paymentMode?: "CASH" | "CREDIT" | "COLLECT_UTANG";
   /** Currently selected credit customer (set by parent) */
   selectedCreditCustomer: CustomerSearchResult | null;
   setSelectedCreditCustomer: (c: CustomerSearchResult | null) => void;
   /** Called when a new customer is created inline during checkout */
   onInlineCustomerCreated?: (c: { id: number; customer_code: string; full_name: string }) => void;
+  /** Called to switch to Collect Utang mode / open payment for this customer */
+  onCollectPayment?: (c: CustomerSearchResult) => void;
 }
 
 export default function CustomerPanel({
@@ -27,6 +29,7 @@ export default function CustomerPanel({
   paymentMode = "CASH",
   selectedCreditCustomer, setSelectedCreditCustomer,
   onInlineCustomerCreated,
+  onCollectPayment,
 }: CustomerPanelProps) {
   const set = (k: keyof CustomerInfo, v: string) =>
     setCustomerInfo((prev) => ({ ...prev, [k]: v }));
@@ -34,40 +37,87 @@ export default function CustomerPanel({
   const setScPwdType = (v: "NONE" | "SENIOR_CITIZEN" | "PWD") =>
     setCustomerInfo((prev) => ({ ...prev, scPwdType: v }));
 
-  // ── Credit customer search state ──────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Form fields for inline creation
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerContact, setNewCustomerContact] = useState("");
   const [newCustomerAddress, setNewCustomerAddress] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const searchRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync selected credit customer info to parent customerInfo
+  const handleSelectCustomer = (customer: CustomerSearchResult) => {
+    setSelectedCreditCustomer(customer);
+    setCustomerInfo({
+      name: customer.full_name,
+      address: customer.address || "",
+      tin: "",
+      businessStyle: "",
+      scPwdType: "NONE",
+      scPwdId: "",
+    });
+    setSearchQuery("");
+    setShowDropdown(false);
+  };
+
+  const selectCustomer = handleSelectCustomer;
+
+  const clearCreditCustomer = () => {
+    setSelectedCreditCustomer(null);
+    setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "", scPwdType: "NONE", scPwdId: "" });
+    setSearchQuery("");
+    setTimeout(() => searchRef.current?.focus(), 50);
+  };
 
   // Debounced search
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setSearchResults([]); setShowDropdown(false); return; }
-    setSearchLoading(true);
-    try {
-      const results = await searchCustomers(q);
-      setSearchResults(results);
-      setShowDropdown(results.length > 0 || q.length > 0);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (paymentMode !== "CREDIT") return;
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => doSearch(searchQuery), 280);
-    return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
-  }, [searchQuery, paymentMode, doSearch]);
+    if (paymentMode !== "CREDIT" && paymentMode !== "COLLECT_UTANG") return;
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const results = await searchCustomers(searchQuery.trim());
+        setSearchResults(results);
+        setShowDropdown(true);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [searchQuery, paymentMode]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        searchRef.current &&
+        !searchRef.current.contains(e.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // When payment mode changes back to CASH, clear credit customer
   useEffect(() => {
@@ -99,50 +149,42 @@ export default function CustomerPanel({
     }
   });
 
-  async function handleCreateInline() {
-    if (!newCustomerName.trim()) { toast.warning("Customer name is required."); return; }
+  const handleCreateInline = async () => {
+    if (!newCustomerName.trim()) {
+      toast.error("Customer name is required");
+      return;
+    }
     setIsCreating(true);
     try {
-      const { createCustomer } = await import("@/shared/api/customersApi");
-      const result = await createCustomer({
+      const created = await createCustomer({
         full_name: newCustomerName.trim(),
         contact_number: newCustomerContact.trim() || undefined,
         address: newCustomerAddress.trim() || undefined,
       });
-      onInlineCustomerCreated?.(result);
-      toast.success(`Customer "${result.full_name}" created. Note: An admin must enable credit before this customer can use it.`);
+      toast.success(`Customer ${created.customer_code} created! (Credit is disabled by default)`);
+      const searchRes: CustomerSearchResult = {
+        id: created.id,
+        customer_code: created.customer_code,
+        full_name: created.full_name,
+        contact_number: newCustomerContact.trim() || undefined,
+        address: newCustomerAddress.trim() || undefined,
+        is_credit_enabled: false,
+        credit_limit: 0,
+        current_balance: 0,
+        status: "Active",
+      };
       setShowCreateForm(false);
-      setNewCustomerName(""); setNewCustomerContact(""); setNewCustomerAddress("");
-      // Search for the new customer to select them
-      const results = await searchCustomers(result.full_name);
-      const newCust = results.find((r) => r.id === result.id);
-      if (newCust) {
-        setSelectedCreditCustomer(newCust);
-        setCustomerInfo((prev) => ({ ...prev, name: newCust.full_name, address: newCust.address ?? "" }));
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Failed to create customer.");
+      setNewCustomerName("");
+      setNewCustomerContact("");
+      setNewCustomerAddress("");
+      handleSelectCustomer(searchRes);
+      onInlineCustomerCreated?.({ id: created.id, customer_code: created.customer_code, full_name: created.full_name });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to create customer";
+      toast.error(msg);
     } finally {
       setIsCreating(false);
     }
-  }
-
-  const selectCustomer = (c: CustomerSearchResult) => {
-    setSelectedCreditCustomer(c);
-    setCustomerInfo((prev) => ({
-      ...prev,
-      name: c.full_name,
-      address: c.address ?? "",
-    }));
-    setSearchQuery(c.full_name);
-    setShowDropdown(false);
-  };
-
-  const clearCreditCustomer = () => {
-    setSelectedCreditCustomer(null);
-    setSearchQuery("");
-    setCustomerInfo((prev) => ({ ...prev, name: "" }));
-    setTimeout(() => searchRef.current?.focus(), 50);
   };
 
   // ── Balance indicator color ───────────────────────────────────────────────
@@ -157,14 +199,20 @@ export default function CustomerPanel({
 
   const fmt = (n: number) => "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // ── CREDIT MODE UI ────────────────────────────────────────────────────────
-  if (paymentMode === "CREDIT") {
+  // ── CREDIT / COLLECT UTANG MODE UI ────────────────────────────────────────
+  if (paymentMode === "CREDIT" || paymentMode === "COLLECT_UTANG") {
     return (
       <div className="w-72 shrink-0 flex flex-col min-h-0">
         <div className="flex-1 bg-blue-50 rounded-xl border-2 border-blue-400 shadow-sm px-4 py-3 flex flex-col">
           <div className="flex items-center gap-2 mb-3">
-            <CreditCard className="h-4 w-4 text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-900">Credit / Utang Customer</h3>
+            {paymentMode === "COLLECT_UTANG" ? (
+              <HandCoins className="h-4 w-4 text-blue-600" />
+            ) : (
+              <CreditCard className="h-4 w-4 text-blue-600" />
+            )}
+            <h3 className="text-sm font-bold text-slate-900">
+              {paymentMode === "COLLECT_UTANG" ? "Customer (Pay Utang)" : "Credit / Utang Customer"}
+            </h3>
           </div>
 
           {/* Selected customer display */}
@@ -227,6 +275,19 @@ export default function CustomerPanel({
                     ⚠️ Credit not enabled for this customer.
                     <br />Admin must enable credit in Customer Management.
                   </div>
+                )}
+
+                {Number(selectedCreditCustomer.current_balance ?? 0) > 0 && onCollectPayment && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCollectPayment(selectedCreditCustomer)}
+                    className="w-full mt-2.5 h-8 text-xs font-bold text-blue-700 bg-blue-50/90 border-blue-300 hover:bg-blue-100 hover:text-blue-800 gap-1.5 shadow-xs"
+                  >
+                    <HandCoins className="w-3.5 h-3.5" />
+                    <span>Pay Utang / Settle Balance</span>
+                  </Button>
                 )}
               </div>
 

@@ -51,12 +51,15 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
     const desc = item.product_name;
     const up = fmtPeso(item.unit_price);
     const amt = fmtPeso(item.unit_price * item.quantity_returned);
-    return `<tr>
-      <td class="qty">${qty}</td>
-      <td class="unit">${unit}</td>
-      <td class="desc">${desc}</td>
-      <td class="price">${currSym} ${up}</td>
-      <td class="amt">${currSym} ${amt}</td>
+    return `<tr class="item-name-row">
+      <td colspan="5" class="col-name">${desc}</td>
+    </tr>
+    <tr class="item-detail-row">
+      <td class="col-qty">${qty}</td>
+      <td class="col-unit">${unit}</td>
+      <td class="col-spacer"></td>
+      <td class="col-price">${currSym} ${up}</td>
+      <td class="col-amt">${currSym} ${amt}</td>
     </tr>`;
   }).join("");
 
@@ -86,44 +89,63 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
   <title>Return Receipt ${data.return_number}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 58mm auto; margin: 0; }
-    html { width: 58mm; }
-    body { 
-      width: 48mm; 
-      max-width: 48mm;
-      margin: 0 auto; 
+    @page { size: 80mm auto; margin: 0; }
+    html, body {
+      width: 80mm;
+      margin: 0;
+      padding: 0;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
       line-height: 1.4;
       color: #000;
-      padding: 0;
       overflow-x: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    .receipt { width: 100%; max-width: 48mm; margin: 0 auto; padding: 0; box-sizing: border-box; }
-    .center { text-align: center; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .section { margin: 2px 0; overflow-wrap: break-word; word-break: break-word; }
-    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
-    .items th, .items td { padding: 2px 0; }
-    .items .qty { width: 7mm; text-align: right; }
-    .items .unit { width: 9mm; text-align: left; }
-    .items .desc { width: 17mm; text-align: left; word-wrap: break-word; max-width: 17mm; overflow-wrap: anywhere; }
-    .items .price { width: 7.5mm; text-align: right; }
-    .items .amt { width: 7.5mm; text-align: right; }
+    body { padding: 0; }
+    .receipt {
+      width: 76mm;
+      max-width: 76mm;
+      margin: 0 auto;
+      padding: 0;
+    }
+    .center { text-align: center; margin: 1px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
+    .section { margin: 1px 0; word-break: break-word; }
     .bold { font-weight: bold; }
-    .divider { border-top: 1px solid #000; margin: 4px 0; }
-    @media print { body { padding: 0; } }
+    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
+    .divider { border-top: 1px dashed #000; margin: 3px 0; }
+    .items { width: 100%; border-collapse: collapse; margin: 3px 0; table-layout: fixed; }
+    .items th, .items td { padding: 0 1px; vertical-align: middle; }
+    .items th { font-size: 10px; font-weight: bold; }
+    .items .col-hdr-qty   { width: 12%; text-align: center; }
+    .items .col-hdr-unit  { width: 14%; text-align: left; }
+    .items .col-hdr-space { width: 4%; text-align: left; }
+    .items .col-hdr-price { width: 35%; text-align: right; }
+    .items .col-hdr-amt   { width: 35%; text-align: right; }
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 1px 0 1px; font-weight: bold; }
+    .item-detail-row td { padding: 0 1px 3px 1px; }
+    .item-detail-row .col-qty   { width: 12%; text-align: center; }
+    .item-detail-row .col-unit  { width: 14%; text-align: left; }
+    .item-detail-row .col-spacer { width: 4%; }
+    .item-detail-row .col-price { width: 35%; text-align: right; word-break: break-all; }
+    .item-detail-row .col-amt   { width: 35%; text-align: right; word-break: break-all; }
+    @media print {
+      html, body { width: 80mm; margin: 0; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="receipt">
     <div class="divider"></div>
+    <div class="store-name">${storeName}</div>
     ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
-    ${proprietor ? `<div class="center">${proprietor}</div>` : ''}
-    <div class="center bold">${storeName}</div>
+    ${proprietor ? `<div class="center">PROPRIETOR: ${proprietor}</div>` : ''}
     <div class="center">${storeAddress}</div>
-    <div class="center">TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
-    ${isVAT ? '<div class="center">VAT REGISTERED</div>' : ''}
+    <div class="center">${isVAT ? 'VAT REGISTERED | ' : ''}TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
     ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
     <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
     <div class="divider"></div>
@@ -140,11 +162,11 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
     <table class="items">
       <thead>
         <tr>
-          <th class="qty">QTY</th>
-          <th class="unit">UNIT</th>
-          <th class="desc">DESCRIPTION</th>
-          <th class="price">PRICE</th>
-          <th class="amt">AMT</th>
+          <th class="col-hdr-qty">QTY</th>
+          <th class="col-hdr-unit">UNIT</th>
+          <th class="col-hdr-space"></th>
+          <th class="col-hdr-price">PRICE</th>
+          <th class="col-hdr-amt">AMOUNT</th>
         </tr>
       </thead>
       <tbody>

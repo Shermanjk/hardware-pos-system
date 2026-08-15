@@ -102,10 +102,30 @@ To make the POS system open automatically whenever the cashier PC turns on:
 
 | Action | Keyboard Shortcut |
 | :--- | :--- |
+| **Collect Customer Utang / Credit Payment** | `F11` or `Alt + U` or click **Collect Utang** in header |
+| **Reprint Last Receipt** (e.g. Paper ran out / jammed) | `F10` or `Alt + R` or click **Reprint Last** in header |
+| **Quick Reprint on Change Dialog** | Press `R` when Payment Complete modal is open |
 | **Close Kiosk Window** | `Alt + F4` or `Ctrl + W` |
-| **Toggle Full Screen** | `F11` |
-| **Focus Barcode Scanner** | Click anywhere on screen or press `F2` |
-| **Refresh Kiosk App** | `Ctrl + R` or `F5` |
+| **Focus Barcode / Product Search** | `F1` |
+| **Focus Cart Items** | `F2` |
+| **1-Click Walk-In Customer** | `F3` |
+| **Open Discount Selector** | `F4` |
+| **Hold Transaction** | `F5` |
+| **Held Transactions Panel** | `F6` |
+| **Process Returns** | `F7` |
+| **Focus Cash Tendered** | `F8` |
+| **Void Requests / Void Sale** | `F9` |
+| **Refresh Kiosk App** | `Ctrl + R` |
+
+---
+
+## What to Do If Thermal Paper Runs Out Mid-Print
+
+If the printer runs out of receipt paper during a transaction:
+1. Open the thermal printer lid, insert a new 80mm paper roll, and close the lid.
+2. If the **Payment Complete** screen is still open, simply press **`R`** or click **[Reprint Receipt]**.
+3. If the dialog was already closed, press **`F10`** (or click **Reprint Last** in the top header).
+4. The exact original receipt will print out cleanly without altering inventory, cash totals, or sales records.
 
 ---
 

@@ -28,7 +28,7 @@ export interface CustomerInfo {
   scPwdId?: string;
 }
 
-interface SaleReceiptParams {
+export interface SaleReceiptParams {
   invoiceNumber: string;
   cartItems: CartItem[];
   customerInfo: CustomerInfo;
@@ -200,16 +200,26 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   <title>Receipt</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 80mm auto; margin: 4mm 4mm 4mm 4mm; }
+    @page { size: 80mm auto; margin: 0; }
     html, body {
-      width: 72mm;
+      width: 80mm;
+      margin: 0;
+      padding: 0;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
-      line-height: 1.45;
+      line-height: 1.4;
       color: #000;
+      overflow-x: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    body { padding: 0; overflow-x: hidden; }
-    .receipt { width: 72mm; }
+    body { padding: 0; }
+    .receipt {
+      width: 76mm;
+      max-width: 76mm;
+      margin: 0 auto;
+      padding: 0;
+    }
     .center { text-align: center; margin: 1px 0; word-break: break-word; }
     .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
@@ -218,21 +228,25 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .bold { font-weight: bold; }
     .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
     .divider { border-top: 1px dashed #000; margin: 3px 0; }
-    .items { width: 100%; border-collapse: collapse; margin: 3px 0; }
-    .items th, .items td { padding: 0 2px; vertical-align: middle; }
-    .items .col-hdr-qty   { width: 8%; text-align: center; }
-    .items .col-hdr-unit  { width: 12%; text-align: left; }
-    .items .col-hdr-space { text-align: left; }
-    .items .col-hdr-price { width: 27%; text-align: right; }
-    .items .col-hdr-amt   { width: 27%; text-align: right; }
-    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 2px 0 2px; font-weight: bold; }
-    .item-detail-row td { padding: 0 2px 3px 2px; }
-    .item-detail-row .col-qty   { width: 8%; text-align: center; }
-    .item-detail-row .col-unit  { width: 12%; text-align: left; }
-    .item-detail-row .col-spacer { }
-    .item-detail-row .col-price { width: 27%; text-align: right; word-break: break-all; }
-    .item-detail-row .col-amt   { width: 27%; text-align: right; word-break: break-all; }
-    @media print { html, body { width: 72mm; } }
+    .items { width: 100%; border-collapse: collapse; margin: 3px 0; table-layout: fixed; }
+    .items th, .items td { padding: 0 1px; vertical-align: middle; }
+    .items th { font-size: 10px; font-weight: bold; }
+    .items .col-hdr-qty   { width: 12%; text-align: center; }
+    .items .col-hdr-unit  { width: 14%; text-align: left; }
+    .items .col-hdr-space { width: 4%; text-align: left; }
+    .items .col-hdr-price { width: 35%; text-align: right; }
+    .items .col-hdr-amt   { width: 35%; text-align: right; }
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 1px 0 1px; font-weight: bold; }
+    .item-detail-row td { padding: 0 1px 3px 1px; }
+    .item-detail-row .col-qty   { width: 12%; text-align: center; }
+    .item-detail-row .col-unit  { width: 14%; text-align: left; }
+    .item-detail-row .col-spacer { width: 4%; }
+    .item-detail-row .col-price { width: 35%; text-align: right; word-break: break-all; }
+    .item-detail-row .col-amt   { width: 35%; text-align: right; word-break: break-all; }
+    @media print {
+      html, body { width: 80mm; margin: 0; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+    }
   </style>
 </head>
 <body>
@@ -393,22 +407,37 @@ export function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): v
   <title>Credit Payment Receipt</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 80mm auto; margin: 4mm 4mm 4mm 4mm; }
+    @page { size: 80mm auto; margin: 0; }
     html, body {
-      width: 72mm;
+      width: 80mm;
+      margin: 0;
+      padding: 0;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
-      line-height: 1.45;
+      line-height: 1.4;
       color: #000;
+      overflow-x: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    body { padding: 0; overflow-x: hidden; }
-    .receipt { width: 72mm; }
+    body { padding: 0; }
+    .receipt {
+      width: 76mm;
+      max-width: 76mm;
+      margin: 0 auto;
+      padding: 0;
+    }
     .center { text-align: center; margin: 1px 0; word-break: break-word; }
     .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
     .bold { font-weight: bold; }
     .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
     .divider { border-top: 1px dashed #000; margin: 3px 0; }
-    @media print { html, body { width: 72mm; } }
+    @media print {
+      html, body { width: 80mm; margin: 0; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+    }
   </style>
 </head>
 <body>

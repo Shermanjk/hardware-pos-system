@@ -6,15 +6,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCashiers, type CashierOption } from "@/shared/api/cashReconciliationApi";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
-import type { Sale, SaleSummary } from "@/shared/api/salesApi";
+import type { Sale, SaleSummary, SaleItemSnapshot } from "@/shared/api/salesApi";
 import { getSaleByInvoice, searchSales } from "@/shared/api/salesApi";
+import { getSettings } from "@/shared/api/settingsApi";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import { printSaleReceipt, type CartItem } from "@/modules/cashier/utils/receipt";
 import axios from "axios";
+import { toast } from "sonner";
 import {
     AlertCircle,
     Calendar, ChevronDown, ChevronUp,
     Eye,
     Percent,
+    Printer,
     Receipt,
     Search,
     ShoppingCart,
@@ -48,9 +52,10 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
   invoiceNumber: string | null;
   onClose: () => void;
 }) {
-  const [sale,    setSale]    = useState<Sale | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [sale,       setSale]       = useState<Sale | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     if (!invoiceNumber) { setSale(null); return; }
@@ -61,6 +66,83 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
       .catch((err) => setError(extractError(err)))
       .finally(() => setLoading(false));
   }, [invoiceNumber]);
+
+  const handlePrintReceipt = async () => {
+    if (!sale) return;
+    setIsPrinting(true);
+    try {
+      const settings = await getSettings();
+      
+      const cartItems: CartItem[] = (sale.items || []).map((item) => ({
+        id: item.product_id,
+        name: item.product_name,
+        barcode: item.barcode ?? undefined,
+        unit: item.unit_abbreviation ?? undefined,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unit_price),
+        subtotal: Number(item.subtotal),
+        tax_type: "VATABLE",
+      }));
+
+      const itemSnapshots: SaleItemSnapshot[] = (sale.items || []).map((item) => {
+        const sub = Number(item.subtotal);
+        const vat = sub > 0 ? (sub / 1.12) * 0.12 : 0;
+        return {
+          product_id: item.product_id,
+          tax_type: "VATABLE",
+          taxable_amount: sub - vat,
+          vat_amount: vat,
+          line_subtotal: sub,
+        };
+      });
+
+      const subtotalCents = Math.round(Number(sale.subtotal) * 100);
+      const taxCents = Math.round(Number(sale.vat_amount) * 100);
+      const totalCents = Math.round(Number(sale.total_amount) * 100);
+      const cashCents = Math.round(Number(sale.cash_tendered ?? 0) * 100);
+      const changeCents = sale.change_amount !== null && sale.change_amount !== undefined ? Math.round(Number(sale.change_amount) * 100) : null;
+      const discountCents = Math.round(Number(sale.discount ?? 0) * 100);
+      const vatExemptCents = Math.round(Number(sale.vat_exempt_amount ?? 0) * 100);
+
+      printSaleReceipt({
+        invoiceNumber: sale.invoice_number,
+        cartItems,
+        customerInfo: {
+          name: sale.customer_name || "Walk-in Customer",
+          address: sale.customer_address || "",
+          tin: sale.customer_tin || "",
+          businessStyle: "",
+          scPwdType: sale.sc_pwd_type ?? "NONE",
+          scPwdId: sale.sc_pwd_id ?? undefined,
+        },
+        subtotalCents,
+        taxCents,
+        totalCents,
+        cashCents,
+        changeCents,
+        cashierName: sale.cashier_name || "—",
+        settings,
+        itemSnapshots,
+        discountCents,
+        discountName: sale.discount_name ?? undefined,
+        discountPercentage: sale.discount_percentage ?? undefined,
+        finalTotalCents: totalCents,
+        vatExemptCents,
+        scPwdType: sale.sc_pwd_type ?? "NONE",
+        scPwdId: sale.sc_pwd_id ?? undefined,
+        paymentType: sale.payment_type === "CREDIT" ? "CREDIT" : "CASH",
+        creditBalance: sale.credit_balance !== null && sale.credit_balance !== undefined ? Math.round(Number(sale.credit_balance) * 100) : null,
+        downPaymentCents: sale.payment_type === "CREDIT" ? Math.round(Number(sale.amount_paid_at_sale ?? 0) * 100) : undefined,
+      });
+
+      toast.success(`Receipt for ${sale.invoice_number} sent to printer.`);
+    } catch (err) {
+      console.error("Failed to reprint receipt:", err);
+      toast.error("Failed to reprint receipt. Check printer connection.");
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   const voidStatusPill = sale?.void_status === "voided"
     ? <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">VOIDED</span>
@@ -353,7 +435,21 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
           })()}
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between shrink-0">
+          {sale ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePrintReceipt}
+              disabled={isPrinting}
+              className="gap-2 text-slate-700 hover:bg-slate-100 font-semibold"
+            >
+              <Printer className="h-4 w-4 text-blue-600" />
+              <span>{isPrinting ? "Printing…" : "Reprint Receipt"}</span>
+            </Button>
+          ) : (
+            <div />
+          )}
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
       </DialogContent>
