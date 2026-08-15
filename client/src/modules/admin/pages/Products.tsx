@@ -33,6 +33,7 @@ import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
 import { AlertCircle, Edit2, Eye, Package, Plus, RefreshCw, ScanLine, Search, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -921,6 +922,11 @@ export default function Products() {
   }, [filterCat, filterSup, filterStatus]);
 
   useEffect(() => { loadProducts(search); }, [filterCat, filterSup, filterStatus, loadProducts]);
+
+  // Real-time zero-refresh sync: refresh products list on sales, stock-ins, or product updates
+  useRealtimeSync(["products", "inventory", "sales", "returns"], () => {
+    loadProducts(search);
+  });
 
   const handleSearchChange = (val: string) => {
     setSearch(val);

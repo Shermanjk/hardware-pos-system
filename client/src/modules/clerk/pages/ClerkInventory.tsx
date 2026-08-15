@@ -180,11 +180,12 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
         format: "CODE128",
         displayValue: false,
         height: 52,
-        width: 1.5,
-        margin: 4,
+        width: 1,
+        margin: 0,
         background: "transparent",
         lineColor: "#000",
       });
+      node.setAttribute("preserveAspectRatio", "none");
     } catch { /* invalid barcode — leave blank */ }
   }, [product?.barcode, open]); // re-run when product or open state changes
 
@@ -225,15 +226,17 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
 
         <div className="space-y-4">
           {/* Barcode preview */}
-          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center gap-1">
-            <p className="text-xs font-bold text-gray-700 tracking-wide uppercase">
+          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-between gap-1 min-h-[140px]">
+            <p className="text-xs font-bold text-gray-700 tracking-wide uppercase truncate w-full text-center">
               {BARCODE_PRINTER_CONFIG.storeName}
             </p>
-            <svg ref={svgCallbackRef} className="w-full h-auto" />
+            <div className="w-full h-14 flex items-center justify-center my-1">
+              <svg ref={svgCallbackRef} className="w-full h-full block" />
+            </div>
             <p className="font-mono text-sm font-bold tracking-widest text-gray-900">
               {product.barcode}
             </p>
-            <p className="text-xs text-gray-400">{product.product_name}</p>
+            <p className="text-xs text-gray-400 truncate w-full text-center">{product.product_name}</p>
           </div>
 
           {/* Number of labels */}

@@ -9,6 +9,7 @@ import { getPendingRequests, getRequestHistory, approveRequest, approveReturnReq
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { toast } from "sonner";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -465,6 +466,9 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
   }, [mainTab, subTab, filterStatus, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Real-time zero-refresh sync: when any request is submitted, approved, or rejected
+  useRealtimeSync(["requests", "returns", "discounts", "sales"], load);
 
   const handleApprove = async (type: string, id: number) => {
     setActionLoading(true);

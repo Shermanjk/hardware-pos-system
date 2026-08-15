@@ -30,6 +30,7 @@ import {
     X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -658,6 +659,12 @@ export default function Inventory() {
 
   useEffect(() => { loadSummary(); }, []);
   useEffect(() => { loadItems(search); }, [filterCat, filterStatus, loadItems]);
+
+  // Real-time zero-refresh sync: instant stock and summary refresh when sales, returns, or adjustments occur
+  useRealtimeSync(["inventory", "products", "sales", "returns"], () => {
+    loadSummary();
+    loadItems(search);
+  });
 
   const handleSearchChange = (val: string) => {
     setSearch(val);

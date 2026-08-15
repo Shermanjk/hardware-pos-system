@@ -33,6 +33,8 @@ export async function getSettings(): Promise<StoreSettings> {
   return res.data;
 }
 
+export const getStoreSettings = getSettings;
+
 export async function updateSettings(payload: Partial<StoreSettings>): Promise<StoreSettings> {
   const res = await httpClient.put<StoreSettings>("/api/settings", payload);
   return res.data;

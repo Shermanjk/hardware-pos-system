@@ -50,6 +50,23 @@ interface SaleReceiptParams {
   scPwdType?: "NONE" | "SENIOR_CITIZEN" | "PWD";
   /** SC/PWD ID number — required for SC/PWD transactions. */
   scPwdId?: string;
+  /** Payment type — "CASH" or "CREDIT". Defaults to "CASH". */
+  paymentType?: "CASH" | "CREDIT";
+  /** Customer's total outstanding balance in centavos after this transaction (credit sales). */
+  creditBalance?: number | null;
+  /** Down payment amount in centavos (credit sales). */
+  downPaymentCents?: number;
+}
+
+export interface CreditPaymentReceiptParams {
+  receiptNumber: string;
+  customerName: string;
+  customerCode?: string;
+  amountPaidCents: number;
+  newBalanceCents: number;
+  cashierName: string;
+  notes?: string;
+  settings: StoreSettings;
 }
 
 function buildReceiptHTML(params: SaleReceiptParams): string {
@@ -259,9 +276,28 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     ${discountHTML}
     ${vatBreakdownHTML}
     <div class="divider"></div>
+    ${params.paymentType === "CREDIT" ? `
+    <div class="row bold"><span>TOTAL AMOUNT:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
+    <div class="row bold"><span>PAYMENT METHOD:</span><span>CREDIT / CHARGE</span></div>
+    ${(params.downPaymentCents && params.downPaymentCents > 0) ? `
+    <div class="row"><span>Down Payment (Cash):</span><span>${currSym} ${fmtCents(params.downPaymentCents)}</span></div>
+    <div class="row bold"><span>Charged to Account:</span><span>${currSym} ${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
+    ` : `
+    <div class="row bold"><span>Charged to Account:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
+    `}
+    ${params.creditBalance !== undefined && params.creditBalance !== null ? `
+    <div class="row"><span>Total Account Balance:</span><span>${currSym} ${fmtCents(params.creditBalance)}</span></div>
+    ` : ''}
+    <div class="divider"></div>
+    <div class="section" style="margin-top: 14px; margin-bottom: 4px;">
+      <div style="border-bottom: 1px solid #000; width: 80%; margin: 12px auto 4px auto;"></div>
+      <div class="center" style="font-size: 9px;">CUSTOMER ACKNOWLEDGEMENT / SIGNATURE</div>
+    </div>
+    ` : `
     <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>Cash Tendered:</span><span>${currSym} ${fmtCents(cashCents)}</span></div>
     <div class="row"><span>Change:</span><span>${currSym} ${fmtCents(displayChangeCents)}</span></div>
+    `}
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
@@ -276,18 +312,133 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 </html>`;
 }
 
-export function printSaleReceipt(params: SaleReceiptParams): void {
-  const html = buildReceiptHTML(params);
-
+function printHtmlSilently(html: string): void {
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;";
+  iframe.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;visibility:hidden;pointer-events:none;";
+  iframe.setAttribute("aria-hidden", "true");
   document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    try {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    } catch {
+      // Ignore removal if already detached
+    }
+  };
+
   const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-  if (!doc) { document.body.removeChild(iframe); return; }
+  if (!doc) {
+    cleanup();
+    return;
+  }
+
   doc.open();
   doc.write(html);
   doc.close();
-  iframe.contentWindow?.focus();
-  iframe.contentWindow?.print();
-  setTimeout(() => document.body.removeChild(iframe), 1000);
+
+  const win = iframe.contentWindow;
+  if (win) {
+    const handlePrint = () => {
+      try {
+        win.focus();
+        win.print();
+      } catch (e) {
+        console.error("Silent receipt print error:", e);
+      }
+      setTimeout(cleanup, 2000);
+    };
+
+    if (doc.readyState === "complete") {
+      handlePrint();
+    } else {
+      win.addEventListener("load", handlePrint, { once: true });
+      setTimeout(handlePrint, 250);
+    }
+  } else {
+    setTimeout(cleanup, 2000);
+  }
 }
+
+export function printSaleReceipt(params: SaleReceiptParams): void {
+  const html = buildReceiptHTML(params);
+  printHtmlSilently(html);
+}
+
+export function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): void {
+  const {
+    receiptNumber, customerName, customerCode,
+    amountPaidCents, newBalanceCents, cashierName,
+    notes, settings,
+  } = params;
+
+  const storeName              = settings.store_name              || "";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const storeAddress           = settings.address                || "";
+  const storeTIN               = settings.tin || settings.business_license || "";
+  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
+
+  const now      = new Date();
+  const dateStr  = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const timeStr  = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  const fmtCents = (cents: number) => (cents / 100).toFixed(2);
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Credit Payment Receipt</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 80mm auto; margin: 4mm 4mm 4mm 4mm; }
+    html, body {
+      width: 72mm;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #000;
+    }
+    body { padding: 0; overflow-x: hidden; }
+    .receipt { width: 72mm; }
+    .center { text-align: center; margin: 1px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .bold { font-weight: bold; }
+    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
+    .divider { border-top: 1px dashed #000; margin: 3px 0; }
+    @media print { html, body { width: 72mm; } }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="divider"></div>
+    <div class="store-name">${storeName}</div>
+    ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
+    <div class="center">${storeAddress}</div>
+    <div class="center">TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+    <div class="divider"></div>
+    <div class="center bold">COLLECTION RECEIPT / PAYMENT ACKNOWLEDGEMENT</div>
+    <div class="row"><span>Receipt No:</span><span>${receiptNumber}</span></div>
+    <div class="row"><span>Date:</span><span>${dateStr}</span></div>
+    <div class="row"><span>Time:</span><span>${timeStr}</span></div>
+    <div class="divider"></div>
+    <div class="row"><span>Received From:</span><span class="bold">${customerName}</span></div>
+    ${customerCode ? `<div class="row"><span>Customer Code:</span><span>${customerCode}</span></div>` : ''}
+    ${notes ? `<div class="row"><span>Notes:</span><span>${notes}</span></div>` : ''}
+    <div class="divider"></div>
+    <div class="row bold" style="font-size: 13px;"><span>AMOUNT PAID:</span><span>${currSym} ${fmtCents(amountPaidCents)}</span></div>
+    <div class="row bold"><span>REMAINING BALANCE:</span><span>${currSym} ${fmtCents(newBalanceCents)}</span></div>
+    <div class="divider"></div>
+    <div class="row"><span>Received By:</span><span>${cashierName}</span></div>
+    <div class="divider"></div>
+    <div class="center" style="margin-top: 10px;">Thank you for your payment!</div>
+    <div class="divider"></div>
+  </div>
+</body>
+</html>`;
+
+  printHtmlSilently(html);
+}
+

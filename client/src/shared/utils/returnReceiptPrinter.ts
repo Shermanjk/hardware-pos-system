@@ -174,14 +174,50 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
 </html>`;
 
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
+  iframe.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;visibility:hidden;pointer-events:none;";
+  iframe.setAttribute("aria-hidden", "true");
   document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    try {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    } catch {
+      // Ignored
+    }
+  };
+
   const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-  if (!doc) { document.body.removeChild(iframe); return; }
+  if (!doc) {
+    cleanup();
+    return;
+  }
+
   doc.open();
   doc.write(html);
   doc.close();
-  iframe.contentWindow?.focus();
-  iframe.contentWindow?.print();
-  setTimeout(() => document.body.removeChild(iframe), 1000);
+
+  const win = iframe.contentWindow;
+  if (win) {
+    const handlePrint = () => {
+      try {
+        win.focus();
+        win.print();
+      } catch (e) {
+        console.error("Silent return receipt print error:", e);
+      }
+      setTimeout(cleanup, 2000);
+    };
+
+    if (doc.readyState === "complete") {
+      handlePrint();
+    } else {
+      win.addEventListener("load", handlePrint, { once: true });
+      setTimeout(handlePrint, 250);
+    }
+  } else {
+    setTimeout(cleanup, 2000);
+  }
 }

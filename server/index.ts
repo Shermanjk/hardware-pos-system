@@ -13,6 +13,8 @@ import backupRoutes from "./routes/backup.js";
 import cashReconciliationRoutes from "./routes/cashReconciliation.js";
 import categoriesRoutes from "./routes/categories.js";
 import commodityPricesRoutes from "./routes/commodityPrices.js";
+import creditLimitOverridesRoutes from "./routes/creditLimitOverrides.js";
+import customersRoutes from "./routes/customers.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import discountApprovalsRoutes from "./routes/discountApprovals.js";
 import discountsRoutes from "./routes/discounts.js";
@@ -82,6 +84,8 @@ async function startServer() {
   app.use("/api/discount-approvals", discountApprovalsRoutes);
   app.use("/api/authorization-history", authorizationHistoryRoutes);
   app.use("/api/cash-reconciliation", cashReconciliationRoutes);
+  app.use("/api/customers", customersRoutes);
+  app.use("/api/credit-limit-overrides", creditLimitOverridesRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────
   // When bundled to server-dist/index.js, static files are at ../dist/public
@@ -98,6 +102,17 @@ async function startServer() {
   const port = Number(process.env.PORT) || 3001;
 
   initWebSocket(server);
+
+  // ─── Auto-run pending database migrations on startup ─────────────────────────
+  try {
+    const { executePendingMigrations } = await import("./services/migrationService.js");
+    const migResult = await executePendingMigrations(1);
+    if (migResult.executed.length > 0) {
+      console.log(`[Database] Successfully applied migrations on startup: ${migResult.executed.join(", ")}`);
+    }
+  } catch (migErr) {
+    console.error("[Database] Migration startup check:", migErr);
+  }
 
   server.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}/`);

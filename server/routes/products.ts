@@ -4,6 +4,7 @@ import { PoolConnection } from "mysql2/promise";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { broadcastEntityUpdate } from "../ws.js";
 
 const router = Router();
 
@@ -326,6 +327,11 @@ router.post("/", async (req: Request, res: Response) => {
       newValues: { barcode, product_name, selling_price, cost_price },
     });
 
+    // Real-time system sync
+    broadcastEntityUpdate({ entity: "products", action: "created", id: newId });
+    broadcastEntityUpdate({ entity: "inventory" });
+    broadcastEntityUpdate({ entity: "dashboard" });
+
     res.status(201).json((newRows as any[])[0]);
   } catch (err) {
     console.error("[products/POST /]", err);
@@ -463,6 +469,11 @@ router.put("/:id", async (req: Request, res: Response) => {
         : data as Record<string, unknown>,
     }).catch((e) => console.error("[products/PUT /:id] auditLogger failed:", e));
 
+    // Real-time system sync
+    broadcastEntityUpdate({ entity: "products", action: "updated", id });
+    broadcastEntityUpdate({ entity: "inventory" });
+    broadcastEntityUpdate({ entity: "dashboard" });
+
     res.status(200).json((updated as any[])[0]);
   } catch (err) {
     await conn.rollback();
@@ -496,11 +507,17 @@ router.delete("/:id", async (req: Request, res: Response) => {
       await pool.execute(
         "UPDATE products SET status = 'Inactive' WHERE id = ?", [id]
       );
+      broadcastEntityUpdate({ entity: "products", action: "updated", id });
+      broadcastEntityUpdate({ entity: "inventory" });
+      broadcastEntityUpdate({ entity: "dashboard" });
       res.status(200).json({ message: "Product deactivated (has sales history).", soft: true });
       return;
     }
 
     await pool.execute("DELETE FROM products WHERE id = ?", [id]);
+    broadcastEntityUpdate({ entity: "products", action: "deleted", id });
+    broadcastEntityUpdate({ entity: "inventory" });
+    broadcastEntityUpdate({ entity: "dashboard" });
     res.status(200).json({ message: "Product deleted successfully.", soft: false });
   } catch (err) {
     console.error("[products/DELETE /:id]", err);

@@ -13,6 +13,7 @@ import {
     ShieldCheck,
     TrendingUp,
     Truck,
+    UserCheck,
     Users,
     Wallet,
 } from "lucide-react";
@@ -57,9 +58,10 @@ const navStructure: (NavItem | NavGroup)[] = [
     label: "Management",
     icon: Users,
     items: [
-      { icon: FolderOpen, label: "Categories", href: "/categories" },
-      { icon: Users,      label: "Users",      href: "/users" },
-      { icon: Percent,    label: "Discount Management", href: "/discounts", hasAlertBadge: true },
+      { icon: UserCheck,  label: "Customers & Credit",   href: "/customers" },
+      { icon: FolderOpen, label: "Categories",           href: "/categories" },
+      { icon: Users,      label: "Users",                href: "/users" },
+      { icon: Percent,    label: "Discount Management",  href: "/discounts", hasAlertBadge: true },
     ],
   } as NavGroup,
   { icon: BarChart3, label: "Reports",  href: "/reports" },

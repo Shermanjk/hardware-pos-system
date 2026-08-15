@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { pool } from "../db";
 import { authenticate } from "../middleware/authenticate";
 import { logAuditEvent } from "../utils/auditLogger";
-import { sendVoidDecision } from "../ws.js";
+import { sendVoidDecision, broadcastEntityUpdate } from "../ws.js";
 import { z } from "zod";
 
 const router = Router();
@@ -581,6 +581,11 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
           newValues: { quantity: newQty },
         });
 
+        broadcastEntityUpdate({ entity: "requests", action: "approved" });
+        broadcastEntityUpdate({ entity: "inventory" });
+        broadcastEntityUpdate({ entity: "products", id: request.product_id });
+        broadcastEntityUpdate({ entity: "dashboard" });
+
         res.status(200).json({ message: "Request approved." });
       } catch (err) {
         await conn.rollback();
@@ -646,6 +651,11 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
           previousValues: { quantity: currentQty },
           newValues: { quantity: newQty },
         });
+
+        broadcastEntityUpdate({ entity: "requests", action: "approved" });
+        broadcastEntityUpdate({ entity: "inventory" });
+        broadcastEntityUpdate({ entity: "products", id: request.product_id });
+        broadcastEntityUpdate({ entity: "dashboard" });
 
         res.status(200).json({ message: "Request approved." });
       } catch (err) {
@@ -736,7 +746,11 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
           });
         }
 
-        // Dispatch refresh event for sidebar counts
+        broadcastEntityUpdate({ entity: "requests", action: "approved" });
+        broadcastEntityUpdate({ entity: "sales", action: "voided", id: voidRow.sale_id });
+        broadcastEntityUpdate({ entity: "inventory" });
+        broadcastEntityUpdate({ entity: "dashboard" });
+
         res.status(200).json({ message: "Sale voided successfully." });
       } catch (err) {
         await conn.rollback();
@@ -757,6 +771,10 @@ router.post("/:type/:id/approve", async (req: Request, res: Response) => {
         entityType: "return",
         entityId: requestId,
       });
+
+      broadcastEntityUpdate({ entity: "requests", action: "approved" });
+      broadcastEntityUpdate({ entity: "returns", action: "approved", id: requestId });
+      broadcastEntityUpdate({ entity: "dashboard" });
 
       res.status(200).json({ message: "Request approved." });
     } else {
@@ -886,6 +904,9 @@ router.post("/:type/:id/reject", async (req: Request, res: Response) => {
           });
         }
 
+        broadcastEntityUpdate({ entity: "requests", action: "rejected" });
+        broadcastEntityUpdate({ entity: "sales", action: "updated", id: voidRow.sale_id });
+
         res.status(200).json({ message: "Void request rejected." });
       } catch (err) {
         await conn.rollback();
@@ -907,6 +928,9 @@ router.post("/:type/:id/reject", async (req: Request, res: Response) => {
         entityId: requestId,
         reason: rejection_reason,
       });
+
+      broadcastEntityUpdate({ entity: "requests", action: "rejected" });
+      broadcastEntityUpdate({ entity: "returns", action: "rejected", id: requestId });
 
       res.status(200).json({ message: "Request rejected." });
     } else {

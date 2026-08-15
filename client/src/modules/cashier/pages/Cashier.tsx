@@ -11,6 +11,7 @@ import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import { ChevronDown, Clock, LogOut, PowerOff, User, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -20,6 +21,7 @@ import CustomerPanel from "../components/CustomerPanel";
 import DiscountApprovalModal from "../components/DiscountApprovalModal";
 import EndShiftModal from "../components/EndShiftModal";
 import type { HeldOrder } from "../components/HeldOrdersPanel";
+import CreditLimitOverrideModal from "../components/CreditLimitOverrideModal";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
 import PaymentPanel from "../components/PaymentPanel";
 import PaymentSuccessModal, { type PaymentSuccessData } from "../components/PaymentSuccessModal";
@@ -167,6 +169,28 @@ export default function Cashier() {
   const [selectedDiscount, setSelectedDiscount] = useState<{ id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null>(null);
   const [discountRequestId, setDiscountRequestId] = useState<number | null>(null);
   const [showDiscountApprovalModal, setShowDiscountApprovalModal] = useState(false);
+
+  // ── Credit / Utang state ──────────────────────────────────────────────────
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "CREDIT">("CASH");
+  const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<any | null>(null);
+  const [downPayment, setDownPayment] = useState("");
+  const [overrideRequestId, setOverrideRequestId] = useState<number | null>(null);
+  const [showCreditOverrideModal, setShowCreditOverrideModal] = useState(false);
+  const [latestCreditOverrideDecision, setLatestCreditOverrideDecision] = useState<any | null>(null);
+
+  // Handle payment mode switch — reset credit-specific state
+  const handleSetPaymentMode = (mode: "CASH" | "CREDIT") => {
+    setPaymentMode(mode);
+    if (mode === "CASH") {
+      setSelectedCreditCustomer(null);
+      setDownPayment("");
+      setOverrideRequestId(null);
+      setShowCreditOverrideModal(false);
+    } else {
+      // Switching to credit — clear cash tendered so the field resets
+      setCashTendered("");
+    }
+  };
 
   // Keep the ref in sync with state so the wrapped setCartItems can read it
   // without a stale closure.
@@ -361,6 +385,9 @@ export default function Cashier() {
     };
   }, [fetchPendingData]);
 
+  // Real-time zero-refresh sync: immediately update pending voids/returns when decisions or submissions happen
+  useRealtimeSync(["requests", "returns", "discounts"], fetchPendingData);
+
   // ── WebSocket return decisions ─────────────────────────────────────────────
   // After updating local state from the WS push, trigger an HTTP reconcile so
   // any items missed during a brief disconnect are also picked up.
@@ -531,17 +558,58 @@ export default function Cashier() {
     setDiscountRequestId(null);
   };
 
-  // Core payment handler — accepts an optional override for discountRequestId
-  // so it can be called immediately after approval without waiting for setState.
-  const handleProcessPaymentWithRequest = async (overrideRequestId?: number) => {
+  const handleProcessPaymentWithRequest = async (overrideDiscountRequestId?: number) => {
     // Hard block — no shift session means no transactions
     if (!hasOpenSession) {
       toast.error("Start your shift before processing transactions.");
       setShowEndShift(true);
       return;
     }
-    const effectiveDiscountRequestId = overrideRequestId ?? discountRequestId;
-    if (cartItems.length === 0 || cashCents < finalTotalCents || !customerInfo.name.trim()) return;
+    const effectiveDiscountRequestId = overrideDiscountRequestId ?? discountRequestId;
+
+    // ── Credit mode validation ──────────────────────────────────────────────
+    if (paymentMode === "CREDIT") {
+      if (cartItems.length === 0 || !customerInfo.name.trim()) return;
+      if (!selectedCreditCustomer) {
+        toast.error("Please select a credit customer.");
+        return;
+      }
+      if (!selectedCreditCustomer.is_credit_enabled) {
+        toast.error("Credit is not enabled for this customer. Contact the admin.");
+        return;
+      }
+      // Check if credit limit would be exceeded and no override is approved
+      const downPaymentAmt = parseCashInput(downPayment) / 100;
+      const creditAmount = finalTotalCents / 100 - downPaymentAmt;
+      const projectedBalance = selectedCreditCustomer.current_balance + creditAmount;
+      if (selectedCreditCustomer.credit_limit > 0 && projectedBalance > selectedCreditCustomer.credit_limit) {
+        if (!overrideRequestId) {
+          // Request override
+          try {
+            const { requestCreditLimitOverride } = await import("@/shared/api/creditApi");
+            const result = await requestCreditLimitOverride({
+              customer_id: selectedCreditCustomer.id,
+              requested_amount: finalTotalCents / 100,
+            });
+            setOverrideRequestId(result.override_id);
+            setShowCreditOverrideModal(true);
+          } catch (err: any) {
+            if (err?.response?.status === 409) {
+              // Already pending override
+              setOverrideRequestId(err.response.data.override_id);
+              setShowCreditOverrideModal(true);
+            } else {
+              toast.error(err?.response?.data?.message ?? "Failed to request credit override.");
+            }
+          }
+          return;
+        }
+        // Has override ID — proceed (backend will validate the override status)
+      }
+    } else {
+      // CASH mode
+      if (cartItems.length === 0 || cashCents < finalTotalCents || !customerInfo.name.trim()) return;
+    }
 
     // SC/PWD validation — require type and ID when an SC/PWD discount is selected
     if (isScPwdSelected) {
@@ -583,17 +651,26 @@ export default function Cashier() {
       if (changedNames.length > 0) { setCartItems(refreshedCart); toast.warning(`Updated: ${changedNames.join(", ")}`); setIsProcessing(false); return; }
 
       const clientTxnId = generateClientTransactionId();
+
+      // Build payload — differs by payment mode
+      const downPaymentAmt = paymentMode === "CREDIT" ? parseCashInput(downPayment) / 100 : 0;
       const payload: CreateSalePayload = {
         customer_name: customerInfo.name || "Walk-in Customer",
         customer_address: customerInfo.address || undefined,
         customer_tin: customerInfo.tin || undefined,
         subtotal: subtotalCents / 100, vat_amount: taxCents / 100, total_amount: totalCents / 100,
-        cash_tendered: cashCents / 100, change_amount: changeCents ? changeCents / 100 : 0,
+        cash_tendered: paymentMode === "CREDIT" ? downPaymentAmt : cashCents / 100,
+        change_amount: paymentMode === "CREDIT" ? 0 : (changeCents ? changeCents / 100 : 0),
         client_transaction_id: clientTxnId,
         discount_id: selectedDiscount?.id,
         discount_request_id: effectiveDiscountRequestId || undefined,
         sc_pwd_type: scPwdType,
         sc_pwd_id: scPwdId || undefined,
+        // Credit fields
+        payment_type: paymentMode,
+        customer_id: paymentMode === "CREDIT" ? selectedCreditCustomer?.id : undefined,
+        down_payment: paymentMode === "CREDIT" ? downPaymentAmt : undefined,
+        credit_limit_override_id: paymentMode === "CREDIT" ? (overrideRequestId ?? undefined) : undefined,
         items: cartItems.map((i) => ({ product_id: i.id, quantity: i.quantity, unit_price: Number(i.unitPrice), subtotal: Number(i.subtotal), tax_type: i.tax_type })),
       };
       const saleResult = await createSale(payload);
@@ -614,6 +691,11 @@ export default function Cashier() {
       setDiscountRequestId(null);
       clearCart();
       setCustomerInfo({ name: "", address: "", tin: "", businessStyle: "" });
+      // Reset credit state
+      setSelectedCreditCustomer(null);
+      setDownPayment("");
+      setOverrideRequestId(null);
+      setPaymentMode("CASH");
 
       // ── Clear draft — transaction is now committed to the DB ──────────────
       cartDraft.commitDraft();
@@ -633,17 +715,17 @@ export default function Cashier() {
           );
         }
 
-        printSaleReceipt({ 
-          invoiceNumber: saleResult.invoice_number, 
-          cartItems: printedCartItems, 
-          customerInfo: printedCustomerInfo, 
-          subtotalCents: Math.round(saleResult.subtotal * 100), 
-          taxCents: Math.round(saleResult.vat_amount * 100), 
-          totalCents: Math.round(saleResult.total_amount * 100), 
-          cashCents, 
-          changeCents: Math.round(saleResult.change_amount * 100), 
-          cashierName: user?.full_name ?? "—", 
-          settings: storeSettings, 
+        printSaleReceipt({
+          invoiceNumber: saleResult.invoice_number,
+          cartItems: printedCartItems,
+          customerInfo: printedCustomerInfo,
+          subtotalCents: Math.round(saleResult.subtotal * 100),
+          taxCents: Math.round(saleResult.vat_amount * 100),
+          totalCents: Math.round(saleResult.total_amount * 100),
+          cashCents: paymentMode === "CREDIT" ? Math.round(downPaymentAmt * 100) : cashCents,
+          changeCents: Math.round(saleResult.change_amount * 100),
+          cashierName: user?.full_name ?? "—",
+          settings: storeSettings,
           itemSnapshots: saleResult.items,
           discountCents: Math.round(saleResult.discount * 100),
           discountName: saleResult.discount_name ?? printedDiscountName,
@@ -652,6 +734,10 @@ export default function Cashier() {
           vatExemptCents: Math.round(saleResult.vat_exempt_amount * 100),
           scPwdType: saleResult.sc_pwd_type ?? printedScPwdType,
           scPwdId: saleResult.sc_pwd_id ?? printedScPwdId ?? "",
+          // Credit receipt fields
+          paymentType: saleResult.payment_type ?? "CASH",
+          creditBalance: saleResult.credit_balance !== null ? Math.round((saleResult.credit_balance ?? 0) * 100) : null,
+          downPaymentCents: paymentMode === "CREDIT" ? Math.round(downPaymentAmt * 100) : undefined,
         });
         receiptPrinted = true;
       } catch (printErr) {
@@ -665,13 +751,13 @@ export default function Cashier() {
       if (saleResult._idempotent)
         toast.info(`Sale already processed: ${saleResult.invoice_number}`, { description: "This transaction was already completed. No duplicate was created.", duration: 8000 });
       else
-        toast.success(`Sale completed: ${saleResult.invoice_number}`, { description: receiptPrinted ? "Receipt printed." : "Receipt not printed.", duration: 5000 });
+        toast.success(`${saleResult.payment_type === "CREDIT" ? "Credit sale" : "Sale"} completed: ${saleResult.invoice_number}`, { description: receiptPrinted ? "Receipt printed." : "Receipt not printed.", duration: 5000 });
 
       // Display prominent post-sale change confirmation dialog
       setPaymentSuccessData({
         invoiceNumber: saleResult.invoice_number,
         totalAmount: Number(saleResult.total_amount),
-        cashTendered: cashCents / 100,
+        cashTendered: paymentMode === "CREDIT" ? downPaymentAmt : cashCents / 100,
         changeAmount: Number(saleResult.change_amount),
         customerName: printedCustomerInfo.name || undefined,
       });
@@ -1025,7 +1111,14 @@ export default function Cashier() {
           setSelectedDiscount={setSelectedDiscount}
           noShift={sessionChecked && !hasOpenSession}
         />
-        <CustomerPanel customerInfo={customerInfo} setCustomerInfo={setCustomerInfo} showScPwdFields={showScPwdFields} />
+        <CustomerPanel
+          customerInfo={customerInfo}
+          setCustomerInfo={setCustomerInfo}
+          showScPwdFields={showScPwdFields}
+          paymentMode={paymentMode}
+          selectedCreditCustomer={selectedCreditCustomer}
+          setSelectedCreditCustomer={setSelectedCreditCustomer}
+        />
         <PaymentPanel
           subtotalCents={subtotalCents} taxCents={taxCents}
           totalCents={totalCents} taxRate={taxRate}
@@ -1054,6 +1147,14 @@ export default function Cashier() {
           )}
           pendingVoidRequestsCount={unreadVoidCount}
           pendingHeldOrdersCount={heldOrders.length}
+          paymentMode={paymentMode}
+          onSetPaymentMode={handleSetPaymentMode}
+          downPayment={downPayment}
+          setDownPayment={setDownPayment}
+          creditLimit={selectedCreditCustomer?.credit_limit ?? 0}
+          creditBalance={selectedCreditCustomer?.current_balance ?? 0}
+          creditEnabled={selectedCreditCustomer?.is_credit_enabled ?? false}
+          pendingCreditOverride={showCreditOverrideModal}
         />
       </div>
 
@@ -1098,6 +1199,26 @@ export default function Cashier() {
         vatRate={taxRate}
         onApproved={handleDiscountApproved}
         onRejected={handleDiscountRejected}
+      />
+      <CreditLimitOverrideModal
+        open={showCreditOverrideModal}
+        onClose={() => setShowCreditOverrideModal(false)}
+        overrideId={overrideRequestId}
+        customerName={selectedCreditCustomer?.full_name ?? ""}
+        requestedAmount={finalTotalCents / 100}
+        currentLimit={selectedCreditCustomer?.credit_limit ?? 0}
+        currentBalance={selectedCreditCustomer?.current_balance ?? 0}
+        onApproved={(id) => {
+          setOverrideRequestId(id);
+          setShowCreditOverrideModal(false);
+          // Proceed with the sale now that override is approved
+          handleProcessPaymentWithRequest();
+        }}
+        onRejected={() => {
+          setOverrideRequestId(null);
+          setShowCreditOverrideModal(false);
+        }}
+        latestDecision={latestCreditOverrideDecision}
       />
 
       <EndShiftModal

@@ -85,6 +85,55 @@ export interface DiscountCancellationNotification {
   cancelled_at: string;
 }
 
+export interface CreditLimitOverrideRequestNotification {
+  type: "credit_limit_override_request";
+  override_id: number;
+  customer_id: number;
+  customer_name: string;
+  requested_amount: number;
+  current_limit: number;
+  current_balance: number;
+  cashier_name: string;
+  cashier_user_id: number;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface CreditLimitOverrideDecisionNotification {
+  type: "credit_limit_override_decision";
+  override_id: number;
+  customer_id: number;
+  customer_name: string;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason: string | null;
+  cashier_user_id: number;
+}
+
+export type EntityType =
+  | "sales"
+  | "customers"
+  | "credit_ledger"
+  | "inventory"
+  | "products"
+  | "categories"
+  | "discounts"
+  | "requests"
+  | "dashboard"
+  | "commodity"
+  | "returns"
+  | "settings"
+  | "cash_reconciliation";
+
+export interface EntityUpdateNotification {
+  type: "entity_updated";
+  entity: EntityType;
+  action?: "created" | "updated" | "deleted" | "voided" | "paid" | "adjusted" | "approved" | "rejected";
+  id?: number;
+  customerId?: number;
+  timestamp: string;
+}
+
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
@@ -95,10 +144,14 @@ export type ReturnNotification = ReturnRequestNotification;
 const HEARTBEAT_INTERVAL_MS = 30_000; // how often we ping
 const PONG_TIMEOUT_MS        = 10_000; // how long we wait for pong before terminating
 
+// Track all connected authenticated sockets for system-wide sync
+const allClients = new Set<WebSocket>();
 // Track connected Admin sockets
 const adminClients = new Set<WebSocket>();
 // Track cashier sockets keyed by userId so we can route decisions back
 const cashierClients = new Map<number, Set<WebSocket>>();
+// Track clerk sockets
+const clerkClients = new Set<WebSocket>();
 
 // ─── Per-socket heartbeat setup ───────────────────────────────────────────────
 // Attach a ping/pong heartbeat to a freshly opened WebSocket. Returns a
@@ -162,11 +215,17 @@ export function initWebSocket(server: Server): void {
 
     // ── Start heartbeat immediately on connection ────────────────────────────
     const stopHeartbeat = attachHeartbeat(ws);
+    allClients.add(ws);
+
+    const handleClose = () => {
+      stopHeartbeat();
+      allClients.delete(ws);
+    };
 
     if (payload.role === "Admin") {
       adminClients.add(ws);
       ws.on("close", () => {
-        stopHeartbeat();
+        handleClose();
         adminClients.delete(ws);
       });
     } else if (payload.role === "Cashier") {
@@ -174,15 +233,40 @@ export function initWebSocket(server: Server): void {
       if (!cashierClients.has(uid)) cashierClients.set(uid, new Set());
       cashierClients.get(uid)!.add(ws);
       ws.on("close", () => {
-        stopHeartbeat();
+        handleClose();
         cashierClients.get(uid)?.delete(ws);
         if (cashierClients.get(uid)?.size === 0) cashierClients.delete(uid);
       });
+    } else if (payload.role === "Inventory Clerk") {
+      clerkClients.add(ws);
+      ws.on("close", () => {
+        handleClose();
+        clerkClients.delete(ws);
+      });
     } else {
-      stopHeartbeat();
+      handleClose();
       ws.close(1008, "Forbidden");
     }
   });
+}
+
+export function broadcastEntityUpdate(
+  notification: Omit<EntityUpdateNotification, "type" | "timestamp">
+): void {
+  const message = JSON.stringify({
+    type: "entity_updated",
+    ...notification,
+    timestamp: new Date().toISOString(),
+  });
+  for (const client of Array.from(allClients)) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch {
+        /* silent */
+      }
+    }
+  }
 }
 
 export function broadcastVoidRequest(notification: VoidRequestNotification): void {
@@ -241,6 +325,33 @@ export function sendDiscountDecision(notification: DiscountDecisionNotification)
     }
   }
   // Also broadcast to all admin clients so other admin terminals update in real time
+  for (const client of Array.from(adminClients)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+// ─── Credit Limit Override notifications ──────────────────────────────────────
+
+export function broadcastCreditLimitOverrideRequest(
+  notification: CreditLimitOverrideRequestNotification
+): void {
+  const message = JSON.stringify(notification);
+  for (const client of Array.from(adminClients)) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+export function sendCreditLimitOverrideDecision(
+  notification: CreditLimitOverrideDecisionNotification
+): void {
+  const message = JSON.stringify(notification);
+  const sockets = cashierClients.get(notification.cashier_user_id);
+  if (sockets) {
+    for (const client of Array.from(sockets)) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
+    }
+  }
+  // Also notify all admin clients (so the pending list auto-refreshes)
   for (const client of Array.from(adminClients)) {
     if (client.readyState === WebSocket.OPEN) client.send(message);
   }

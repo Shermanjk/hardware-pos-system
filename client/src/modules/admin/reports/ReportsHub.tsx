@@ -8,11 +8,11 @@ import {
   RotateCcw, 
   Ban, 
   Percent, 
-  DollarSign, 
   ShieldCheck, 
   ClipboardList,
   ChevronRight
 } from "lucide-react";
+import PesoSign from "@/shared/components/PesoSign";
 import { useState } from "react";
 import SalesReport from "./SalesReport";
 import InventoryReport from "./InventoryReport";
@@ -26,10 +26,13 @@ import DiscountReport from "./DiscountReport";
 import CashReconciliationReport from "./CashReconciliationReport";
 import AuthorizationHistoryReport from "./AuthorizationHistoryReport";
 import AuditLogReport from "./AuditLogReport";
+import CreditReceivablesReport from "./CreditReceivablesReport";
+import { CreditCard } from "lucide-react";
 
 type ReportType = 
   | "hub"
   | "sales"
+  | "credit-receivables"
   | "inventory"
   | "stock-movement"
   | "product-sales"
@@ -56,6 +59,13 @@ const reports: ReportCard[] = [
     title: "Sales Report",
     description: "Detailed sales transaction data with gross sales, discounts, returns, and net sales",
     icon: <FileText className="h-6 w-6" />,
+    category: "Sales",
+  },
+  {
+    id: "credit-receivables",
+    title: "Accounts Receivable & Utang",
+    description: "Customer credit balances, aging analysis (0-30, 31-60, 61-90, >90 days), and credit sales vs collection",
+    icon: <CreditCard className="h-6 w-6" />,
     category: "Sales",
   },
   {
@@ -118,7 +128,7 @@ const reports: ReportCard[] = [
     id: "cash-reconciliation",
     title: "Cash Reconciliation",
     description: "Cash drawer reconciliation with expected vs actual and variance tracking",
-    icon: <DollarSign className="h-6 w-6" />,
+    icon: <PesoSign className="text-2xl" />,
     category: "Operations",
   },
   {
@@ -151,6 +161,8 @@ export default function ReportsHub() {
     switch (selectedReport) {
       case "sales":
         return <SalesReport />;
+      case "credit-receivables":
+        return <CreditReceivablesReport />;
       case "inventory":
         return <InventoryReport />;
       case "stock-movement":

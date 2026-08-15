@@ -1093,4 +1093,146 @@ router.get("/audit-logs", async (req: Request, res: Response) => {
   }
 });
 
-export default router;
+// ─── GET /api/reports/credit-receivables — Accounts Receivable & Aging Report ─
+router.get("/credit-receivables", async (req: Request, res: Response) => {
+  try {
+    const {
+      date_from = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+      date_to   = new Date().toISOString().slice(0, 10),
+      status = "all", // "all" | "with_balance" | "active"
+      customer_id,
+    } = req.query as Record<string, string>;
+
+    // 1. Overall Summary KPIs
+    const [summaryRows] = await pool.execute<any[]>(`
+      SELECT
+        COALESCE(SUM(current_balance), 0) AS total_receivables,
+        COUNT(*) AS total_customers,
+        COUNT(CASE WHEN current_balance > 0 THEN 1 END) AS customers_with_balance,
+        COUNT(CASE WHEN is_credit_enabled = 1 THEN 1 END) AS credit_enabled_customers
+      FROM customers
+      WHERE status = 'Active'
+    `);
+
+    // 2. Period activity (Credit sales and payments made in the selected date range)
+    const [activityRows] = await pool.execute<any[]>(`
+      SELECT
+        COALESCE(SUM(CASE WHEN entry_type = 'CREDIT_SALE' THEN amount ELSE 0 END), 0) AS period_credit_sales,
+        COALESCE(SUM(CASE WHEN entry_type = 'PAYMENT' THEN ABS(amount) ELSE 0 END), 0) AS period_payments,
+        COALESCE(SUM(CASE WHEN entry_type = 'VOID_REVERSAL' THEN ABS(amount) ELSE 0 END), 0) AS period_void_reversals,
+        COALESCE(SUM(CASE WHEN entry_type = 'ADJUSTMENT' THEN amount ELSE 0 END), 0) AS period_adjustments
+      FROM credit_ledger
+      WHERE DATE(created_at) BETWEEN ? AND ?
+    `, [date_from, date_to]);
+
+    // 3. Customer-by-customer list with balances and aging
+    let customerFilter = "";
+    const customerParams: any[] = [];
+    if (status === "with_balance") {
+      customerFilter += " AND c.current_balance > 0";
+    } else if (status === "active") {
+      customerFilter += " AND c.status = 'Active'";
+    }
+    if (customer_id) {
+      customerFilter += " AND c.id = ?";
+      customerParams.push(Number(customer_id));
+    }
+
+    const [customerRows] = await pool.execute<any[]>(`
+      SELECT
+        c.id,
+        c.customer_code,
+        c.full_name,
+        c.contact_number,
+        c.credit_limit,
+        c.current_balance,
+        c.is_credit_enabled,
+        c.status,
+        c.created_at,
+        (SELECT MAX(created_at) FROM credit_ledger WHERE customer_id = c.id AND entry_type = 'CREDIT_SALE') AS last_credit_sale_date,
+        (SELECT MAX(created_at) FROM credit_ledger WHERE customer_id = c.id AND entry_type = 'PAYMENT') AS last_payment_date
+      FROM customers c
+      WHERE 1=1
+        ${customerFilter}
+      ORDER BY c.current_balance DESC, c.full_name ASC
+    `, customerParams);
+
+    // 4. Calculate aging breakdown for each customer with outstanding balance
+    // Uses open CREDIT_SALE ledger entries (unallocated remainder)
+    const [openEntries] = await pool.execute<any[]>(`
+      SELECT
+        cl.customer_id,
+        cl.amount AS original_amount,
+        cl.created_at,
+        DATEDIFF(CURDATE(), DATE(cl.created_at)) AS days_old,
+        (cl.amount - COALESCE((SELECT SUM(ca.amount_applied) FROM credit_allocations ca WHERE ca.sale_ledger_id = cl.id), 0)) AS remaining_amount
+      FROM credit_ledger cl
+      WHERE cl.entry_type = 'CREDIT_SALE'
+      HAVING remaining_amount > 0
+    `);
+
+    // Group aging per customer
+    const agingMap: Record<number, { current_30: number; days_31_60: number; days_61_90: number; over_90: number }> = {};
+    let totalAging = { current_30: 0, days_31_60: 0, days_61_90: 0, over_90: 0 };
+
+    for (const entry of openEntries) {
+      const custId = entry.customer_id;
+      if (!agingMap[custId]) {
+        agingMap[custId] = { current_30: 0, days_31_60: 0, days_61_90: 0, over_90: 0 };
+      }
+      const rem = Number(entry.remaining_amount);
+      const days = Number(entry.days_old);
+
+      if (days <= 30) {
+        agingMap[custId].current_30 += rem;
+        totalAging.current_30 += rem;
+      } else if (days <= 60) {
+        agingMap[custId].days_31_60 += rem;
+        totalAging.days_31_60 += rem;
+      } else if (days <= 90) {
+        agingMap[custId].days_61_90 += rem;
+        totalAging.days_61_90 += rem;
+      } else {
+        agingMap[custId].over_90 += rem;
+        totalAging.over_90 += rem;
+      }
+    }
+
+    const customers = customerRows.map((c: any) => ({
+      id: c.id,
+      customer_code: c.customer_code,
+      full_name: c.full_name,
+      contact_number: c.contact_number,
+      credit_limit: Number(c.credit_limit),
+      current_balance: Number(c.current_balance),
+      is_credit_enabled: c.is_credit_enabled === 1 || c.is_credit_enabled === true,
+      status: c.status,
+      created_at: c.created_at,
+      last_credit_sale_date: c.last_credit_sale_date,
+      last_payment_date: c.last_payment_date,
+      aging: agingMap[c.id] || { current_30: 0, days_31_60: 0, days_61_90: 0, over_90: 0 },
+    }));
+
+    res.status(200).json({
+      period: { date_from, date_to },
+      summary: {
+        total_receivables: Number(summaryRows[0]?.total_receivables || 0),
+        total_customers: Number(summaryRows[0]?.total_customers || 0),
+        customers_with_balance: Number(summaryRows[0]?.customers_with_balance || 0),
+        credit_enabled_customers: Number(summaryRows[0]?.credit_enabled_customers || 0),
+        period_credit_sales: Number(activityRows[0]?.period_credit_sales || 0),
+        period_payments: Number(activityRows[0]?.period_payments || 0),
+        period_void_reversals: Number(activityRows[0]?.period_void_reversals || 0),
+        period_adjustments: Number(activityRows[0]?.period_adjustments || 0),
+        aging_summary: totalAging,
+      },
+      customers,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[reports/GET /credit-receivables]", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
+export default router;

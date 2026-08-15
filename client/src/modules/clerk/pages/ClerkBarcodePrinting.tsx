@@ -55,10 +55,12 @@ function BarcodePreview({ code, heightMm, symbology }: {
         background:   "transparent",
         lineColor:    "#000",
       });
+      // Stretch bars horizontally to fill the label width seamlessly (e.g. 0004 or long EANs)
+      node.setAttribute("preserveAspectRatio", "none");
     } catch { /* leave empty for invalid code */ }
   }, [code, heightMm, symbology]);
 
-  return <svg ref={svgCallbackRef} className="w-full h-auto" />;
+  return <svg ref={svgCallbackRef} className="w-full h-full block" />;
 }
 
 // ─── To-scale label preview card ─────────────────────────────────────────────
@@ -67,7 +69,6 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
   const scale = 3.2; // px per mm for on-screen preview
   const w     = config.labelWidthMm  * scale;
   const h     = config.labelHeightMm * scale;
-  const bh    = config.barcodeHeightMm * scale;
   const fs    = config.fontSizePt * 1.1;
   const pt    = config.marginTopMm    * scale;
   const pb    = config.marginBottomMm * scale;
@@ -89,13 +90,13 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
     >
       {config.showStoreName && config.storeName && (
         <p
-          className="font-bold text-center leading-tight truncate w-full flex-shrink-0"
+          className="font-bold text-center leading-tight truncate w-full flex-shrink-0 mb-0.5"
           style={{ fontFamily: config.fontFamily, fontSize: fs }}
         >
           {config.storeName}
         </p>
       )}
-      <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden" style={{ maxHeight: bh }}>
+      <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden my-0.5">
         <BarcodePreview
           code={product.barcode}
           heightMm={config.barcodeHeightMm}
@@ -104,7 +105,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       </div>
       {config.showBarcodeText && (
         <p
-          className="font-mono text-center tracking-widest leading-none flex-shrink-0"
+          className="font-mono text-center tracking-widest leading-none flex-shrink-0 mt-0.5 font-semibold"
           style={{ fontFamily: config.fontFamily, fontSize: fs * 0.85 }}
         >
           {product.barcode}

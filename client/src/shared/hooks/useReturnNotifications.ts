@@ -84,6 +84,17 @@ export interface DiscountCancellationNotification {
   cancelled_at: string;
 }
 
+export interface CreditLimitOverrideDecisionNotification {
+  type: "credit_limit_override_decision";
+  override_id: number;
+  customer_id: number;
+  customer_name: string;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason: string | null;
+  cashier_user_id: number;
+}
+
 // ─── Shared reconnecting WebSocket factory ────────────────────────────────────
 //
 // Creates a WebSocket that automatically reconnects after disconnection using
@@ -299,6 +310,53 @@ export function useDiscountNotifications() {
           } else if (data.type === "discount_decision") {
             window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
           }
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
+  }, []);
+}
+
+// ─── Admin hook: receives credit limit override requests ──────────────────────
+
+export function useCreditLimitOverrideNotifications() {
+  useEffect(() => {
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "credit_limit_override_request") {
+            toast.warning(`Credit Limit Override — ${data.customer_name}`, {
+              id: `clo-req-${data.override_id}`,
+              description: `${data.cashier_name} · Sale: ₱${Number(data.requested_amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })} · Limit: ₱${Number(data.current_limit).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`,
+              duration: 8000,
+            });
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+          } else if (data.type === "credit_limit_override_decision") {
+            window.dispatchEvent(new CustomEvent("refresh-pending-counts"));
+          }
+        } catch { /* ignore malformed */ }
+      },
+    });
+    return cleanup;
+  }, []);
+}
+
+// ─── Cashier hook: receives credit limit override decisions ───────────────────
+
+export function useCreditLimitOverrideDecision(
+  onDecision: (n: CreditLimitOverrideDecisionNotification) => void
+) {
+  const onDecisionRef = useRef(onDecision);
+  onDecisionRef.current = onDecision;
+
+  useEffect(() => {
+    const cleanup = createReconnectingWS({
+      onMessage: (event) => {
+        try {
+          const data: CreditLimitOverrideDecisionNotification = JSON.parse(event.data);
+          if (data.type !== "credit_limit_override_decision") return;
+          onDecisionRef.current(data);
         } catch { /* ignore malformed */ }
       },
     });

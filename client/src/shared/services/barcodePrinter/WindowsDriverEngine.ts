@@ -138,6 +138,8 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
         background:   "#ffffff",
         lineColor:    "#000000",
       });
+      // Ensure barcode bars stretch to fill printable width regardless of barcode length
+      svgEl.setAttribute("preserveAspectRatio", "none");
     } catch {
       // Invalid barcode — generate an error label
       return this._buildErrorDocument(barcode, label_width_mm, label_height_mm);
@@ -240,7 +242,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       letter-spacing: 0.3px;
     }
 
-    /* ── Barcode SVG — fills remaining space, dynamically constrained ── */
+    /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
     .barcode-svg {
       flex:      1;
       width:     100%;
@@ -250,10 +252,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       justify-content: center;
       overflow:  hidden;
       min-height: 0;
+      padding:   0.5mm 0;
     }
     .barcode-svg svg {
       width:      100%;
-      height:     auto;
+      height:     100%;
       max-height: 100%;
       max-width:  ${printW}mm;
       display:    block;

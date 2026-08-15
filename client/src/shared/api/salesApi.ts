@@ -55,6 +55,11 @@ export interface Sale {
   discount_percentage: number | null;
   /** True when the applied discount is an SC/PWD type discount. */
   discount_is_sc_pwd: boolean;
+  payment_type?: "CASH" | "CREDIT";
+  customer_id?: number | null;
+  customer_code?: string | null;
+  amount_paid_at_sale?: number | null;
+  credit_balance?: number | null;
   approval_info?: SaleApprovalInfo | null;
   items: SaleItem[];
 }
@@ -69,6 +74,11 @@ export interface SaleSummary {
   payment_status: "pending" | "completed" | "failed";
   receipt_printed: number | boolean;
   created_at: string;
+  payment_type?: "CASH" | "CREDIT";
+  customer_id?: number | null;
+  customer_code?: string | null;
+  amount_paid_at_sale?: number | null;
+  credit_balance?: number | null;
   return_count?: number;
   total_refunded?: number;
 }
@@ -87,6 +97,11 @@ export interface CreateSalePayload {
   discount_request_id?: number;
   sc_pwd_type?: "NONE" | "SENIOR_CITIZEN" | "PWD";
   sc_pwd_id?: string;
+  // ─── Credit fields ────────────────────────────────────────────────────────
+  payment_type?: "CASH" | "CREDIT";
+  customer_id?: number;
+  down_payment?: number;
+  credit_limit_override_id?: number;
   items: Array<{
     product_id: number;
     quantity: number;
@@ -119,6 +134,9 @@ export interface CreateSaleResult {
   change_amount:   number;
   payment_status:  "pending" | "completed" | "failed";
   receipt_printed: boolean;
+  payment_type:    "CASH" | "CREDIT";
+  credit_balance:  number | null;
+  down_payment:    number | null;
   items:           SaleItemSnapshot[];
   _idempotent?:    boolean;
 }
@@ -171,6 +189,7 @@ export async function searchSales(params: {
   date_from?: string;
   date_to?: string;
   return_status?: string;
+  payment_type?: "CASH" | "CREDIT";
 }): Promise<SaleSummary[]> {
   const response = await httpClient.get<SaleSummary[]>("/api/sales", { params });
   return response.data;

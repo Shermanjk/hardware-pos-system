@@ -22,6 +22,7 @@ import {
     X
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -306,13 +307,45 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                       <span className="tabular-nums text-blue-600 text-lg">{fmt(sale.total_amount)}</span>
                     </div>
 
-                    {/* Cash & change */}
-                    <div className="flex justify-between text-gray-600 pt-1 border-t border-gray-100">
-                      <span>Cash Tendered</span><span className="tabular-nums">{fmt(sale.cash_tendered)}</span>
+                    {/* Payment Method & Cash details */}
+                    <div className="flex justify-between text-gray-700 pt-1 border-t border-gray-100 font-medium">
+                      <span>Payment Method</span>
+                      <span className="font-semibold text-slate-900">
+                        {sale.payment_type === "CREDIT" ? "Credit / Utang" : "Cash"}
+                      </span>
                     </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Change</span><span className="tabular-nums">{fmt(sale.change_amount)}</span>
-                    </div>
+
+                    {sale.payment_type === "CREDIT" ? (
+                      <>
+                        {Number(sale.amount_paid_at_sale ?? 0) > 0 && (
+                          <div className="flex justify-between text-gray-600 text-xs">
+                            <span>Down Payment (Cash)</span>
+                            <span className="tabular-nums">{fmt(Number(sale.amount_paid_at_sale))}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-blue-700 font-semibold text-xs">
+                          <span>Amount on Credit</span>
+                          <span className="tabular-nums">
+                            {fmt(sale.total_amount - Number(sale.amount_paid_at_sale ?? 0))}
+                          </span>
+                        </div>
+                        {sale.credit_balance !== null && sale.credit_balance !== undefined && (
+                          <div className="flex justify-between text-slate-600 text-xs bg-slate-50 p-1.5 rounded">
+                            <span>Customer Total Balance:</span>
+                            <span className="font-bold text-rose-600 tabular-nums">{fmt(Number(sale.credit_balance))}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Cash Tendered</span><span className="tabular-nums">{fmt(sale.cash_tendered)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Change</span><span className="tabular-nums">{fmt(sale.change_amount)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -348,6 +381,7 @@ export default function Sales() {
   const [dateFrom,     setDateFrom]     = useState("");
   const [dateTo,       setDateTo]       = useState("");
   const [returnStatus, setReturnStatus] = useState("all");
+  const [paymentType,  setPaymentType]  = useState("all");
   const [showFilters,  setShowFilters]  = useState(true);
 
   // Detail modal
@@ -382,6 +416,7 @@ export default function Sales() {
     date_from?: string;
     date_to?: string;
     return_status?: string;
+    payment_type?: "CASH" | "CREDIT";
   }) => {
     setIsLoading(true);
     setLoadError(null);
@@ -396,8 +431,8 @@ export default function Sales() {
     }
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     load({
       invoice_number: invoice.trim() || undefined,
       customer_name:  customer.trim() || undefined,
@@ -405,11 +440,19 @@ export default function Sales() {
       date_from:      dateFrom || undefined,
       date_to:        dateTo   || undefined,
       return_status:  returnStatus !== "all" ? returnStatus : undefined,
+      payment_type:   paymentType !== "all" ? (paymentType as "CASH" | "CREDIT") : undefined,
     });
   };
 
+  // Real-time zero-refresh sync: when a sale is created or voided, auto-refresh the current search view
+  useRealtimeSync(["sales", "returns"], () => {
+    if (hasSearched) {
+      handleSearch();
+    }
+  });
+
   const handleClear = () => {
-    setInvoice(""); setCustomer(""); setCashierId("__all__"); setReturnStatus("all");
+    setInvoice(""); setCustomer(""); setCashierId("__all__"); setReturnStatus("all"); setPaymentType("all");
     const today = new Date().toISOString().split("T")[0];
     setDateFrom(today); setDateTo(today);
     setSales([]); setHasSearched(false); setLoadError(null);
@@ -547,7 +590,19 @@ export default function Sales() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="w-40">
+                <Select value={paymentType} onValueChange={setPaymentType}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All Methods" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payment Methods</SelectItem>
+                    <SelectItem value="CASH">Cash Only</SelectItem>
+                    <SelectItem value="CREDIT">Credit / Utang Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="w-40">
                 <Select value={returnStatus} onValueChange={setReturnStatus}>
                   <SelectTrigger className="h-9 text-sm">
@@ -661,6 +716,11 @@ export default function Sales() {
                         )}
                         {sale.void_status === "void_requested" && (
                           <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">PENDING VOID</span>
+                        )}
+                        {sale.payment_type === "CREDIT" && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">
+                            CREDIT
+                          </span>
                         )}
                         {(sale.return_count ?? 0) > 0 && (
                           <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">

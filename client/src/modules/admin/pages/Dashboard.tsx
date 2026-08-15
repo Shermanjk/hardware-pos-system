@@ -7,6 +7,7 @@ import {
   TrendingUp, AlertCircle, Package, Truck,
   ShoppingCart, RefreshCw, RotateCcw,
   AlertTriangle, TrendingDown, CheckCircle, XCircle, Clock, Upload,
+  CreditCard, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -14,6 +15,7 @@ import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 import { getPendingCounts } from "@/shared/api/dashboardApi";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,8 @@ interface DashboardData {
     low_stock:          number;
     total_suppliers:    number;
     pending_returns:    number;
+    total_receivables?: number;
+    customers_with_balance?: number;
   };
   weekly_sales:    { sale_date: string; transactions: number; revenue: number }[];
   monthly_sales:   { month: string; revenue: number }[];
@@ -168,8 +172,12 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
-  // Auto-refresh every 5 minutes so KPIs stay current throughout the business day
-  // without requiring a manual page reload.
+  // Real-time zero-refresh sync: instant KPI & chart refresh on any sale, request, inventory, or customer change
+  useRealtimeSync(["dashboard", "sales", "requests", "customers", "inventory", "commodity"], () => {
+    load();
+  });
+
+  // Fallback auto-refresh every 5 minutes
   useEffect(() => {
     const id = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(id);
@@ -230,12 +238,15 @@ export default function Dashboard() {
       )}
 
       {/* KPI cards — row 1 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard icon={PesoIcon}     label="Today's Revenue"   value={fmtShort(kpis?.today_revenue ?? 0)}
           sub={`${kpis?.today_transactions ?? 0} transaction${(kpis?.today_transactions ?? 0) !== 1 ? "s" : ""}`}
           color="text-blue-600" bg="bg-blue-50" loading={loading} />
         <KpiCard icon={TrendingUp}   label="Monthly Revenue"   value={fmtShort(kpis?.monthly_revenue ?? 0)}
           color="text-emerald-600" bg="bg-emerald-50" loading={loading} />
+        <KpiCard icon={CreditCard}   label="Accounts Receivable" value={fmtShort(kpis?.total_receivables ?? 0)}
+          sub={`${kpis?.customers_with_balance ?? 0} with balance`}
+          color="text-rose-600" bg="bg-rose-50" loading={loading} href="/customers" />
         <KpiCard icon={Package}      label="Total Products"    value={(kpis?.total_products ?? 0).toLocaleString()}
           color="text-purple-600" bg="bg-purple-50" loading={loading} href="/products" />
         <KpiCard icon={Truck}        label="Active Suppliers"  value={(kpis?.total_suppliers ?? 0).toString()}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { broadcastEntityUpdate } from "../ws.js";
 
 const router = Router();
 
@@ -289,6 +290,11 @@ router.post("/stock-in", async (req: Request, res: Response) => {
       newValues: { stock_in_id: stockInId, reference, source, item_count: items.length },
     });
 
+    // Real-time system sync
+    broadcastEntityUpdate({ entity: "inventory", action: "created" });
+    broadcastEntityUpdate({ entity: "products" });
+    broadcastEntityUpdate({ entity: "dashboard" });
+
     res.status(201).json({ message: "Stock in successful", stock_in_id: stockInId, reference });
   } catch (err) {
     await conn.rollback();
@@ -365,6 +371,11 @@ router.post("/stock-adjustment", async (req: Request, res: Response) => {
       previousValues: { quantity: product.quantity },
       newValues: { quantity: newQuantity, adjustment_type: type },
     });
+
+    // Real-time system sync
+    broadcastEntityUpdate({ entity: "inventory", action: "adjusted", id: product_id });
+    broadcastEntityUpdate({ entity: "products", id: product_id });
+    broadcastEntityUpdate({ entity: "dashboard" });
 
     res.status(201).json({ message: "Stock adjustment successful", product_id, type, new_quantity: newQuantity });
   } catch (err) {

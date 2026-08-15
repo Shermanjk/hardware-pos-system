@@ -21,6 +21,8 @@ const AuthorizationHistory = lazy(() => import("./modules/admin/pages/Authorizat
 const CashReconciliation   = lazy(() => import("./modules/admin/pages/CashReconciliation"));
 const Categories           = lazy(() => import("./modules/admin/pages/Categories"));
 const CommodityPrices      = lazy(() => import("./modules/admin/pages/CommodityPrices"));
+const Customers            = lazy(() => import("./modules/admin/pages/Customers"));
+const CreditLedger         = lazy(() => import("./modules/admin/pages/CreditLedger"));
 const Dashboard            = lazy(() => import("./modules/admin/pages/Dashboard"));
 const DiscountManagement   = lazy(() => import("./modules/admin/pages/DiscountManagement"));
 const ExternalProcessing   = lazy(() => import("./modules/admin/pages/ExternalProcessing"));
@@ -88,6 +90,8 @@ function AdminRouter() {
       <Suspense fallback={<PanelSkeleton />}>
         <Switch>
           <Route path="/"                          component={Dashboard}           />
+          <Route path="/customers"                 component={Customers}           />
+          <Route path="/customers/:id/ledger"      component={CreditLedger}        />
           <Route path="/products"                  component={Products}            />
           <Route path="/categories"                component={Categories}          />
           <Route path="/inventory"                 component={Inventory}           />

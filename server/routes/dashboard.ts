@@ -19,11 +19,15 @@ router.get("/pending-counts", async (_req: Request, res: Response) => {
     const [voidsPending] = await pool.execute<any[]>(
       "SELECT COUNT(*) as count FROM sale_voids WHERE status = 'pending'"
     );
+    const [creditOverridesPending] = await pool.execute<any[]>(
+      "SELECT COUNT(*) as count FROM credit_limit_overrides WHERE status = 'pending'"
+    );
     
     res.status(200).json({
       pending_commodity_approvals: Number(commodityPending[0]?.count || 0),
       pending_returns: Number(returnsPending[0]?.count || 0),
       pending_voids: Number(voidsPending[0]?.count || 0),
+      pending_credit_overrides: Number(creditOverridesPending[0]?.count || 0),
     });
   } catch (err) {
     console.error("[dashboard/GET /pending-counts]", err);
@@ -96,6 +100,15 @@ router.get("/", async (_req: Request, res: Response) => {
     // ── Pending returns ──────────────────────────────────────────────────────
     const [returnsRows] = await pool.execute<any[]>(`
       SELECT COUNT(*) AS pending_returns FROM returns WHERE status = 'pending'
+    `);
+
+    // ── Accounts Receivable / Utang ──────────────────────────────────────────
+    const [arRows] = await pool.execute<any[]>(`
+      SELECT
+        COALESCE(SUM(current_balance), 0) AS total_receivables,
+        COUNT(CASE WHEN current_balance > 0 THEN 1 END) AS customers_with_balance
+      FROM customers
+      WHERE status = 'Active'
     `);
 
     // ── Daily sales for the last 7 days ──────────────────────────────────────
@@ -214,15 +227,17 @@ router.get("/", async (_req: Request, res: Response) => {
 
     res.status(200).json({
       kpis: {
-        today_transactions: Number(todayRows[0].today_transactions),
-        today_revenue:      today_revenue,
-        monthly_revenue:    monthly_revenue,
-        total_products:     Number(productRows[0].total_products),
-        out_of_stock:       Number(productRows[0].out_of_stock),
-        critical:           Number(productRows[0].critical),
-        low_stock:          Number(productRows[0].low_stock),
-        total_suppliers:    Number(supplierRows[0].total_suppliers),
-        pending_returns:    Number(returnsRows[0].pending_returns),
+        today_transactions:     Number(todayRows[0].today_transactions),
+        today_revenue:          today_revenue,
+        monthly_revenue:        monthly_revenue,
+        total_products:         Number(productRows[0].total_products),
+        out_of_stock:           Number(productRows[0].out_of_stock),
+        critical:               Number(productRows[0].critical),
+        low_stock:              Number(productRows[0].low_stock),
+        total_suppliers:        Number(supplierRows[0].total_suppliers),
+        pending_returns:        Number(returnsRows[0].pending_returns),
+        total_receivables:      Number(arRows[0].total_receivables),
+        customers_with_balance: Number(arRows[0].customers_with_balance),
       },
       weekly_sales:   weekly_sales,
       monthly_sales:  monthly_sales,

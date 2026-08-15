@@ -6,7 +6,8 @@ import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
-import { broadcastVoidRequest, sendVoidDecision } from "../ws.js";
+import { applyFifoAllocation, recalcCustomerBalance } from "./customers.js";
+import { broadcastVoidRequest, sendVoidDecision, broadcastEntityUpdate } from "../ws.js";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ const createSaleSchema = z.object({
   subtotal:         z.number().min(0),
   vat_amount:       z.number().min(0),
   total_amount:     z.number().min(0),
-  cash_tendered:    z.number().positive(),
+  cash_tendered:    z.number().min(0),   // 0 is allowed for pure-credit sales
   change_amount:    z.number().min(0),
   // client_transaction_id provides idempotency — if the same key is sent twice,
   // the second request returns the existing sale instead of creating a duplicate.
@@ -32,6 +33,11 @@ const createSaleSchema = z.object({
   // SC/PWD identification fields
   sc_pwd_type: z.enum(["NONE", "SENIOR_CITIZEN", "PWD"]).optional(),
   sc_pwd_id: z.string().optional(),
+  // ─── Credit / Utang fields ───────────────────────────────────────────────
+  payment_type:             z.enum(["CASH", "CREDIT"]).optional().default("CASH"),
+  customer_id:              z.number().int().positive().optional(),
+  down_payment:             z.number().min(0).optional().default(0),
+  credit_limit_override_id: z.number().int().positive().optional(),
   items: z.array(z.object({
     product_id: z.number().int().positive(),
     quantity:   z.number().int().positive(),
@@ -96,6 +102,8 @@ router.post(
       cash_tendered, items,
       discount_id, discount_request_id,
       sc_pwd_type = "NONE", sc_pwd_id,
+      payment_type = "CASH", customer_id, down_payment = 0,
+      credit_limit_override_id,
     } = parsed.data;
 
     // ── DISCOUNT VALIDATION ────────────────────────────────────────────────────
@@ -403,8 +411,9 @@ router.post(
            (invoice_number, customer_name, customer_address, customer_tin,
             cashier_id, subtotal, discount, discount_id, sc_pwd_type, sc_pwd_id,
             vat_amount, vat_exempt_amount, total_amount, cash_tendered, change_amount,
-            payment_status, client_transaction_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+            payment_status, client_transaction_id,
+            payment_type, customer_id, amount_paid_at_sale)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
         [
           invoice_number,
           customer_name,
@@ -422,6 +431,9 @@ router.post(
           cash_tendered,
           calc_change >= 0 ? calc_change : 0,
           clientTxnId ?? null,
+          payment_type,
+          payment_type === "CREDIT" ? (customer_id ?? null) : null,
+          payment_type === "CREDIT" ? down_payment : null,
         ]
       );
       const sale_id: number = saleResult.insertId;
@@ -467,12 +479,106 @@ router.post(
         );
       }
 
-      // ── 9. COMMIT — all-or-nothing ───────────────────────────────────────────
+      // ── 9. Credit ledger entries (credit sales only) ──────────────────────
+      let credit_balance_snapshot: number | null = null;
+      if (payment_type === "CREDIT" && customer_id) {
+        // Validate customer inside the transaction
+        const [custRows] = await conn.execute<any[]>(
+          `SELECT id, full_name, current_balance, credit_limit, is_credit_enabled
+           FROM customers WHERE id = ? FOR UPDATE`,
+          [customer_id]
+        );
+        if (custRows.length === 0) {
+          await conn.rollback();
+          res.status(404).json({ message: "Customer not found." });
+          return;
+        }
+        const customer = custRows[0];
+        if (!customer.is_credit_enabled) {
+          await conn.rollback();
+          res.status(422).json({ message: "Credit is not enabled for this customer." });
+          return;
+        }
+
+        // Credit amount = sale total minus any down payment collected
+        const creditAmount = Math.round((final_total_amount - down_payment) * 100) / 100;
+        const projectedBalance = Math.round((Number(customer.current_balance) + creditAmount) * 100) / 100;
+
+        // Validate credit limit (unless an approved override was provided)
+        if (projectedBalance > Number(customer.credit_limit)) {
+          if (!credit_limit_override_id) {
+            await conn.rollback();
+            res.status(422).json({
+              message: `Credit limit exceeded. Current balance: ₱${Number(customer.current_balance).toFixed(2)}, Limit: ₱${Number(customer.credit_limit).toFixed(2)}.`,
+              code: "CREDIT_LIMIT_EXCEEDED",
+              current_balance: Number(customer.current_balance),
+              credit_limit: Number(customer.credit_limit),
+              sale_total: final_total_amount,
+            });
+            return;
+          }
+          // Verify the override is approved for this customer
+          const [overrideRows] = await conn.execute<any[]>(
+            `SELECT id FROM credit_limit_overrides
+             WHERE id = ? AND customer_id = ? AND status = 'approved' AND sale_id IS NULL`,
+            [credit_limit_override_id, customer_id]
+          );
+          if (overrideRows.length === 0) {
+            await conn.rollback();
+            res.status(422).json({ message: "Invalid or already-used credit limit override." });
+            return;
+          }
+        }
+
+        // Insert CREDIT_SALE ledger entry
+        const [ledgerResult] = await conn.execute<any>(
+          `INSERT INTO credit_ledger
+             (customer_id, sale_id, entry_type, amount, reference, recorded_by)
+           VALUES (?, ?, 'CREDIT_SALE', ?, ?, ?)`,
+          [customer_id, sale_id, creditAmount, invoice_number, req.user!.id]
+        );
+        const saleLedgerId: number = ledgerResult.insertId;
+
+        // If down payment > 0, insert a PAYMENT entry and FIFO-allocate it
+        if (down_payment > 0) {
+          const [pmtResult] = await conn.execute<any>(
+            `INSERT INTO credit_ledger
+               (customer_id, sale_id, entry_type, amount, reference, notes, recorded_by)
+             VALUES (?, ?, 'PAYMENT', ?, ?, 'Down payment at sale', ?)`,
+          [customer_id, sale_id, -down_payment, invoice_number, req.user!.id]
+          );
+          // Allocate down payment against this specific sale entry
+          await conn.execute(
+            `INSERT INTO credit_allocations (payment_ledger_id, sale_ledger_id, amount_applied)
+             VALUES (?, ?, ?)`,
+            [pmtResult.insertId, saleLedgerId, down_payment]
+          );
+        }
+
+        // Recalculate and persist balance
+        credit_balance_snapshot = await recalcCustomerBalance(conn, customer_id);
+
+        // Link the override to this sale so it cannot be reused
+        if (credit_limit_override_id) {
+          await conn.execute(
+            `UPDATE credit_limit_overrides SET sale_id = ? WHERE id = ?`,
+            [sale_id, credit_limit_override_id]
+          );
+        }
+
+        // Persist balance snapshot on sales row
+        await conn.execute(
+          `UPDATE sales SET credit_balance = ? WHERE id = ?`,
+          [credit_balance_snapshot, sale_id]
+        );
+      }
+
+      // ── 10. COMMIT — all-or-nothing ───────────────────────────────────────────
       // If power fails here, the entire transaction is rolled back.
       // No sale, no inventory deduction, no invoice number consumed.
       await conn.commit();
 
-      // ── 10. Update payment_status to 'completed' (post-commit) ────────────────
+      // ── 11. Update payment_status to 'completed' (post-commit) ────────────────
       // This is done in a separate, simple UPDATE so that if the sale row exists
       // with payment_status='pending', we know the transaction committed but
       // something failed after (e.g., response not sent, receipt not printed).
@@ -515,6 +621,15 @@ router.post(
         });
       }
 
+      // Real-time system sync: notify all connected dashboards and terminals
+      broadcastEntityUpdate({ entity: "sales", action: "created", id: sale_id });
+      broadcastEntityUpdate({ entity: "dashboard" });
+      broadcastEntityUpdate({ entity: "inventory" });
+      if (payment_type === "CREDIT" && customer_id) {
+        broadcastEntityUpdate({ entity: "customers", action: "updated", id: customer_id, customerId: customer_id });
+        broadcastEntityUpdate({ entity: "credit_ledger", customerId: customer_id });
+      }
+
       res.status(201).json({
         invoice_number,
         id: sale_id,
@@ -529,6 +644,9 @@ router.post(
         total_amount:  final_total_amount,
         change_amount: calc_change >= 0 ? calc_change : 0,
         payment_status: "completed",
+        payment_type,
+        credit_balance: credit_balance_snapshot,
+        down_payment:  payment_type === "CREDIT" ? down_payment : null,
         receipt_printed: false,
         // Per-item tax snapshot — used by the receipt for authoritative VAT breakdown
         items: calcItems.map((ci) => ({
@@ -870,6 +988,46 @@ router.patch(
         [voidRow.sale_id]
       );
 
+      // ── VOID_REVERSAL for credit sales ────────────────────────────────────
+      // If the voided sale was a credit sale, insert a VOID_REVERSAL ledger
+      // entry to restore the customer's credit balance.
+      const [voidedSaleRows] = await conn.execute<any[]>(
+        `SELECT payment_type, customer_id, total_amount, amount_paid_at_sale
+         FROM sales WHERE id = ?`,
+        [voidRow.sale_id]
+      );
+      if (voidedSaleRows.length > 0 && voidedSaleRows[0].payment_type === "CREDIT" && voidedSaleRows[0].customer_id) {
+        const vs = voidedSaleRows[0];
+        // The reversal amount = amount that was put on credit (total - down payment at sale)
+        const downPaid = Number(vs.amount_paid_at_sale ?? 0);
+        const reversalAmount = Math.round((Number(vs.total_amount) - downPaid) * 100) / 100;
+        if (reversalAmount > 0) {
+          const [reversalResult] = await conn.execute<any>(
+            `INSERT INTO credit_ledger
+               (customer_id, sale_id, entry_type, amount, reference, notes, recorded_by, authorized_by)
+             VALUES (?, ?, 'VOID_REVERSAL', ?, ?, 'Automatic reversal on void approval', ?, ?)`,
+            [vs.customer_id, voidRow.sale_id, -reversalAmount,
+             voidRow.invoice_number, req.user!.id, req.user!.id]
+          );
+          // FIFO-allocate the reversal against the original CREDIT_SALE entry
+          const [origEntry] = await conn.execute<any[]>(
+            `SELECT id FROM credit_ledger
+             WHERE sale_id = ? AND entry_type = 'CREDIT_SALE' LIMIT 1`,
+            [voidRow.sale_id]
+          );
+          if (origEntry.length > 0) {
+            const alreadyApplied = downPaid; // down payment already allocated at sale time
+            const toReverse = Math.min(reversalAmount, reversalAmount); // the net credit amount
+            await conn.execute(
+              `INSERT INTO credit_allocations (payment_ledger_id, sale_ledger_id, amount_applied)
+               VALUES (?, ?, ?)`,
+              [reversalResult.insertId, origEntry[0].id, toReverse]
+            );
+          }
+          await recalcCustomerBalance(conn, vs.customer_id);
+        }
+      }
+
       await conn.commit();
 
       await logAuditEvent({
@@ -901,6 +1059,12 @@ router.patch(
           cashier_user_id: cashier_id,
         });
       }
+
+      // Real-time system sync: notify sales, inventory, dashboard, and requests
+      broadcastEntityUpdate({ entity: "sales", action: "voided", id: voidRow.sale_id });
+      broadcastEntityUpdate({ entity: "dashboard" });
+      broadcastEntityUpdate({ entity: "inventory" });
+      broadcastEntityUpdate({ entity: "requests" });
 
       res.status(200).json({ message: "Sale voided successfully." });
     } catch (err) {
@@ -993,6 +1157,10 @@ router.patch(
           cashier_user_id: cashier_id,
         });
       }
+
+      // Real-time system sync: notify requests & sales
+      broadcastEntityUpdate({ entity: "requests", action: "rejected" });
+      broadcastEntityUpdate({ entity: "sales", action: "updated", id: voidRow.sale_id });
 
       res.status(200).json({ message: "Void request rejected." });
     } catch (err) {
@@ -1145,6 +1313,12 @@ router.post(
         });
       }
 
+      // Real-time system sync: notify sales, inventory, dashboard, requests
+      broadcastEntityUpdate({ entity: "sales", action: "voided", id: voidRow.sale_id });
+      broadcastEntityUpdate({ entity: "dashboard" });
+      broadcastEntityUpdate({ entity: "inventory" });
+      broadcastEntityUpdate({ entity: "requests" });
+
       res.status(200).json({
         message: "Void approved via manager override.",
         admin_name: manager.full_name ?? manager.username,
@@ -1175,6 +1349,7 @@ router.get(
       void_status,
       payment_status,
       return_status,
+      payment_type,
     } = req.query as Record<string, string | undefined>;
 
     try {
@@ -1188,6 +1363,10 @@ router.get(
       if (customer_name) {
         conditions.push("s.customer_name LIKE ?");
         params.push(`%${customer_name}%`);
+      }
+      if (payment_type && ["CASH", "CREDIT"].includes(payment_type)) {
+        conditions.push("s.payment_type = ?");
+        params.push(payment_type);
       }
       if (date_from) {
         conditions.push("DATE(s.created_at) >= ?");
@@ -1223,6 +1402,8 @@ router.get(
                 s.subtotal, s.discount, s.discount_id, s.sc_pwd_type, s.sc_pwd_id,
                 s.vat_amount, s.vat_exempt_amount, s.total_amount, s.cash_tendered,
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at,
+                s.payment_type, s.customer_id, s.amount_paid_at_sale, s.credit_balance,
+                c.customer_code,
                 COALESCE(d.discount_name, dr_d.discount_name) AS discount_name,
                 COALESCE(d.discount_type, dr_d.discount_type) AS discount_type,
                 COALESCE(d.value, dr.requested_percentage, dr_d.value) AS discount_percentage,
@@ -1231,6 +1412,7 @@ router.get(
                 (SELECT COALESCE(SUM(r.refund_amount), 0) FROM returns r WHERE r.sale_id = s.id AND r.status = 'completed') AS total_refunded
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
+         LEFT JOIN customers c ON c.id = s.customer_id
          LEFT JOIN discounts d ON d.id = s.discount_id
          LEFT JOIN discount_requests dr ON dr.sale_id = s.id
          LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
@@ -1384,6 +1566,8 @@ router.get(
                 s.subtotal, s.vat_amount, s.vat_exempt_amount, s.total_amount, s.cash_tendered,
                 s.change_amount, s.void_status, s.payment_status, s.receipt_printed, s.created_at,
                 s.sc_pwd_type, s.sc_pwd_id, s.discount, s.discount_id,
+                s.payment_type, s.customer_id, s.amount_paid_at_sale, s.credit_balance,
+                c.customer_code,
                 COALESCE(d.discount_name, dr_d.discount_name) AS discount_name,
                 COALESCE(d.discount_type, dr_d.discount_type) AS discount_type,
                 COALESCE(d.value, dr.requested_percentage, dr_d.value) AS discount_percentage,
@@ -1401,6 +1585,7 @@ router.get(
                 ) AS approval_action
          FROM sales s
          JOIN users u ON u.id = s.cashier_id
+         LEFT JOIN customers c ON c.id = s.customer_id
          LEFT JOIN discounts d ON d.id = s.discount_id
          LEFT JOIN discount_requests dr ON dr.sale_id = s.id
          LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
