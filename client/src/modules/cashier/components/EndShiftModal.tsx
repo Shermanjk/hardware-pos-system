@@ -16,7 +16,7 @@ import {
     type CashSession,
     type CloseSessionResult,
 } from "@/shared/api/cashReconciliationApi";
-import { AlertCircle, CheckCircle2, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogOut, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -70,6 +70,10 @@ interface EndShiftModalProps {
   onShiftClosed?: () => void;
   /** Called after an opening session is started */
   onShiftOpened?: () => void;
+  /** If true, modal was opened as part of the Logout flow */
+  isLogoutFlow?: boolean;
+  /** Triggered when the cashier acknowledges the reconciliation result to complete logout */
+  onLogoutAfterShift?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -81,6 +85,8 @@ export default function EndShiftModal({
   onClose,
   onShiftClosed,
   onShiftOpened,
+  isLogoutFlow = false,
+  onLogoutAfterShift,
 }: EndShiftModalProps) {
   const [step, setStep] = useState<ModalStep>("loading");
   const [session, setSession] = useState<CashSession | null>(null);
@@ -402,12 +408,27 @@ export default function EndShiftModal({
               <div className="text-xs text-gray-500 text-center">
                 This record has been submitted and sent to the Admin for review.
                 <br />
-                You cannot modify it after submission.
+                {isLogoutFlow
+                  ? "Click below to acknowledge and complete your logout."
+                  : "You cannot modify it after submission."}
               </div>
 
-              <Button className="w-full bg-slate-800 hover:bg-slate-900 text-white" onClick={onClose}>
-                Close
-              </Button>
+              {isLogoutFlow ? (
+                <Button
+                  className="w-full bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-2 h-11 shadow-md"
+                  onClick={() => {
+                    onClose();
+                    onLogoutAfterShift?.();
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Acknowledge & Complete Logout
+                </Button>
+              ) : (
+                <Button className="w-full bg-slate-800 hover:bg-slate-900 text-white" onClick={onClose}>
+                  Close
+                </Button>
+              )}
             </>
           )}
         </div>

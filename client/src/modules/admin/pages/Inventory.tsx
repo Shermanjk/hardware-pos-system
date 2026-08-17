@@ -110,7 +110,12 @@ function SummaryCards({ summary, loading }: { summary: InventorySummary | null; 
 // ─── Stock Table ──────────────────────────────────────────────────────────────
 
 function StockTable({
-  items, loading, error, onRetry, onViewDetails, onViewLogs,
+  items,
+  loading,
+  error,
+  onRetry,
+  onViewDetails,
+  onViewLogs,
 }: {
   items: InventoryItem[];
   loading: boolean;
@@ -120,30 +125,30 @@ function StockTable({
   onViewLogs: (item: InventoryItem) => void;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
       {error && (
-        <div className="flex items-center gap-3 px-5 py-3 bg-red-50 border-b border-red-200">
+        <div className="flex items-center gap-3 px-5 py-3.5 bg-red-50 border-b border-red-200">
           <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-          <p className="text-sm text-red-700 flex-1">{error}</p>
-          <button onClick={onRetry} className="text-red-600 text-sm font-semibold hover:underline">Retry</button>
+          <p className="text-sm text-red-700 font-medium flex-1">{error}</p>
+          <button onClick={onRetry} className="text-red-600 text-sm font-bold hover:underline cursor-pointer">Retry</button>
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm text-left">
           <thead>
-            <tr className="bg-gray-50 border-b-2 border-gray-200">
-              <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Barcode</th>
-              <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Product</th>
-              <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Category</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Stock</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Reorder</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Damaged</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
-              <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Last Updated</th>
-              <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Barcode</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Product Name</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Category</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Stock Level</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Reorder Min</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Damaged</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Status</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Last Updated</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {loading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i}>
@@ -159,84 +164,87 @@ function StockTable({
                 </tr>
               ))
             ) : items.length === 0 ? (
-              <tr><td colSpan={9} className="py-20 text-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Package className="h-7 w-7 text-gray-400" />
-                  </div>
-                  <p className="font-semibold text-gray-700">No products found</p>
-                  <p className="text-xs text-gray-400">Try adjusting your filters</p>
-                </div>
-              </td></tr>
-            ) : items.map((item) => {
-              const st = deriveStatus(item.quantity, item.reorder_level);
-              return (
-                <tr key={item.id}
-                  className="hover:bg-blue-50/40 transition-colors">
-                  <td className="py-3.5 px-5">
-                    <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
-                      {item.barcode}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-5">
-                    <p className="font-semibold text-gray-900 text-sm">{item.product_name}</p>
-                    <p className="text-xs text-gray-400">{item.supplier}</p>
-                  </td>
-                  <td className="py-3.5 px-5">
-                    <span className="text-xs font-medium text-gray-600 bg-slate-100 px-2 py-1 rounded-full">
-                      {item.category}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-5 text-center">
-                    {(() => {
-                      const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
-                      return (
-                        <div className="flex items-center justify-center gap-0.5">
-                          <span className={`text-base font-bold tabular-nums ${
-                            item.quantity === 0 ? "text-red-600" :
-                            item.quantity <= item.reorder_level ? "text-amber-600" : "text-gray-900"
-                          }`}>{parts.number}</span>
-                          {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="py-3.5 px-5 text-center text-sm text-gray-500">{item.reorder_level}</td>
-                  <td className="py-3.5 px-5 text-center">
-                    <span className={`text-sm font-semibold tabular-nums ${item.damaged_stock > 0 ? "text-red-500" : "text-gray-300"}`}>
-                      {item.damaged_stock}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-5 text-center">{statusBadge(st)}</td>
-                  <td className="py-3.5 px-5 text-xs text-gray-400">{fmtRelative(item.updated_at)}</td>
-                  <td className="py-3.5 px-5">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => onViewDetails(item)}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="View product details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => onViewLogs(item)}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="View movement log"
-                      >
-                        <History className="h-4 w-4" />
-                      </button>
+              <tr>
+                <td colSpan={9} className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Package className="h-7 w-7 text-slate-400" />
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
+                    <p className="font-bold text-slate-700">No inventory products found</p>
+                    <p className="text-xs text-slate-400">Try adjusting your filters</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              items.map((item) => {
+                const st = deriveStatus(item.quantity, item.reorder_level);
+                return (
+                  <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="py-3.5 px-5">
+                      <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
+                        {item.barcode}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5">
+                      <p className="font-bold text-slate-900 text-sm">{item.product_name}</p>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">{item.supplier || "—"}</p>
+                    </td>
+                    <td className="py-3.5 px-5">
+                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
+                        {item.category || "—"}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-center">
+                      {(() => {
+                        const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
+                        return (
+                          <div className="flex items-center justify-center gap-0.5 font-mono">
+                            <span className={`text-base font-bold tabular-nums ${
+                              item.quantity === 0 ? "text-red-600" :
+                              item.quantity <= item.reorder_level ? "text-amber-600" : "text-slate-900"
+                            }`}>{parts.number}</span>
+                            {parts.unit && <span className="text-xs text-slate-500 font-sans font-medium">{parts.unit}</span>}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-3.5 px-5 text-center text-sm font-mono text-slate-500">{item.reorder_level}</td>
+                    <td className="py-3.5 px-5 text-center">
+                      <span className={`text-sm font-semibold font-mono tabular-nums ${item.damaged_stock > 0 ? "text-red-500 font-bold" : "text-slate-300"}`}>
+                        {item.damaged_stock}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-center">{statusBadge(st)}</td>
+                    <td className="py-3.5 px-5 text-xs text-slate-500">{fmtRelative(item.updated_at)}</td>
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => onViewDetails(item)}
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                          title="View product details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => onViewLogs(item)}
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                          title="View movement log"
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
       {!loading && items.length > 0 && (
-        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-          <p className="text-xs text-gray-500 font-medium">{items.length} product{items.length !== 1 ? "s" : ""}</p>
-          <p className="text-xs text-gray-400">Sorted by urgency</p>
+        <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <p className="text-xs text-slate-600 font-bold">{items.length} product{items.length !== 1 ? "s" : ""} tracked</p>
+          <p className="text-xs text-slate-400 font-medium">Sorted by urgency</p>
         </div>
       )}
     </div>
@@ -714,24 +722,24 @@ export default function Inventory() {
       <SummaryCards summary={summary} loading={summaryLoading} />
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-            <Search className="h-4 w-4 text-gray-400 shrink-0" />
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm p-4.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
+            <Search className="h-4 w-4 text-slate-400 shrink-0" />
             <input
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search product or barcode…"
-              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-gray-400 text-gray-800"
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
             />
             {search && (
-              <button onClick={() => handleSearchChange("")} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => handleSearchChange("")} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
           <Select value={filterCat || "all"} onValueChange={(v) => setFilterCat(v === "all" ? "" : v)}>
-            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700 h-10">
+            <SelectTrigger className="bg-white border-slate-300 hover:border-slate-400 text-slate-800 h-10 shadow-xs">
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
@@ -742,7 +750,7 @@ export default function Inventory() {
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as StockStatusFilter)}>
-            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700 h-10">
+            <SelectTrigger className="bg-white border-slate-300 hover:border-slate-400 text-slate-800 h-10 shadow-xs">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -755,10 +763,10 @@ export default function Inventory() {
           </Select>
         </div>
         {hasFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-3">
-            <span className="text-xs text-gray-500 font-medium">{items.length} result{items.length !== 1 ? "s" : ""}</span>
-            <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline">
-              Clear filters
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">{items.length} result{items.length !== 1 ? "s" : ""}</span>
+            <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer">
+              Clear all filters
             </button>
           </div>
         )}

@@ -182,7 +182,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   return (
     <aside
       className={`relative flex flex-col bg-[#0f172a] transition-all duration-200 shrink-0 ${
-        isOpen ? "w-48" : "w-[70px]"
+        isOpen ? "w-60" : "w-[70px]"
       }`}
     >
       {/* Logo */}
@@ -199,7 +199,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
         {navStructure.map((item) => {
           // ── Standalone nav item ───────────────────────────────────────────
           if (!("items" in item)) {
@@ -212,7 +212,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 title={!isOpen ? item.label : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
+                className={`flex items-center ${isOpen ? "gap-3 px-3 py-2.5" : "justify-center h-10 w-full"} rounded-lg transition-all duration-150 group relative
                   ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
               >
                 <span className="relative shrink-0">
@@ -250,11 +250,12 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           const showGroupAlert = (grpHasInventoryAlert || grpHasRequestAlert || grpHasCommodityAlert || grpHasDiscountAlert) && !isExp;
 
           return (
-            <div key={group.label}>
+            <div key={group.label} className="space-y-0.5">
               <button
+                type="button"
                 onClick={() => toggleGroup(group.label)}
-                title={!isOpen ? group.label : undefined}
-                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 group relative
+                title={!isOpen ? `${group.label} (${isExp ? "Open" : "Collapsed"})` : undefined}
+                className={`w-full flex items-center ${isOpen ? "gap-3 px-3 py-2.5" : "justify-center h-10"} rounded-lg transition-all duration-150 group relative cursor-pointer
                   ${isGrpAct ? "bg-blue-600/20 text-blue-400" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
               >
                 <span className="relative shrink-0">
@@ -274,60 +275,101 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
                 )}
               </button>
 
-              {isOpen && isExp && (
-                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
-                  {group.items.map((subItem) => {
-                    const SubIcon = subItem.icon!;
-                    const isActive = location === subItem.href;
+              {/* Sub-items when expanded */}
+              {isExp && (
+                isOpen ? (
+                  <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
+                    {group.items.map((subItem) => {
+                      const SubIcon = subItem.icon!;
+                      const isActive = location === subItem.href;
 
-                    // Per-item badge count
-                    let badgeCount  = 0;
-                    let showBadge   = false;
-                    let badgeColor  = "bg-red-500";
+                      // Per-item badge count
+                      let badgeCount  = 0;
+                      let showBadge   = false;
+                      let badgeColor  = "bg-red-500";
 
-                    if (subItem.href === "/inventory") {
-                      badgeCount = alertCount; showBadge = hasAlerts;
-                    } else if (subItem.href === "/requests") {
-                      // Combine request + return + void counts on the Requests badge
-                      badgeCount = totalPendingRequests; showBadge = totalPendingRequests > 0;
-                      badgeColor = "bg-blue-500";
-                    } else if (subItem.href === "/commodity-prices") {
-                      badgeCount = pendingCommodity; showBadge = pendingCommodity > 0;
-                      badgeColor = "bg-orange-500";
-                    } else if (subItem.href === "/discounts") {
-                      badgeCount = pendingDiscountApprovals; showBadge = pendingDiscountApprovals > 0;
-                      badgeColor = "bg-amber-500";
-                    }
+                      if (subItem.href === "/inventory") {
+                        badgeCount = alertCount; showBadge = hasAlerts;
+                      } else if (subItem.href === "/requests") {
+                        badgeCount = totalPendingRequests; showBadge = totalPendingRequests > 0;
+                        badgeColor = "bg-blue-500";
+                      } else if (subItem.href === "/commodity-prices") {
+                        badgeCount = pendingCommodity; showBadge = pendingCommodity > 0;
+                        badgeColor = "bg-orange-500";
+                      } else if (subItem.href === "/discounts") {
+                        badgeCount = pendingDiscountApprovals; showBadge = pendingDiscountApprovals > 0;
+                        badgeColor = "bg-amber-500";
+                      }
 
-                    return (
-                      <Link
-                        key={subItem.href}
-                        href={subItem.href}
-                        className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all duration-150 group relative
-                          ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
-                      >
-                        <span className="relative shrink-0">
-                          <SubIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-                          {showBadge && (
-                            <>
-                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} animate-ping opacity-75`} />
-                              <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} ring-1 ring-[#0f172a]`} />
-                            </>
-                          )}
-                        </span>
-                        <span className="text-sm font-medium truncate">{subItem.label}</span>
-                        {showBadge && (
-                          <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full ${badgeColor} text-white text-xs font-bold leading-none`}>
-                            {badgeCount > 99 ? "99+" : badgeCount}
+                      return (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all duration-150 group relative
+                            ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
+                        >
+                          <span className="relative shrink-0">
+                            <SubIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
+                            {showBadge && (
+                              <>
+                                <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} animate-ping opacity-75`} />
+                                <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ${badgeColor} ring-1 ring-[#0f172a]`} />
+                              </>
+                            )}
                           </span>
-                        )}
-                        {isActive && !showBadge && (
-                          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
+                          <span className="text-sm font-medium truncate">{subItem.label}</span>
+                          {showBadge && (
+                            <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full ${badgeColor} text-white text-xs font-bold leading-none`}>
+                              {badgeCount > 99 ? "99+" : badgeCount}
+                            </span>
+                          )}
+                          {isActive && !showBadge && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70" />
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="my-1 py-1 space-y-1 bg-white/[0.04] rounded-xl flex flex-col items-center w-full border border-white/5">
+                    {group.items.map((subItem) => {
+                      const SubIcon = subItem.icon!;
+                      const isActive = location === subItem.href;
+
+                      // Per-item badge count
+                      let showBadge = false;
+                      let badgeColor = "bg-red-500";
+
+                      if (subItem.href === "/inventory") {
+                        showBadge = hasAlerts;
+                      } else if (subItem.href === "/requests") {
+                        showBadge = totalPendingRequests > 0;
+                        badgeColor = "bg-blue-500";
+                      } else if (subItem.href === "/commodity-prices") {
+                        showBadge = pendingCommodity > 0;
+                        badgeColor = "bg-orange-500";
+                      } else if (subItem.href === "/discounts") {
+                        showBadge = pendingDiscountApprovals > 0;
+                        badgeColor = "bg-amber-500";
+                      }
+
+                      return (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          title={subItem.label}
+                          className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 relative
+                            ${isActive ? "bg-blue-600 text-white shadow-md shadow-blue-900/40" : "text-slate-400 hover:bg-white/[0.08] hover:text-white"}`}
+                        >
+                          <SubIcon className={`h-4 w-4 ${isActive ? "text-white" : "text-slate-400 hover:text-white"}`} />
+                          {showBadge && (
+                            <span className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ${badgeColor} ring-1 ring-[#0f172a]`} />
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
           );

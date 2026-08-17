@@ -20,7 +20,9 @@ import {
     ChevronLeft,
     ChevronRight,
     Eye,
+    Filter,
     RefreshCw,
+    RotateCcw,
     Search,
     TrendingDown,
     TrendingUp,
@@ -104,7 +106,7 @@ function DetailModal({
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"summary" | "sales" | "refunds">("summary");
+  const [tab, setTab] = useState<"summary" | "sales" | "collections" | "refunds">("summary");
 
   useEffect(() => {
     if (!sessionId) { setSession(null); return; }
@@ -153,7 +155,7 @@ function DetailModal({
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 bg-white shrink-0">
-          {(["summary", "sales", "refunds"] as const).map((t) => (
+          {(["summary", "sales", "collections", "refunds"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -164,6 +166,7 @@ function DetailModal({
               }`}
             >
               {t === "sales" ? `Sales (${session?.sales?.length ?? "…"})` :
+               t === "collections" ? `Utang Payments (${session?.credit_collections?.length ?? "0"})` :
                t === "refunds" ? `Refunds (${session?.refunds?.length ?? "…"})` :
                "Summary"}
             </button>
@@ -182,6 +185,9 @@ function DetailModal({
           )}
           {!loading && session && tab === "sales" && (
             <SalesTab sales={session.sales ?? []} />
+          )}
+          {!loading && session && tab === "collections" && (
+            <CollectionsTab collections={session.credit_collections ?? []} />
           )}
           {!loading && session && tab === "refunds" && (
             <RefundsTab refunds={session.refunds ?? []} />
@@ -305,26 +311,89 @@ function SalesTab({ sales }: { sales: CashSession["sales"] }) {
           <tr className="bg-gray-50 text-xs uppercase text-gray-500 font-semibold">
             <th className="px-3 py-2.5 text-left">Invoice #</th>
             <th className="px-3 py-2.5 text-left">Customer</th>
-            <th className="px-3 py-2.5 text-right">Amount</th>
+            <th className="px-3 py-2.5 text-left">Method</th>
+            <th className="px-3 py-2.5 text-right">Total Sale</th>
+            <th className="px-3 py-2.5 text-right">Cash Inflow</th>
             <th className="px-3 py-2.5 text-left">Time</th>
             <th className="px-3 py-2.5 text-left">Status</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {sales.map((s) => (
-            <tr key={s.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 font-mono text-xs text-blue-700">{s.invoice_number}</td>
-              <td className="px-3 py-2 text-gray-800 truncate max-w-[140px]">{s.customer_name}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmt(s.total_amount)}</td>
-              <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
-                {new Date(s.created_at).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
+          {sales.map((s) => {
+            const isCredit = s.payment_type === "CREDIT";
+            const downPmt = Number(s.amount_paid_at_sale ?? 0);
+            const cashCollected = isCredit ? downPmt : s.total_amount;
+            return (
+              <tr key={s.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2 font-mono text-xs text-blue-700">{s.invoice_number}</td>
+                <td className="px-3 py-2 text-gray-800 truncate max-w-[130px]">{s.customer_name}</td>
+                <td className="px-3 py-2 text-xs">
+                  {isCredit ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800">
+                      Credit {downPmt > 0 ? `(DP: ${fmt(downPmt)})` : "(No DP)"}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-700">
+                      Cash
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right font-medium tabular-nums text-gray-600">{fmt(s.total_amount)}</td>
+                <td className="px-3 py-2 text-right font-semibold tabular-nums text-green-700">
+                  {fmt(cashCollected)}
+                </td>
+                <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
+                  {new Date(s.created_at).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
+                </td>
+                <td className="px-3 py-2">
+                  {s.void_status === "voided" ? (
+                    <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 font-semibold">Voided</span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 font-semibold">Completed</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Collections tab ──────────────────────────────────────────────────────────
+
+function CollectionsTab({ collections }: { collections: CashSession["credit_collections"] }) {
+  if (!collections || collections.length === 0)
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2 text-sm">
+        <AlertCircle className="h-8 w-8 opacity-30" />
+        No utang payments collected in this session.
+      </div>
+    );
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-gray-50 text-xs uppercase text-gray-500 font-semibold">
+            <th className="px-3 py-2.5 text-left">Receipt #</th>
+            <th className="px-3 py-2.5 text-left">Customer</th>
+            <th className="px-3 py-2.5 text-right">Cash Collected</th>
+            <th className="px-3 py-2.5 text-left">Notes</th>
+            <th className="px-3 py-2.5 text-left">Time</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {collections.map((c) => (
+            <tr key={c.id} className="hover:bg-gray-50">
+              <td className="px-3 py-2 font-mono text-xs text-blue-700">{c.reference}</td>
+              <td className="px-3 py-2 text-gray-800 font-medium">{c.customer_name}</td>
+              <td className="px-3 py-2 text-right font-semibold tabular-nums text-green-700">
+                {fmt(c.amount)}
               </td>
-              <td className="px-3 py-2">
-                {s.void_status === "voided" ? (
-                  <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 font-semibold">Voided</span>
-                ) : (
-                  <span className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 font-semibold">Completed</span>
-                )}
+              <td className="px-3 py-2 text-gray-500 text-xs truncate max-w-[150px]">{c.notes || "—"}</td>
+              <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
+                {new Date(c.created_at).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
               </td>
             </tr>
           ))}
@@ -499,157 +568,198 @@ export default function CashReconciliation() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-end">
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-gray-600 uppercase">Cashier</Label>
-            <Select value={filterCashier} onValueChange={setFilterCashier}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="All cashiers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All cashiers</SelectItem>
-                {cashiers.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 border-b border-slate-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <Filter className="h-4 w-4" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">Filter Shift Sessions</h3>
+            {(filterCashier !== "__all__" || filterShift !== "__all__" || filterStatus !== "__all__") && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-medium">
+                Active Filter
+              </span>
+            )}
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-gray-600 uppercase">Date From</Label>
-            <Input
-              type="date"
-              value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
-              className="h-9 text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-gray-600 uppercase">Date To</Label>
-            <Input
-              type="date"
-              value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
-              className="h-9 text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-gray-600 uppercase">Shift</Label>
-            <Select value={filterShift} onValueChange={setFilterShift}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="All shifts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All shifts</SelectItem>
-                <SelectItem value="Morning Shift">Morning Shift</SelectItem>
-                <SelectItem value="Day Shift">Day Shift</SelectItem>
-                <SelectItem value="Afternoon Shift">Afternoon Shift</SelectItem>
-                <SelectItem value="Night Shift">Night Shift</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-gray-600 uppercase">Status</Label>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All statuses</SelectItem>
-                <SelectItem value="Balanced">Balanced</SelectItem>
-                <SelectItem value="Short">Short</SelectItem>
-                <SelectItem value="Over">Over</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 gap-1"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Reset
+          </Button>
         </div>
 
-        <div className="flex gap-2 mt-3 justify-end">
-          <Button variant="outline" size="sm" onClick={handleReset}>Reset</Button>
-          <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSearch}>
-            <Search className="h-3.5 w-3.5" /> Search
-          </Button>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 items-end">
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Cashier</Label>
+              <Select value={filterCashier} onValueChange={setFilterCashier}>
+                <SelectTrigger className="h-9.5 text-sm">
+                  <SelectValue placeholder="All cashiers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All cashiers</SelectItem>
+                  {cashiers.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Date From</Label>
+              <Input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="h-9.5 text-sm"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Date To</Label>
+              <Input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="h-9.5 text-sm"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Shift</Label>
+              <Select value={filterShift} onValueChange={setFilterShift}>
+                <SelectTrigger className="h-9.5 text-sm">
+                  <SelectValue placeholder="All shifts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All shifts</SelectItem>
+                  <SelectItem value="Morning Shift">Morning Shift</SelectItem>
+                  <SelectItem value="Day Shift">Day Shift</SelectItem>
+                  <SelectItem value="Afternoon Shift">Afternoon Shift</SelectItem>
+                  <SelectItem value="Night Shift">Night Shift</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Reconciliation Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="h-9.5 text-sm">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All statuses</SelectItem>
+                  <SelectItem value="Balanced">Balanced</SelectItem>
+                  <SelectItem value="Short">Short</SelectItem>
+                  <SelectItem value="Over">Over</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReset}
+              className="h-9 px-4 text-slate-600 border-slate-300 hover:bg-slate-100 gap-1.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Clear Filters
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold h-9 px-5 shadow-xs"
+              onClick={handleSearch}
+            >
+              <Search className="h-4 w-4" /> Filter Sessions
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-800">
-            {total > 0 ? `${total} record${total !== 1 ? "s" : ""}` : "No records found"}
+      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+            {total > 0 ? `${total} reconciliation record${total !== 1 ? "s" : ""}` : "No records found"}
           </span>
+          <span className="text-xs text-slate-400 font-medium">Isra Hardware POS</span>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400 gap-2 text-sm">
-            <Spinner /> Loading…
+          <div className="flex items-center justify-center py-20 text-slate-400 gap-2 text-sm">
+            <Spinner className="text-blue-600" /> <span className="font-medium">Loading reconciliation logs…</span>
           </div>
         ) : sessions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2 text-sm">
-            <AlertCircle className="h-8 w-8 opacity-30" />
-            No reconciliation records found.
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+            <AlertCircle className="h-10 w-10 text-slate-300" />
+            <p className="font-bold text-slate-700">No reconciliation records found.</p>
+            <p className="text-xs text-slate-400">Try adjusting your filters or date range.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-left">
               <thead>
-                <tr className="bg-gray-50 text-xs uppercase text-gray-500 font-semibold border-b border-gray-200">
-                  <th className="px-4 py-3 text-left">Cashier</th>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-left">Shift</th>
-                  <th className="px-4 py-3 text-right">Expected</th>
-                  <th className="px-4 py-3 text-right">Actual</th>
-                  <th className="px-4 py-3 text-right">Variance</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-center">Review</th>
-                  <th className="px-4 py-3 text-center">Action</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-700 font-bold tracking-wide">
+                  <th className="px-4 py-3.5">Cashier</th>
+                  <th className="px-4 py-3.5">Shift Date</th>
+                  <th className="px-4 py-3.5">Shift Label</th>
+                  <th className="px-4 py-3.5 text-right">Expected Cash</th>
+                  <th className="px-4 py-3.5 text-right">Actual Count</th>
+                  <th className="px-4 py-3.5 text-right">Variance</th>
+                  <th className="px-4 py-3.5 text-center">Status</th>
+                  <th className="px-4 py-3.5 text-center">Audit Review</th>
+                  <th className="px-4 py-3.5 text-center">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {sessions.map((s) => {
                   const variance = s.variance ?? 0;
                   const varColor =
                     Math.abs(variance) < 0.01
-                      ? "text-green-600"
+                      ? "text-emerald-700 font-bold"
                       : variance < 0
-                      ? "text-red-600 font-semibold"
-                      : "text-amber-600 font-semibold";
+                      ? "text-red-600 font-bold"
+                      : "text-amber-700 font-bold";
                   return (
-                    <tr key={s.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-gray-900">{s.cashier_name}</p>
+                    <tr key={s.id} className="hover:bg-blue-50/50 transition-colors">
+                      <td className="px-4 py-3.5">
+                        <p className="font-bold text-slate-900">{s.cashier_name}</p>
                         {s.cashier_employee_id && (
-                          <p className="text-xs text-gray-400 font-mono">{s.cashier_employee_id}</p>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">{s.cashier_employee_id}</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmtDate(s.shift_date)}</td>
-                      <td className="px-4 py-3 text-gray-600">{s.shift_label}</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">{fmt(s.expected_cash)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">{fmt(s.actual_cash)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums ${varColor}`}>
+                      <td className="px-4 py-3.5 text-slate-700 font-medium whitespace-nowrap">{fmtDate(s.shift_date)}</td>
+                      <td className="px-4 py-3.5 text-slate-600 font-medium">
+                        <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-md">
+                          {s.shift_label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right tabular-nums font-mono font-medium text-slate-700">{fmt(s.expected_cash)}</td>
+                      <td className="px-4 py-3.5 text-right tabular-nums font-mono font-bold text-slate-900">{fmt(s.actual_cash)}</td>
+                      <td className={`px-4 py-3.5 text-right tabular-nums font-mono ${varColor}`}>
                         {variance > 0 ? "+" : ""}{fmt(variance)}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         <StatusBadge status={s.status} />
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         {s.reviewed_at ? (
-                          <span className="text-xs text-green-600 font-medium">Reviewed</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Reviewed</span>
                         ) : (
-                          <span className="text-xs text-gray-400">Pending</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Pending</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 px-2 gap-1 text-xs"
+                          className="h-8 px-3 gap-1.5 text-xs font-bold text-slate-700 border-slate-300 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors cursor-pointer"
                           onClick={() => setSelectedId(s.id)}
                         >
                           <Eye className="h-3.5 w-3.5" /> View

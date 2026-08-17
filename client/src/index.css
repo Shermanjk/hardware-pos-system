@@ -69,8 +69,8 @@
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: #E5E7EB;
-  --input: #F3F4F6;
+  --border: #E2E8F0;
+  --input: #CBD5E1;
   --ring: #2563EB;
   --sidebar: #FFFFFF;
   --sidebar-foreground: #1F2937;
@@ -229,3 +229,57 @@
     animation: fade-in 0.3s ease-out forwards;
   }
 }
+
+/* ==========================================================================
+   Modern Minimalist Custom Scrollbars
+   ========================================================================== */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari, Opera) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Scrollbars on Dark elements (like Admin Sidebar) */
+.dark ::-webkit-scrollbar-thumb,
+aside ::-webkit-scrollbar-thumb,
+nav ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+aside ::-webkit-scrollbar-thumb:hover,
+nav ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Hide scrollbar buttons (arrows) */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}

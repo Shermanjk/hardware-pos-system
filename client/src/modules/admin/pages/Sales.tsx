@@ -16,10 +16,14 @@ import { toast } from "sonner";
 import {
     AlertCircle,
     Calendar, ChevronDown, ChevronUp,
+    CreditCard,
     Eye,
+    Filter,
+    Hash,
     Percent,
     Printer,
     Receipt,
+    RotateCcw,
     Search,
     ShoppingCart,
     User,
@@ -627,26 +631,41 @@ export default function Sales() {
       )}
 
       {/* Search filters */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
         <button
+          type="button"
           onClick={() => setShowFilters((v) => !v)}
-          className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-bold text-slate-800 bg-slate-50 hover:bg-slate-100/80 transition-colors border-b border-slate-200"
         >
-          <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-gray-400" />
-            Search / Filter Sales
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <Filter className="h-4 w-4" />
+            </div>
+            <span>Search & Filter Sales Transactions</span>
+            {(cashierId !== "__all__" || invoice.trim() || customer.trim() || paymentType !== "all" || returnStatus !== "all") && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-medium">
+                Filtered
+              </span>
+            )}
           </div>
-          {showFilters ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <span>{showFilters ? "Hide Filters" : "Show Filters"}</span>
+            {showFilters ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+          </div>
         </button>
 
         {showFilters && (
-          <form onSubmit={handleSearch} className="px-5 pb-5 pt-1 space-y-4 border-t border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-              {/* Cashier dropdown — primary filter */}
-              <div className="xl:col-span-2">
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Cashier</Label>
+          <form onSubmit={handleSearch} className="p-5 space-y-4 bg-white">
+            {/* Primary Search Criteria Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {/* Cashier */}
+              <div>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                  <User className="h-3.5 w-3.5 text-slate-400" />
+                  Cashier
+                </Label>
                 <Select value={cashierId} onValueChange={setCashierId}>
-                  <SelectTrigger className="h-9 text-sm">
+                  <SelectTrigger className="h-9.5 text-sm">
                     <SelectValue placeholder="All Cashiers" />
                   </SelectTrigger>
                   <SelectContent>
@@ -659,69 +678,175 @@ export default function Sales() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Invoice No */}
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Invoice No.</Label>
-                <Input value={invoice} onChange={(e) => setInvoice(e.target.value)}
-                  placeholder="INV-20250120-0001" className="h-9 text-sm" />
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Hash className="h-3.5 w-3.5 text-slate-400" />
+                  Invoice No.
+                </Label>
+                <Input
+                  value={invoice}
+                  onChange={(e) => setInvoice(e.target.value)}
+                  placeholder="e.g. INV-2026..."
+                  className="h-9.5 text-sm"
+                />
               </div>
+
+              {/* Customer Name */}
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Customer Name</Label>
-                <Input value={customer} onChange={(e) => setCustomer(e.target.value)}
-                  placeholder="Search by customer…" className="h-9 text-sm" />
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                  <User className="h-3.5 w-3.5 text-slate-400" />
+                  Customer Name
+                </Label>
+                <Input
+                  value={customer}
+                  onChange={(e) => setCustomer(e.target.value)}
+                  placeholder="Search customer…"
+                  className="h-9.5 text-sm"
+                />
               </div>
+
+              {/* Date From */}
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Date From</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                  Date From
+                </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                    className="h-9 text-sm pl-8" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="h-9.5 text-sm pl-8"
+                  />
                 </div>
               </div>
+
+              {/* Date To */}
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Date To</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                  Date To
+                </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                    className="h-9 text-sm pl-8" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="h-9.5 text-sm pl-8"
+                  />
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="w-40">
-                <Select value={paymentType} onValueChange={setPaymentType}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="All Methods" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Payment Methods</SelectItem>
-                    <SelectItem value="CASH">Cash Only</SelectItem>
-                    <SelectItem value="CREDIT">Credit / Utang Only</SelectItem>
-                  </SelectContent>
-                </Select>
+
+            {/* Secondary Filters & Action Row */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col md:flex-row items-start md:items-end justify-between gap-4">
+              <div className="flex flex-wrap items-end gap-3.5">
+                {/* Payment Method */}
+                <div className="w-48">
+                  <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+                    Payment Method
+                  </Label>
+                  <Select value={paymentType} onValueChange={setPaymentType}>
+                    <SelectTrigger className="h-9.5 text-sm">
+                      <SelectValue placeholder="All Methods" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Payment Methods</SelectItem>
+                      <SelectItem value="CASH">Cash Only</SelectItem>
+                      <SelectItem value="CREDIT">Credit / Utang Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Return Status */}
+                <div className="w-44">
+                  <Label className="text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 uppercase tracking-wide">
+                    <Receipt className="h-3.5 w-3.5 text-slate-400" />
+                    Return Status
+                  </Label>
+                  <Select value={returnStatus} onValueChange={setReturnStatus}>
+                    <SelectTrigger className="h-9.5 text-sm">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Transactions</SelectItem>
+                      <SelectItem value="no_returns">No Returns</SelectItem>
+                      <SelectItem value="has_returns">Has Returns</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Quick Date Presets */}
+                <div>
+                  <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">
+                    Quick Presets
+                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const t = new Date().toISOString().split("T")[0];
+                        setDateFrom(t);
+                        setDateTo(t);
+                      }}
+                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const y = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+                        setDateFrom(y);
+                        setDateTo(y);
+                      }}
+                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      Yesterday
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+                        const todayStr = now.toISOString().split("T")[0];
+                        setDateFrom(firstDay);
+                        setDateTo(todayStr);
+                      }}
+                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      This Month
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="w-40">
-                <Select value={returnStatus} onValueChange={setReturnStatus}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Sales</SelectItem>
-                    <SelectItem value="no_returns">No Returns</SelectItem>
-                    <SelectItem value="has_returns">Has Returns</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button type="submit" disabled={isLoading}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-9 px-5 text-sm gap-2">
-                {isLoading ? <LoadingSpinner size={16} className="text-white" /> : <Search className="h-4 w-4" />}
-                {isLoading ? "Searching…" : "Search"}
-              </Button>
-              {hasSearched && (
-                <Button type="button" variant="outline" onClick={handleClear}
-                  className="h-9 px-4 text-sm text-gray-600 border-gray-300 hover:bg-gray-100 gap-1.5">
-                  <X className="h-3.5 w-3.5" /> Clear
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-2 md:pt-0">
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-9.5 px-5 text-sm font-semibold gap-2 shadow-xs cursor-pointer"
+                >
+                  {isLoading ? <LoadingSpinner size={16} className="text-white" /> : <Search className="h-4 w-4" />}
+                  {isLoading ? "Filtering…" : "Apply Filters"}
                 </Button>
-              )}
+                {hasSearched && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleClear}
+                    className="h-9.5 px-4 text-sm font-medium text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-slate-900 gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Reset
+                  </Button>
+                )}
+              </div>
             </div>
           </form>
         )}
@@ -759,20 +884,20 @@ export default function Sales() {
 
       {/* Results table */}
       {hasSearched && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-left">
               <thead>
-                <tr className="bg-gray-50 border-b-2 border-gray-200">
-                  <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Invoice No.</th>
-                  <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Customer</th>
-                  <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Cashier</th>
-                  <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Date & Time</th>
-                  <th className="text-right py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Total</th>
-                  <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Invoice No.</th>
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Customer</th>
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Cashier</th>
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Date & Time</th>
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-right">Total Amount</th>
+                  <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i}>
@@ -785,50 +910,58 @@ export default function Sales() {
                     </tr>
                   ))
                 ) : sales.length === 0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                        <ShoppingCart className="h-6 w-6 text-gray-400" />
+                  <tr>
+                    <td colSpan={6} className="py-20 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                          <ShoppingCart className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <p className="font-bold text-slate-700">No sales transactions found</p>
+                        <p className="text-xs text-slate-400">Try adjusting your search criteria or date filters</p>
                       </div>
-                      <p className="font-semibold text-gray-700">No sales found</p>
-                      <p className="text-xs text-gray-400">Try adjusting your search filters</p>
-                    </div>
-                  </td></tr>
+                    </td>
+                  </tr>
                 ) : (
                   sales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-blue-50/40 transition-colors">
+                    <tr key={sale.id} className="hover:bg-blue-50/50 transition-colors">
                       <td className="py-3.5 px-5">
-                        <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
                           {sale.invoice_number}
                         </span>
                       </td>
-                      <td className="py-3.5 px-5 font-medium text-gray-900">{sale.customer_name}</td>
-                      <td className="py-3.5 px-5 text-gray-600 text-sm">{sale.cashier_name}</td>
-                      <td className="py-3.5 px-5 text-sm text-gray-500">{fmtDate(sale.created_at)}</td>
-                      <td className="py-3.5 px-5 text-right font-bold text-gray-900 tabular-nums">
-                        <span className={sale.void_status === "voided" ? "line-through text-gray-400" : ""}>{fmt(sale.total_amount)}</span>
+                      <td className="py-3.5 px-5 font-bold text-slate-900">{sale.customer_name || "Walk-in Customer"}</td>
+                      <td className="py-3.5 px-5 text-slate-600 text-sm font-medium">{sale.cashier_name}</td>
+                      <td className="py-3.5 px-5 text-sm text-slate-500">{fmtDate(sale.created_at)}</td>
+                      <td className="py-3.5 px-5 text-right font-bold text-slate-900 tabular-nums">
+                        <span className={`font-mono text-sm ${sale.void_status === "voided" ? "line-through text-slate-400" : "text-slate-900"}`}>
+                          {fmt(sale.total_amount)}
+                        </span>
                         {sale.void_status === "voided" && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-600">VOID</span>
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                            VOIDED
+                          </span>
                         )}
                         {sale.void_status === "void_requested" && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">PENDING VOID</span>
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            PENDING VOID
+                          </span>
                         )}
                         {sale.payment_type === "CREDIT" && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
                             CREDIT
                           </span>
                         )}
                         {(sale.return_count ?? 0) > 0 && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
-                            RETURN{(sale.return_count ?? 0) > 1 ? ` (${sale.return_count})` : ''}
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            RETURN{(sale.return_count ?? 0) > 1 ? ` (${sale.return_count})` : ""}
                           </span>
                         )}
                       </td>
                       <td className="py-3.5 px-5 text-center">
                         <button
                           onClick={() => setDetailInvoice(sale.invoice_number)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors mx-auto"
-                          title="View details"
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors mx-auto cursor-pointer"
+                          title="View transaction receipt"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -840,13 +973,11 @@ export default function Sales() {
             </table>
           </div>
           {!isLoading && sales.length > 0 && (
-            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-              <p className="text-xs text-gray-500 font-medium">
-                {sales.length} transaction{sales.length !== 1 ? "s" : ""}
+            <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <p className="text-xs text-slate-600 font-bold">
+                {sales.length} transaction{sales.length !== 1 ? "s" : ""} recorded
               </p>
-              <p className="text-xs font-semibold text-emerald-600 tabular-nums">
-                Total: {fmt(totalRevenue)}
-              </p>
+              <p className="text-xs text-slate-400 font-medium">Isra Hardware POS</p>
             </div>
           )}
         </div>

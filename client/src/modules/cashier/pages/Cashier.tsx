@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { getMySession } from "@/shared/api/cashReconciliationApi";
+import { getMySession, type CashSession } from "@/shared/api/cashReconciliationApi";
 import httpClient from "@/shared/api/httpClient";
 import { getProduct } from "@/shared/api/productsApi";
 import { getMyPendingReturns } from "@/shared/api/returnsApi";
@@ -21,6 +21,7 @@ import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
 import CustomerPanel from "../components/CustomerPanel";
 import DiscountApprovalModal from "../components/DiscountApprovalModal";
 import EndShiftModal from "../components/EndShiftModal";
+import LogoutShiftConfirmModal from "../components/LogoutShiftConfirmModal";
 import type { HeldOrder } from "../components/HeldOrdersPanel";
 import CreditLimitOverrideModal from "../components/CreditLimitOverrideModal";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
@@ -300,10 +301,13 @@ export default function Cashier() {
     } catch { /* ignore storage errors */ }
   }, [getSeenVoidIds, getSeenVoidKey]);
 
-  // ── End Shift modal ───────────────────────────────────────────────────────
-  const [showEndShift, setShowEndShift]       = useState(false);
-  const [hasOpenSession, setHasOpenSession]   = useState(false);
-  const [sessionChecked, setSessionChecked]   = useState(false); // true once initial check completes
+  // ── End Shift & Logout Interceptor state ──────────────────────────────────
+  const [showEndShift, setShowEndShift]             = useState(false);
+  const [hasOpenSession, setHasOpenSession]         = useState(false);
+  const [currentSession, setCurrentSession]         = useState<CashSession | null>(null);
+  const [sessionChecked, setSessionChecked]         = useState(false); // true once initial check completes
+  const [showLogoutPrompt, setShowLogoutPrompt]     = useState(false);
+  const [isLogoutShiftFlow, setIsLogoutShiftFlow]   = useState(false);
 
   // ── Suspended sales ───────────────────────────────────────────────────────
   const [suspendedSales, setSuspendedSales]     = useState<SuspendedSaleApi[]>([]);
@@ -485,6 +489,7 @@ export default function Cashier() {
       .then((s) => {
         const isOpen = !!s;
         setHasOpenSession(isOpen);
+        setCurrentSession(s);
         setSessionChecked(true);
         if (!isOpen) {
           // Small delay so the POS UI renders before the modal appears
@@ -493,9 +498,30 @@ export default function Cashier() {
       })
       .catch(() => {
         setHasOpenSession(false);
+        setCurrentSession(null);
         setSessionChecked(true);
       });
   }, []);
+
+  // ── Logout Interceptor Handlers ───────────────────────────────────────────
+  const handleInitiateLogout = () => {
+    if (hasOpenSession) {
+      setShowLogoutPrompt(true);
+    } else {
+      logout();
+    }
+  };
+
+  const handleConfirmEndShiftFromLogout = () => {
+    setShowLogoutPrompt(false);
+    setIsLogoutShiftFlow(true);
+    setShowEndShift(true);
+  };
+
+  const handleConfirmTemporaryLogout = () => {
+    setShowLogoutPrompt(false);
+    logout();
+  };
 
   const handleHold = useCallback(async () => {
     if (cartItems.length === 0) return;
@@ -1210,14 +1236,20 @@ export default function Cashier() {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="gap-2 text-amber-600 hover:text-amber-700 font-medium"
-                onClick={() => setShowEndShift(true)}
+                className="gap-2 text-amber-600 hover:text-amber-700 font-medium cursor-pointer"
+                onClick={() => {
+                  setIsLogoutShiftFlow(false);
+                  setShowEndShift(true);
+                }}
               >
                 <PowerOff className="h-4 w-4" />
                 {hasOpenSession ? "End Shift" : "Start Shift"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600 gap-2" onClick={logout}>
+              <DropdownMenuItem
+                className="text-red-600 gap-2 cursor-pointer font-medium hover:bg-red-50"
+                onClick={handleInitiateLogout}
+              >
                 <LogOut className="h-4 w-4" />Logout
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -1386,11 +1418,37 @@ export default function Cashier() {
         latestDecision={latestCreditOverrideDecision}
       />
 
+      {/* ── Logout with Active Shift Confirmation Modal ───────────────────── */}
+      <LogoutShiftConfirmModal
+        open={showLogoutPrompt}
+        onClose={() => setShowLogoutPrompt(false)}
+        onEndShift={handleConfirmEndShiftFromLogout}
+        onTemporaryLogout={handleConfirmTemporaryLogout}
+        shiftLabel={currentSession?.shift_label ?? "Active Shift"}
+        openedAt={currentSession?.opened_at ?? null}
+      />
+
       <EndShiftModal
         open={showEndShift}
-        onClose={() => setShowEndShift(false)}
-        onShiftOpened={() => { setHasOpenSession(true); barcodeRef.current?.focus(); }}
-        onShiftClosed={() => setHasOpenSession(false)}
+        onClose={() => {
+          setShowEndShift(false);
+          setIsLogoutShiftFlow(false);
+        }}
+        isLogoutFlow={isLogoutShiftFlow}
+        onLogoutAfterShift={() => {
+          logout();
+        }}
+        onShiftOpened={() => {
+          getMySession().then((s) => {
+            setHasOpenSession(!!s);
+            setCurrentSession(s);
+          });
+          barcodeRef.current?.focus();
+        }}
+        onShiftClosed={() => {
+          setHasOpenSession(false);
+          setCurrentSession(null);
+        }}
       />
 
       <PaymentSuccessModal

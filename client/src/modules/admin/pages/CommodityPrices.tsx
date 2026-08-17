@@ -671,39 +671,39 @@ function MarketBasedWithTabs({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-left">
               <thead>
-                <tr className="bg-gray-800 text-white">
-                  {["Product", "Unit", "Current Buying Price", "Effective From", "Stock", "Actions"].map((h, i) => (
-                    <th key={h} className={`py-3 px-5 font-semibold text-xs uppercase tracking-wide ${i >= 2 && i <= 4 ? "text-right" : i === 5 ? "text-center" : "text-left"}`}>{h}</th>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {["Commodity Product", "Unit", "Current Buying Price", "Effective From", "Stock", "Actions"].map((h, i) => (
+                    <th key={h} className={`py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide ${i >= 2 && i <= 4 ? "text-right" : i === 5 ? "text-center" : "text-left"}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {products.map((p) => (
-                  <tr key={p.id} className="hover:bg-amber-50/30 transition-colors">
+                  <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
                     <td className="py-3.5 px-5">
-                      <p className="font-semibold text-gray-900">{p.product_name}</p>
-                      <p className="font-mono text-xs text-gray-400 mt-0.5">{p.barcode}</p>
+                      <p className="font-bold text-slate-900">{p.product_name}</p>
+                      <p className="font-mono text-xs text-slate-400 mt-0.5">{p.barcode}</p>
                     </td>
                     <td className="py-3.5 px-5">
-                      <span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
                         {p.unit} ({p.unit_abbreviation})
                       </span>
                     </td>
                     <td className="py-3.5 px-5 text-right">
                       {p.current_price != null ? (
-                        <span className="text-base font-bold text-amber-700 tabular-nums">
+                        <span className="text-base font-bold text-amber-700 font-mono tabular-nums">
                           {fmtShort(p.current_price)}/{p.unit_abbreviation}
                         </span>
                       ) : (
-                        <span className="text-xs text-red-500 font-semibold">Not set</span>
+                        <span className="text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-200">Not set</span>
                       )}
                     </td>
-                    <td className="py-3.5 px-5 text-right text-xs text-gray-500">
+                    <td className="py-3.5 px-5 text-right text-xs text-slate-500 font-medium">
                       {p.price_effective_from ? fmtDate(p.price_effective_from) : "—"}
                     </td>
-                    <td className="py-3.5 px-5 text-right font-bold text-gray-900 tabular-nums">
+                    <td className="py-3.5 px-5 text-right font-bold text-slate-900 font-mono tabular-nums">
                       {Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })}
                     </td>
                     <td className="py-3.5 px-5">
@@ -711,14 +711,14 @@ function MarketBasedWithTabs({
                         <button
                           title="Update price"
                           onClick={() => onEditPrice(p)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
                         <button
                           title="Price history"
                           onClick={() => onViewHistory(p)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                         >
                           <History className="h-4 w-4" />
                         </button>
@@ -735,103 +735,103 @@ function MarketBasedWithTabs({
       {/* History Tab */}
       {activeTab === "history" && (
         <>
-          <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-3 items-end bg-blue-50/50">
+          <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap gap-3 items-end bg-slate-50">
             <div>
-              <Label className="text-xs font-semibold text-gray-500 mb-1 block">From</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 text-sm w-36" />
+              <Label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wide">From</Label>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm w-36 bg-white border-slate-300" />
             </div>
             <div>
-              <Label className="text-xs font-semibold text-gray-500 mb-1 block">To</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-sm w-36" />
+              <Label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wide">To</Label>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm w-36 bg-white border-slate-300" />
             </div>
             <div>
-              <Label className="text-xs font-semibold text-gray-500 mb-1 block">Seller</Label>
+              <Label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wide">Seller</Label>
               <Input 
                 type="text" 
                 value={sellerSearch} 
                 onChange={(e) => setSellerSearch(e.target.value)} 
-                placeholder="Search seller..." 
-                className="h-8 text-sm w-48 border-gray-400" 
+                placeholder="Search seller…" 
+                className="h-9 text-sm w-52 bg-white border-slate-300" 
               />
             </div>
             {(dateFrom || dateTo || sellerSearch) && (
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setDateFrom(""); setDateTo(""); setSellerSearch(""); }}>
-                <X className="h-3 w-3 mr-1" /> Clear
+              <Button variant="outline" size="sm" className="h-9 text-xs border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer" onClick={() => { setDateFrom(""); setDateTo(""); setSellerSearch(""); }}>
+                <X className="h-3.5 w-3.5 mr-1" /> Clear
               </Button>
             )}
           </div>
 
           {historyLoading ? (
-            <div className="py-10 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
-              <Spinner className="text-blue-500" /> Loading…
+            <div className="py-16 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
+              <Spinner className="text-blue-600" /> Loading purchase records…
             </div>
           ) : filteredPurchases.length === 0 ? (
-            <div className="py-10 text-center text-gray-400 text-sm">{sellerSearch.trim() ? "No matching sellers found." : "No purchase records found."}</div>
+            <div className="py-16 text-center text-slate-500 text-sm font-medium">{sellerSearch.trim() ? "No matching sellers found." : "No commodity purchase records found."}</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm text-left">
                 <thead>
-                  <tr className="bg-gray-800 text-white">
-                    {["Date", "Product", "Seller", "Address", "Contact", "Qty Rec", "Ded", "Payable", "Ref.Price", "Gross", "Ded.Amt", "FinalAmt", "Status", "Pmt", "By"].map((h, i) => (
-                      <th key={h} className={`py-3 px-2 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i >= 5 && i <= 11 ? "text-right" : i >= 13 ? "text-center" : "text-left"}`}>{h}</th>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    {["Date", "Product", "Seller", "Address", "Contact", "Qty Rec", "Ded", "Payable", "Ref. Price", "Gross", "Ded. Amt", "Final Amount", "Approval", "Payment", "Recorded By"].map((h, i) => (
+                      <th key={h} className={`py-3.5 px-3 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap ${i >= 5 && i <= 11 ? "text-right" : i >= 12 && i <= 13 ? "text-center" : "text-left"}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {filteredPurchases.map((p, idx) => (
                     <tr 
                       key={p.id} 
-                      className={`hover:bg-blue-50/40 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                      className={`hover:bg-blue-50/50 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
                       onClick={() => setSelectedPurchase(p)}
                     >
-                      <td className="py-3 px-3 whitespace-nowrap text-xs text-gray-600">{fmtDateOnly(p.transaction_date)}</td>
-                      <td className="py-3 px-3">
-                        <p className="font-semibold text-gray-900 text-sm">{p.product_name}</p>
-                        <p className="font-mono text-xs text-gray-400">{p.barcode}</p>
+                      <td className="py-3.5 px-3 whitespace-nowrap text-xs text-slate-600 font-medium">{fmtDateOnly(p.transaction_date)}</td>
+                      <td className="py-3.5 px-3">
+                        <p className="font-bold text-slate-900 text-sm">{p.product_name}</p>
+                        <p className="font-mono text-xs text-slate-400">{p.barcode}</p>
                       </td>
-                      <td className="py-3 px-3 text-xs text-gray-600">{p.seller}</td>
-                      <td className="py-3 px-3 text-xs text-gray-500 max-w-[120px] truncate" title={(p as any).seller_address || ""}>
-                        {(p as any).seller_address || <span className="text-gray-300">—</span>}
+                      <td className="py-3.5 px-3 text-xs font-semibold text-slate-800">{p.seller}</td>
+                      <td className="py-3.5 px-3 text-xs text-slate-500 max-w-[130px] truncate" title={(p as any).seller_address || ""}>
+                        {(p as any).seller_address || <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="py-3 px-3 text-xs text-gray-500 whitespace-nowrap font-mono">
-                        {(p as any).seller_contact || <span className="text-gray-300">—</span>}
+                      <td className="py-3.5 px-3 text-xs text-slate-600 whitespace-nowrap font-mono">
+                        {(p as any).seller_contact || <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-gray-900 tabular-nums">
+                      <td className="py-3.5 px-3 text-right font-bold text-slate-900 font-mono tabular-nums">
                         {Number(p.quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })} {p.unit_name}
                       </td>
-                      <td className="py-3 px-3 text-right tabular-nums text-xs text-red-600">
+                      <td className="py-3.5 px-3 text-right tabular-nums text-xs font-mono text-red-600">
                         {Number(p.deducted_quantity) > 0
-                          ? <span className="text-red-600">−{Number(p.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })}</span>
-                          : <span className="text-gray-400">—</span>
+                          ? <span className="text-red-600 font-bold">−{Number(p.deducted_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })}</span>
+                          : <span className="text-slate-300">—</span>
                         }
                       </td>
-                      <td className="py-3 px-3 text-right font-semibold text-gray-900 tabular-nums text-xs">
+                      <td className="py-3.5 px-3 text-right font-bold text-slate-900 font-mono tabular-nums text-xs">
                         {Number(p.payable_quantity).toLocaleString("en-PH", { maximumFractionDigits: 4 })}
                       </td>
-                      <td className="py-3 px-3 text-right text-gray-600 tabular-nums text-xs">{fmtShort(p.reference_price)}</td>
-                      <td className="py-3 px-3 text-right text-gray-600 tabular-nums text-xs">{fmt(p.gross_amount)}</td>
-                      <td className="py-3 px-3 text-right tabular-nums text-xs">
+                      <td className="py-3.5 px-3 text-right text-slate-600 font-mono tabular-nums text-xs">{fmtShort(p.reference_price)}</td>
+                      <td className="py-3.5 px-3 text-right text-slate-600 font-mono tabular-nums text-xs">{fmt(p.gross_amount)}</td>
+                      <td className="py-3.5 px-3 text-right tabular-nums text-xs font-mono">
                         {Number(p.deduction_amount) > 0
-                          ? <span className="text-red-600">−{fmt(p.deduction_amount)}</span>
-                          : <span className="text-gray-400">—</span>
+                          ? <span className="text-red-600 font-bold">−{fmt(p.deduction_amount)}</span>
+                          : <span className="text-slate-300">—</span>
                         }
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-emerald-700 tabular-nums">
+                      <td className="py-3.5 px-3 text-right font-bold text-emerald-700 font-mono tabular-nums">
                         {fmt(p.final_amount)}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3.5 px-3 text-center">
                         {p.approval_status ? (
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${p.approval_status === "APPROVED" ? "bg-green-100 text-green-700" : p.approval_status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${p.approval_status === "APPROVED" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : p.approval_status === "REJECTED" ? "bg-red-100 text-red-700 border border-red-200" : "bg-amber-100 text-amber-800 border border-amber-200"}`}>
                             {p.approval_status}
                           </span>
                         ) : "—"}
                       </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${p.payment_status === "PAID" ? "bg-green-100 text-green-700" : p.payment_status === "PARTIALLY_PAID" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                      <td className="py-3.5 px-3 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${p.payment_status === "PAID" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : p.payment_status === "PARTIALLY_PAID" ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-red-100 text-red-700 border border-red-200"}`}>
                           {p.payment_status}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-xs text-gray-500">{p.recorded_by_name}</td>
+                      <td className="py-3.5 px-3 text-xs text-slate-500 font-medium">{p.recorded_by_name}</td>
                     </tr>
                   ))}
                 </tbody>

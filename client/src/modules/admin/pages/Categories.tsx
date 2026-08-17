@@ -705,28 +705,28 @@ export default function Categories() {
       )}
 
       {/* Search + count */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-sm">
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm p-4.5">
+        <div className="flex items-center gap-3.5">
+          <div className="flex-1 flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-sm shadow-xs">
             {activeTab === "categories" ? (
-              <FolderOpen className="h-4 w-4 text-gray-400 shrink-0" />
+              <FolderOpen className="h-4 w-4 text-slate-400 shrink-0" />
             ) : (
-              <Package className="h-4 w-4 text-gray-400 shrink-0" />
+              <Package className="h-4 w-4 text-slate-400 shrink-0" />
             )}
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={activeTab === "categories" ? "Search categories…" : "Search units…"}
-              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-gray-400 text-gray-800"
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
             />
             {search && (
-              <button onClick={() => setSearch("")} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
           {!isLoading && (
-            <p className="text-sm text-gray-500 font-medium">
+            <p className="text-sm text-slate-500 font-medium">
               {activeTab === "categories" ? filteredCategories.length : filteredUnits.length}{" "}
               {activeTab === "categories" 
                 ? (filteredCategories.length === 1 ? "category" : "categories")

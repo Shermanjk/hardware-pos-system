@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AdminSidebar from "./AdminSidebar";
 import AdminTopNav from "./AdminTopNav";
 import DailyBackupReminder from "@/components/DailyBackupReminder";
 import PageTransition from "@/shared/components/PageTransition";
+import BackToTop from "@/shared/components/BackToTop";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 
@@ -11,6 +12,7 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const mainRef = useRef<HTMLElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{
@@ -84,12 +86,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <AdminTopNav onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
           <PageTransition>
             {children}
           </PageTransition>
         </main>
       </div>
+      <BackToTop containerRef={mainRef} threshold={200} />
       <DailyBackupReminder
         open={showBackupReminder}
         onClose={() => setShowBackupReminder(false)}

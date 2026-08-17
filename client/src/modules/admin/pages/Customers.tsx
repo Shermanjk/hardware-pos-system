@@ -398,14 +398,14 @@ export default function CustomersPage() {
       </div>
 
       {/* ── Search and Filter Controls ───────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="bg-white p-4.5 rounded-xl border border-slate-300 shadow-sm flex flex-col md:flex-row gap-3.5 items-center justify-between">
         <div className="relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Search name, code, contact…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 border-slate-200 bg-slate-50/50 focus:bg-white"
+            className="pl-9 h-10 border-slate-300 bg-white hover:border-slate-400 focus:bg-white text-slate-800 font-medium"
           />
           {searchQuery && (
             <button
@@ -463,32 +463,32 @@ export default function CustomersPage() {
       </div>
 
       {/* ── Customers Table ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3">
             <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-            <p className="text-sm text-slate-500 font-medium">Loading customers…</p>
+            <p className="text-sm text-slate-500 font-medium">Loading customer records…</p>
           </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="py-16 text-center">
             <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-700">No customers found</p>
+            <p className="text-sm font-bold text-slate-700">No customers found</p>
             <p className="text-xs text-slate-400 mt-0.5">
-              {searchQuery ? "Try refining your search terms" : "Click 'Add Customer' to create a customer"}
+              {searchQuery ? "Try refining your search terms" : "Click 'Add Customer' to register a customer"}
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase tracking-wider">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider">
                   <th className="py-3.5 px-4">Code</th>
                   <th className="py-3.5 px-4">Customer Name</th>
                   <th className="py-3.5 px-4">Contact / Address</th>
                   <th className="py-3.5 px-4 text-right">Credit Limit</th>
                   <th className="py-3.5 px-4 text-right">Current Balance</th>
                   <th className="py-3.5 px-4 text-center">Credit Status</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 text-center">Account Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>

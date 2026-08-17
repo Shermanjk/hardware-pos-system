@@ -171,9 +171,16 @@ router.post(
 
       // ── Calculate cash movements during this session ──────────────────────
 
-      // 1. Total cash sales (completed, non-voided) during this session
+      // 1. Total cash from direct sales during this session:
+      //    - For pure CASH sales: total_amount entered the drawer.
+      //    - For CREDIT sales: only amount_paid_at_sale (down payment) entered the drawer.
       const [salesRows] = await pool.execute<any[]>(
-        `SELECT COALESCE(SUM(total_amount), 0) AS total_cash_sales
+        `SELECT COALESCE(SUM(
+           CASE
+             WHEN payment_type = 'CREDIT' THEN COALESCE(amount_paid_at_sale, 0)
+             ELSE total_amount
+           END
+         ), 0) AS total_cash_from_sales
          FROM sales
          WHERE cashier_id = ?
            AND payment_status = 'completed'
@@ -182,9 +189,27 @@ router.post(
            AND created_at >= ?`,
         [cashierId, openedAt]
       );
-      const cashSales = Number(salesRows[0]?.total_cash_sales ?? 0);
+      const cashFromSales = Number(salesRows[0]?.total_cash_from_sales ?? 0);
 
-      // 2. Cash refunds paid out (approved refunds) during this session
+      // 2. Standalone credit (utang) payments collected at register during this session
+      //    In credit_ledger, payments are recorded with entry_type = 'PAYMENT' and negative amount.
+      //    Sale-time down payments have sale_id IS NOT NULL and are already counted in cashFromSales above.
+      //    Standalone "Pay Utang" collections have sale_id IS NULL and are collected in cash.
+      const [creditPmtRows] = await pool.execute<any[]>(
+        `SELECT COALESCE(SUM(ABS(amount)), 0) AS total_credit_collections
+         FROM credit_ledger
+         WHERE recorded_by = ?
+           AND entry_type = 'PAYMENT'
+           AND sale_id IS NULL
+           AND created_at >= ?`,
+        [cashierId, openedAt]
+      );
+      const creditCollections = Number(creditPmtRows[0]?.total_credit_collections ?? 0);
+
+      // Total gross cash inflow into the drawer
+      const cashSales = cashFromSales + creditCollections;
+
+      // 3. Cash refunds paid out (approved refunds) during this session
       //    Refunds are money paid OUT of the drawer back to the customer.
       const [refundRows] = await pool.execute<any[]>(
         `SELECT COALESCE(SUM(r.refund_amount), 0) AS total_refunds
@@ -197,10 +222,10 @@ router.post(
       );
       const cashRefunds = Number(refundRows[0]?.total_refunds ?? 0);
 
-      // 3. Cash paid-out (reserved for future petty cash feature) — default 0
+      // 4. Cash paid-out (reserved for future petty cash feature) — default 0
       const cashPaidOut = 0;
 
-      // 4. Expected cash = opening float + cash sales - refunds - paid-outs
+      // 5. Expected cash = opening float + cash sales (incl. down payments & utang collections) - refunds - paid-outs
       const expectedCash = openingCash + cashSales - cashRefunds - cashPaidOut;
 
       // 5. Variance = actual - expected  (positive = Over, negative = Short)
@@ -415,13 +440,31 @@ router.get(
 
       // Fetch related sales for this session (for auditing)
       const [salesRows] = await pool.execute<any[]>(
-        `SELECT id, invoice_number, total_amount, created_at, transaction_status, void_status, customer_name
+        `SELECT id, invoice_number, total_amount, payment_type, amount_paid_at_sale, created_at, transaction_status, void_status, customer_name
          FROM sales
          WHERE cashier_id = ?
            AND payment_status = 'completed'
            AND created_at >= ?
            AND created_at <= COALESCE(?, NOW())
          ORDER BY created_at ASC`,
+        [
+          session.cashier_id,
+          session.opened_at,
+          session.closed_at ?? null,
+        ]
+      );
+
+      // Fetch standalone credit (utang) payments collected during this session
+      const [creditPmtRows] = await pool.execute<any[]>(
+        `SELECT cl.id, cl.reference, ABS(cl.amount) AS amount, cl.created_at, cl.notes, c.full_name AS customer_name
+         FROM credit_ledger cl
+         JOIN customers c ON c.id = cl.customer_id
+         WHERE cl.recorded_by = ?
+           AND cl.entry_type = 'PAYMENT'
+           AND cl.sale_id IS NULL
+           AND cl.created_at >= ?
+           AND cl.created_at <= COALESCE(?, NOW())
+         ORDER BY cl.created_at ASC`,
         [
           session.cashier_id,
           session.opened_at,
@@ -447,7 +490,12 @@ router.get(
         ]
       );
 
-      res.status(200).json({ ...session, sales: salesRows, refunds: refundRows });
+      res.status(200).json({
+        ...session,
+        sales: salesRows,
+        credit_collections: creditPmtRows,
+        refunds: refundRows,
+      });
     } catch (err) {
       console.error("[cash-reconciliation/detail]", err);
       res.status(500).json({ message: "An unexpected error occurred. Please try again." });

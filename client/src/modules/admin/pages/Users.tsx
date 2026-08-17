@@ -10,7 +10,7 @@ import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
-import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, ShieldOff, UserCog, UserPlus, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, Search, ShieldOff, UserCog, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const DRAFT_KEY_CREATE_USER = "admin-user-create";
@@ -622,6 +622,8 @@ export default function Users() {
   const [users,       setUsers]       = useState<UserRecord[]>([]);
   const [isLoading,   setIsLoading]   = useState(true);
   const [loadError,   setLoadError]   = useState<string | null>(null);
+  const [search,      setSearch]      = useState("");
+  const [roleFilter,  setRoleFilter]  = useState("all");
 
   // Modal / dialog state
   const [showCreate,       setShowCreate]       = useState(false);
@@ -690,21 +692,52 @@ export default function Users() {
         </div>
       )}
 
+      {/* Search & Filters */}
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm p-4.5">
+        <div className="flex flex-wrap gap-3.5 items-center">
+          <div className="flex-1 min-w-56 flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
+            <Search className="h-4 w-4 text-slate-400 shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search user by name, username, or employee ID…"
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-48 bg-white border-slate-300 hover:border-slate-400 text-slate-800 h-10 shadow-xs">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="Admin">Admin</SelectItem>
+              <SelectItem value="Cashier">Cashier</SelectItem>
+              <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {/* Users Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-gray-50 border-b-2 border-gray-200">
-                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Name</th>
-                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Username</th>
-                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Role</th>
-                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
-                <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Password Changed</th>
-                <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Employee Name</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Username</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Assigned Role</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Account Status</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Last Activity</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
@@ -716,51 +749,61 @@ export default function Users() {
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
                   </tr>
                 ))
-              ) : users.length === 0 ? (
+              ) : users.filter((u) => {
+                  const matchSearch = !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()) || (u.employee_id && u.employee_id.toLowerCase().includes(search.toLowerCase()));
+                  const matchRole = roleFilter === "all" || u.role === roleFilter;
+                  return matchSearch && matchRole;
+                }).length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
-                        <Plus className="h-7 w-7 text-gray-400" />
+                      <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                        <Plus className="h-7 w-7 text-slate-400" />
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-700">No users found</p>
-                        <p className="text-xs text-gray-400 mt-1">Click Add User to create the first account</p>
+                        <p className="font-bold text-slate-700">No users found</p>
+                        <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria or role filters</p>
                       </div>
                     </div>
                   </td>
                 </tr>
               ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-blue-50/40 transition-colors">
+                users
+                  .filter((u) => {
+                    const matchSearch = !search || u.full_name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()) || (u.employee_id && u.employee_id.toLowerCase().includes(search.toLowerCase()));
+                    const matchRole = roleFilter === "all" || u.role === roleFilter;
+                    return matchSearch && matchRole;
+                  })
+                  .map((user) => (
+                  <tr key={user.id} className="hover:bg-blue-50/50 transition-colors">
                     <td className="py-3.5 px-5">
-                      <p className="font-semibold text-gray-900">{user.full_name}</p>
+                      <p className="font-bold text-slate-900">{user.full_name}</p>
                       {user.must_change_password === true && (
-                        <span className="inline-block px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded mt-0.5">
-                          Temp pwd
+                        <span className="inline-block px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-200 mt-0.5">
+                          Temp Password
                         </span>
                       )}
                     </td>
                     <td className="py-3.5 px-5">
-                      <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                      <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
                         {user.username}
                       </span>
                     </td>
                     <td className="py-3.5 px-5">
-                      <span className="text-xs font-medium text-gray-600 bg-slate-100 px-2 py-1 rounded-full">
+                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
                         {user.role}
                       </span>
                     </td>
                     <td className="py-3.5 px-5 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                         user.status === "Active"
-                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                          : "bg-gray-100 text-gray-500 border-gray-200"
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-slate-100 text-slate-500 border-slate-200"
                       }`}>
                         {user.status}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 text-sm text-gray-500">{formatLastLogin(user)}</td>
+                    <td className="py-3.5 px-5 text-sm text-slate-500 font-medium">{formatLastLogin(user)}</td>
                     <td className="py-3.5 px-5">
                       <div className="flex items-center justify-center gap-1">
                         <button

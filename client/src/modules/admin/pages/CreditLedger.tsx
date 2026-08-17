@@ -540,19 +540,19 @@ export default function CreditLedgerPage() {
       </div>
 
       {/* ── Ledger Table ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
           <h2 className="font-bold text-slate-900 text-sm flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4 text-blue-600" />
             Transaction History & FIFO Allocation
           </h2>
-          <span className="text-xs text-slate-500">{ledger.length} entries</span>
+          <span className="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-md border border-slate-200">{ledger.length} entries</span>
         </div>
 
         {ledger.length === 0 ? (
           <div className="py-16 text-center">
             <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-700">No ledger entries yet</p>
+            <p className="text-sm font-bold text-slate-700">No ledger entries yet</p>
             <p className="text-xs text-slate-400 mt-0.5">
               Transactions, payments, and adjustments will appear here in chronological order.
             </p>
@@ -561,15 +561,15 @@ export default function CreditLedgerPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-xs font-semibold uppercase tracking-wider">
-                  <th className="py-3 px-4">Date & Time</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Reference</th>
-                  <th className="py-3 px-4 text-right">Debit (+)</th>
-                  <th className="py-3 px-4 text-right">Credit (-)</th>
-                  <th className="py-3 px-4 text-right">Invoice Status</th>
-                  <th className="py-3 px-4">Recorded By</th>
-                  <th className="py-3 px-4">Notes</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider">
+                  <th className="py-3.5 px-4">Date & Time</th>
+                  <th className="py-3.5 px-4">Type</th>
+                  <th className="py-3.5 px-4">Reference</th>
+                  <th className="py-3.5 px-4 text-right">Debit (+)</th>
+                  <th className="py-3.5 px-4 text-right">Credit (-)</th>
+                  <th className="py-3.5 px-4 text-right">Invoice Status</th>
+                  <th className="py-3.5 px-4">Recorded By</th>
+                  <th className="py-3.5 px-4">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

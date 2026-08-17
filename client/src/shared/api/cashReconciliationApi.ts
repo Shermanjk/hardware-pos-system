@@ -24,17 +24,29 @@ export interface CashSession {
   reviewer_name:        string | null;
   session_status:       "open" | "closed";
   sales?:               SessionSale[];
+  credit_collections?:  SessionCreditCollection[];
   refunds?:             SessionRefund[];
 }
 
 export interface SessionSale {
-  id:                 number;
-  invoice_number:     string;
-  total_amount:       number;
-  created_at:         string;
-  transaction_status: string;
-  void_status:        string;
-  customer_name:      string;
+  id:                  number;
+  invoice_number:      string;
+  total_amount:        number;
+  payment_type?:       "CASH" | "CREDIT";
+  amount_paid_at_sale?: number | null;
+  created_at:          string;
+  transaction_status:  string;
+  void_status:         string;
+  customer_name:       string;
+}
+
+export interface SessionCreditCollection {
+  id:            number;
+  reference:     string;
+  amount:        number;
+  customer_name: string;
+  notes?:        string | null;
+  created_at:    string;
 }
 
 export interface SessionRefund {

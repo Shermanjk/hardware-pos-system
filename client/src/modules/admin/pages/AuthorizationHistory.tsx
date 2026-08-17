@@ -446,37 +446,48 @@ export default function AuthorizationHistory() {
       )}
 
       {/* Filter panel */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
         <button
+          type="button"
           onClick={() => setShowFilters((v) => !v)}
-          className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-bold text-slate-800 bg-slate-50 hover:bg-slate-100/80 transition-colors border-b border-slate-200"
         >
-          <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-gray-400" />
-            Search / Filter
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <Search className="h-4 w-4" />
+            </div>
+            <span>Search & Filter Authorization Logs</span>
+            {(search || typeFilter !== "ALL" || statusFilter !== "all" || dateFrom || dateTo) && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-medium">
+                Filtered
+              </span>
+            )}
           </div>
-          {showFilters ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <span>{showFilters ? "Hide Filters" : "Show Filters"}</span>
+            {showFilters ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+          </div>
         </button>
 
         {showFilters && (
-          <form onSubmit={handleSearch} className="px-5 pb-5 pt-1 space-y-4 border-t border-gray-100">
+          <form onSubmit={handleSearch} className="p-5 space-y-4 bg-white">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               <div className="lg:col-span-2">
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Search</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Search</Label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Reference, name, product…"
-                    className="h-9 text-sm pl-8"
+                    className="h-9.5 text-sm pl-8"
                   />
                 </div>
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Type</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Type</Label>
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9.5 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Types</SelectItem>
                     <SelectItem value="DISCOUNT">Discount</SelectItem>
@@ -489,9 +500,9 @@ export default function AuthorizationHistory() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Decision</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Decision</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9.5 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Decisions</SelectItem>
                     <SelectItem value="APPROVED">Approved</SelectItem>
@@ -502,35 +513,35 @@ export default function AuthorizationHistory() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Date From</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Date From</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm pl-8" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9.5 text-sm pl-8" />
                 </div>
               </div>
               <div>
-                <Label className="text-xs font-semibold text-gray-500 mb-1.5 block uppercase tracking-wide">Date To</Label>
+                <Label className="text-xs font-bold text-slate-700 mb-1.5 block uppercase tracking-wide">Date To</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm pl-8" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9.5 text-sm pl-8" />
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white h-9 px-5 text-sm gap-2">
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white h-9.5 px-5 text-sm font-semibold gap-2 shadow-xs cursor-pointer">
                 {loading ? <Spinner className="text-white" /> : <Search className="h-4 w-4" />}
-                {loading ? "Searching…" : "Search"}
+                {loading ? "Searching…" : "Apply Filters"}
               </Button>
               {searched && (
-                <Button type="button" variant="outline" onClick={handleClear} className="h-9 px-4 text-sm gap-1.5">
-                  <X className="h-3.5 w-3.5" /> Clear
+                <Button type="button" variant="outline" onClick={handleClear} className="h-9.5 px-4 text-sm font-medium text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-slate-900 gap-1.5 cursor-pointer">
+                  <X className="h-3.5 w-3.5" /> Reset
                 </Button>
               )}
               <button
                 type="button"
                 onClick={() => load(page)}
                 disabled={loading}
-                className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                className="h-9.5 w-9.5 flex items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-50 shadow-xs cursor-pointer ml-auto"
                 title="Refresh"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -550,11 +561,11 @@ export default function AuthorizationHistory() {
       )}
 
       {/* Results table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-gray-50 border-b-2 border-gray-200">
+              <tr className="bg-slate-50 border-b border-slate-200">
                 {(
                   [
                     ["auth_type",       "Type"],
@@ -570,50 +581,54 @@ export default function AuthorizationHistory() {
                   <th
                     key={col}
                     onClick={() => toggleSort(col)}
-                    className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-blue-600"
+                    className="py-3.5 px-4 font-bold text-slate-700 text-xs uppercase tracking-wide cursor-pointer select-none hover:text-blue-600 transition-colors"
                   >
                     {label}<SortIcon col={col} />
                   </th>
                 ))}
-                <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wide text-center">Details</th>
+                <th className="py-3.5 px-4 text-xs font-bold text-slate-700 uppercase tracking-wide text-center">Details</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={9} className="py-20 text-center">
-                  <div className="flex items-center justify-center gap-2 text-gray-400">
-                    <Spinner className="text-blue-500" /><span className="text-sm">Loading…</span>
-                  </div>
-                </td></tr>
-              ) : sorted.length === 0 ? (
-                <tr><td colSpan={9} className="py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                      <ShieldCheck className="h-6 w-6 text-gray-400" />
+                <tr>
+                  <td colSpan={9} className="py-20 text-center">
+                    <div className="flex items-center justify-center gap-2 text-slate-400">
+                      <Spinner className="text-blue-600" /><span className="text-sm font-medium">Loading authorization logs…</span>
                     </div>
-                    <p className="font-semibold text-gray-700">{searched ? "No records found" : "Use filters above to search"}</p>
-                    <p className="text-xs text-gray-400">{searched ? "Try adjusting your filters" : "Search by type, decision, date range, or keyword"}</p>
-                  </div>
-                </td></tr>
+                  </td>
+                </tr>
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                        <ShieldCheck className="h-7 w-7 text-slate-400" />
+                      </div>
+                      <p className="font-bold text-slate-700">{searched ? "No authorization records found" : "Use filters above to search"}</p>
+                      <p className="text-xs text-slate-400">{searched ? "Try adjusting your search criteria" : "Search by type, decision, date range, or keyword"}</p>
+                    </div>
+                  </td>
+                </tr>
               ) : sorted.map((row, idx) => (
                 <tr
                   key={`${row.auth_type}-${row.source_id}`}
-                  className={`hover:bg-blue-50/40 transition-colors ${idx % 2 === 1 ? "bg-gray-50/40" : ""}`}
+                  className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 1 ? "bg-slate-50/40" : ""}`}
                 >
-                  <td className="py-3 px-4"><TypeBadge type={row.auth_type} /></td>
-                  <td className="py-3 px-4">
-                    <span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{row.reference}</span>
+                  <td className="py-3.5 px-4"><TypeBadge type={row.auth_type} /></td>
+                  <td className="py-3.5 px-4">
+                    <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">{row.reference}</span>
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-700 max-w-[130px] truncate" title={row.extra_ref}>{row.extra_ref}</td>
-                  <td className="py-3 px-4 text-sm font-medium text-gray-900">{row.requester_name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{row.admin_name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600 max-w-[110px] truncate" title={row.customer_name}>{row.customer_name}</td>
-                  <td className="py-3 px-4"><DecisionBadge decision={row.final_decision} /></td>
-                  <td className="py-3 px-4 text-xs text-gray-500">{fmtDate(row.created_at)}</td>
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-3.5 px-4 text-sm text-slate-700 max-w-[140px] truncate font-medium" title={row.extra_ref}>{row.extra_ref}</td>
+                  <td className="py-3.5 px-4 text-sm font-bold text-slate-900">{row.requester_name}</td>
+                  <td className="py-3.5 px-4 text-sm text-slate-600 font-medium">{row.admin_name}</td>
+                  <td className="py-3.5 px-4 text-sm text-slate-600 max-w-[120px] truncate" title={row.customer_name}>{row.customer_name}</td>
+                  <td className="py-3.5 px-4"><DecisionBadge decision={row.final_decision} /></td>
+                  <td className="py-3.5 px-4 text-xs text-slate-500">{fmtDate(row.created_at)}</td>
+                  <td className="py-3.5 px-4 text-center">
                     <button
                       onClick={() => setDetailRow(row)}
-                      className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors mx-auto"
+                      className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors mx-auto cursor-pointer"
                       title="View details"
                     >
                       <Eye className="h-4 w-4" />
@@ -627,8 +642,8 @@ export default function AuthorizationHistory() {
 
         {/* Footer with pagination */}
         {!loading && sorted.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
-            <p className="text-xs text-gray-500 font-medium">
+          <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
+            <p className="text-xs text-slate-600 font-bold">
               Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()} records
             </p>
             {totalPages > 1 && (

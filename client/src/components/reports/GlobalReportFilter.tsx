@@ -195,46 +195,56 @@ export default function GlobalReportFilter({
     filters.search !== "";
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Filter className="h-4 w-4 text-gray-500" />
-        <h3 className="text-sm font-semibold text-gray-700">Report Filters</h3>
+    <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 border-b border-slate-200">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+            <Filter className="h-4 w-4" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">Report Filters & Parameters</h3>
+          {hasActiveFilters && (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-medium">
+              Active Filters
+            </span>
+          )}
+        </div>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
             onClick={clearFilters}
-            className="ml-auto h-7 text-xs text-gray-500 hover:text-gray-700"
+            className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-200/60"
           >
-            <X className="h-3 w-3 mr-1" />
+            <X className="h-3.5 w-3.5 mr-1" />
             Clear All
           </Button>
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        {/* Quick Date Filter */}
-        <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-            Quick Date
-          </Label>
-          <Select
-            value={filters.quickDateFilter}
-            onValueChange={(v) => handleQuickDateFilter(v as QuickDateFilter)}
-          >
-            <SelectTrigger className="h-9 text-sm w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="yesterday">Yesterday</SelectItem>
-              <SelectItem value="this_week">This Week</SelectItem>
-              <SelectItem value="this_month">This Month</SelectItem>
-              <SelectItem value="this_year">This Year</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          {/* Quick Date Filter */}
+          <div>
+            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5 block">
+              Quick Date
+            </Label>
+            <Select
+              value={filters.quickDateFilter}
+              onValueChange={(v) => handleQuickDateFilter(v as QuickDateFilter)}
+            >
+              <SelectTrigger className="h-9.5 text-sm w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
         {/* Date From */}
         <div>
@@ -502,11 +512,11 @@ export default function GlobalReportFilter({
         )}
 
         {/* Generate Button */}
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button
             onClick={onGenerate}
             disabled={isLoading}
-            className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm"
+            className="h-9.5 px-5 gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs cursor-pointer"
           >
             {isLoading ? (
               <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
@@ -515,8 +525,19 @@ export default function GlobalReportFilter({
             )}
             Generate Report
           </Button>
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={clearFilters}
+              className="h-9.5 px-4 text-sm font-medium text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-slate-900 gap-1.5 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" /> Reset
+            </Button>
+          )}
         </div>
       </div>
     </div>
+  </div>
   );
 }

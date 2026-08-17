@@ -343,21 +343,21 @@ export default function DiscountManagement() {
             </div>
           )}
 
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm text-left">
                 <thead>
-                  <tr className="bg-gray-50 border-b-2 border-gray-200">
-                    <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Name</th>
-                    <th className="text-left py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Type</th>
-                    <th className="text-right py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Value</th>
-                    <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">SC/PWD</th>
-                    <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Requires Approval</th>
-                    <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
-                    <th className="text-center py-3.5 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">Actions</th>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Discount Name</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Type</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-right">Value Rate</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">SC / PWD</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Admin Approval</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Status</th>
+                    <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {discountsLoading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
@@ -371,46 +371,50 @@ export default function DiscountManagement() {
                       </tr>
                     ))
                   ) : discounts.length === 0 ? (
-                    <tr><td colSpan={7} className="py-16 text-center text-gray-400">No discounts found</td></tr>
+                    <tr>
+                      <td colSpan={7} className="py-16 text-center text-slate-400 font-medium">
+                        No discounts registered yet.
+                      </td>
+                    </tr>
                   ) : (
                     discounts.map((discount) => (
-                      <tr key={discount.id} className="hover:bg-gray-50">
-                        <td className="py-3.5 px-5 font-medium text-gray-900">{discount.discount_name}</td>
-                        <td className="py-3.5 px-5 text-gray-600">{discount.discount_type}</td>
-                        <td className="py-3.5 px-5 text-right font-semibold text-gray-900">{discount.value}%</td>
+                      <tr key={discount.id} className="hover:bg-blue-50/50 transition-colors">
+                        <td className="py-3.5 px-5 font-bold text-slate-900">{discount.discount_name}</td>
+                        <td className="py-3.5 px-5 text-slate-600 font-medium">{discount.discount_type}</td>
+                        <td className="py-3.5 px-5 text-right font-bold text-slate-900 font-mono tabular-nums">{discount.value}%</td>
                         <td className="py-3.5 px-5 text-center">
                           {discount.is_sc_pwd ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">Yes</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">Yes</span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">No</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200/60">No</span>
                           )}
                         </td>
                         <td className="py-3.5 px-5 text-center">
                           {discount.requires_admin_approval ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Yes</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Required</span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">No</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Auto</span>
                           )}
                         </td>
                         <td className="py-3.5 px-5 text-center">
                           {discount.status === "Active" ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Active</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">Active</span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Inactive</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
                           )}
                         </td>
                         <td className="py-3.5 px-5 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => openEditDialog(discount)}
-                              className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                               title="Edit"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => openDeleteDialog(discount)}
-                              className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                               title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />

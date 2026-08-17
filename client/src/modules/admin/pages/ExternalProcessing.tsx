@@ -565,43 +565,44 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-gray-800 text-white">
-                {["Reference", "Date", "Product", "Quantity", "Company", "Delivered By", "Recorded By"].map((h, i) => (
-                  <th key={i} className={`py-3 px-4 font-semibold text-xs uppercase tracking-wide whitespace-nowrap ${i === 3 ? "text-right" : "text-left"}`}>{h}</th>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {["Reference", "Delivery Date", "Product", "Quantity", "Processing Company", "Delivered By", "Recorded By"].map((h, i) => (
+                  <th key={i} className={`py-3.5 px-4 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap ${i === 3 ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {deliveries.map((d, idx) => (
                 <tr 
                   key={d.id} 
-                  className={`hover:bg-blue-50/40 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                  className={`hover:bg-blue-50/50 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
                   onClick={() => setSelectedDelivery(d)}
                 >
-                  <td className="py-3 px-4">
-                    <span className="font-mono text-xs font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
+                  <td className="py-3.5 px-4">
+                    <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
                       {d.delivery_reference}
                     </span>
                   </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-xs text-gray-600">{fmtDate(d.delivery_date)}</td>
-                  <td className="py-3 px-4">
-                    <p className="font-semibold text-gray-900">{d.product_name}</p>
-                    <p className="text-xs text-gray-400">{d.unit_abbreviation}</p>
+                  <td className="py-3.5 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">{fmtDate(d.delivery_date)}</td>
+                  <td className="py-3.5 px-4">
+                    <p className="font-bold text-slate-900">{d.product_name}</p>
+                    <p className="text-xs text-slate-400 font-medium">{d.unit_abbreviation}</p>
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-gray-900 tabular-nums">
+                  <td className="py-3.5 px-4 text-right font-bold text-slate-900 font-mono tabular-nums">
                     {Number(d.quantity).toLocaleString("en-PH", { maximumFractionDigits: 3 })}
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-700">{d.company_name}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{d.delivered_by || "—"}</td>
-                  <td className="py-3 px-4 text-xs text-gray-500">{d.recorded_by_name}</td>
+                  <td className="py-3.5 px-4 text-sm font-semibold text-slate-800">{d.company_name}</td>
+                  <td className="py-3.5 px-4 text-sm text-slate-600 font-medium">{d.delivered_by || <span className="text-slate-300">—</span>}</td>
+                  <td className="py-3.5 px-4 text-xs text-slate-500">{d.recorded_by_name}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-            <p className="text-xs text-gray-500">{deliveries.length} record{deliveries.length !== 1 ? "s" : ""}</p>
+          <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+            <p className="text-xs text-slate-600 font-bold">{deliveries.length} delivery record{deliveries.length !== 1 ? "s" : ""}</p>
+            <p className="text-xs text-slate-400 font-medium">Isra Hardware POS</p>
           </div>
         </div>
       )}
