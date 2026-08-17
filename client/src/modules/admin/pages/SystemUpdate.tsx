@@ -144,7 +144,10 @@ export default function SystemUpdate() {
     } catch (error: any) {
       console.error("Failed to install update:", error);
       const status = error.response?.status;
-      const message = error.response?.data?.message || "Failed to install update";
+      const errData = error.response?.data;
+      const message = errData?.error
+        ? `${errData.message}: ${errData.error}`
+        : errData?.message || error.message || "Failed to install update";
 
       if (status === 409) {
         toast.error("System was stuck in maintenance mode. Resetting — please try again.");
@@ -152,7 +155,7 @@ export default function SystemUpdate() {
           await axios.post("/api/system-update/reset-maintenance", {}, { headers: authHeaders() });
         } catch { /* ignore */ }
       } else {
-        toast.error(message);
+        toast.error(message, { duration: 6000 });
       }
       setStep("ready");
     }
