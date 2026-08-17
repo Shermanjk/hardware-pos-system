@@ -230,15 +230,15 @@ export default function ClerkDashboard() {
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link href="/clerk/stock-in" className="block">
-          <Card className="p-4 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:shadow-md transition-all cursor-pointer group">
+          <Card className="p-4 border border-blue-200/80 bg-gradient-to-br from-blue-50/80 to-blue-100/50 hover:bg-blue-100 hover:shadow-md transition-all cursor-pointer group rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-600 rounded-lg">
-                  <PackagePlus className="h-5 w-5 text-white" />
+                <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-sm">
+                  <PackagePlus className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-blue-900">New Stock In</p>
-                  <p className="text-xs text-blue-600">Receive a delivery</p>
+                  <p className="text-sm font-bold text-blue-950">New Stock In</p>
+                  <p className="text-xs text-blue-700">Receive delivery & update stock</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-blue-500 group-hover:translate-x-1 transition-transform" />
@@ -247,15 +247,15 @@ export default function ClerkDashboard() {
         </Link>
 
         <Link href="/clerk/stock-adjustment" className="block">
-          <Card className="p-4 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:shadow-md transition-all cursor-pointer group">
+          <Card className="p-4 border border-amber-200/80 bg-gradient-to-br from-amber-50/80 to-amber-100/50 hover:bg-amber-100 hover:shadow-md transition-all cursor-pointer group rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500 rounded-lg">
-                  <SlidersHorizontal className="h-5 w-5 text-white" />
+                <div className="p-2.5 bg-amber-500 rounded-xl text-white shadow-sm">
+                  <SlidersHorizontal className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-amber-900">Stock Adjustment</p>
-                  <p className="text-xs text-amber-700">Damaged, lost, expired</p>
+                  <p className="text-sm font-bold text-amber-950">Stock Adjustment</p>
+                  <p className="text-xs text-amber-700">Record damaged, lost, expired</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-amber-500 group-hover:translate-x-1 transition-transform" />
@@ -264,18 +264,18 @@ export default function ClerkDashboard() {
         </Link>
 
         <Link href="/clerk/low-stock" className="block">
-          <Card className="p-4 border-red-200 bg-red-50 hover:bg-red-100 hover:shadow-md transition-all cursor-pointer group">
+          <Card className="p-4 border border-rose-200/80 bg-gradient-to-br from-rose-50/80 to-rose-100/50 hover:bg-rose-100 hover:shadow-md transition-all cursor-pointer group rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-500 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-white" />
+                <div className="p-2.5 bg-rose-500 rounded-xl text-white shadow-sm">
+                  <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-red-900">View Low Stock</p>
-                  <p className="text-xs text-red-600">{stats.lowStockCount} items need attention</p>
+                  <p className="text-sm font-bold text-rose-950">View Low Stock</p>
+                  <p className="text-xs text-rose-700 font-medium">{stats.lowStockCount} items need attention</p>
                 </div>
               </div>
-              <ArrowRight className="h-4 w-4 text-red-500 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 text-rose-500 group-hover:translate-x-1 transition-transform" />
             </div>
           </Card>
         </Link>
@@ -284,13 +284,13 @@ export default function ClerkDashboard() {
       {/* Main content row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Recent activity — 2/3 width */}
-        <Card className="xl:col-span-2 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <Card className="xl:col-span-2 overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Recent Inventory Activities</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Latest transactions by you</p>
+              <h2 className="text-sm font-bold text-slate-900">Recent Inventory Activities</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Latest transactions and movements</p>
             </div>
-            <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs gap-1">
+            <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs font-semibold gap-1 hover:bg-blue-50">
               <Link href="/clerk/inventory">View all <ArrowRight className="h-3 w-3" /></Link>
             </Button>
           </div>
@@ -310,52 +310,60 @@ export default function ClerkDashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left py-3 px-6 font-semibold text-gray-600 text-xs uppercase tracking-wide">Action</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Product</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Qty Change</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Time</th>
+                  <tr className="bg-slate-100/70 border-b border-slate-200">
+                    <th className="text-left py-3 px-6 font-semibold text-slate-600 text-xs uppercase tracking-wider">Action</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Product</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Qty Change</th>
+                    <th className="text-right py-3 px-6 font-semibold text-slate-600 text-xs uppercase tracking-wider">Time</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {logs.map((log, idx) => (
-                    <tr
-                      key={log.id}
-                      className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                        idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                      }`}
-                    >
-                      <td className="py-3 px-6">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`p-1.5 rounded-lg ${activityIconBg(log.action)}`}>
-                            <ActivityIcon action={log.action} />
-                          </div>
-                          <span className="text-gray-800 font-medium text-xs">{log.action}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-700 text-xs max-w-[160px] truncate">
-                        {log.product_name}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`font-semibold text-xs ${
-                            log.quantity_change.startsWith("+")
-                              ? "text-green-600"
-                              : log.quantity_change.startsWith("-")
-                              ? "text-red-600"
-                              : "text-gray-500"
-                          }`}
-                        >
-                          {log.quantity_change}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-gray-400 text-xs whitespace-nowrap">
-                        {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true })}
+                <tbody className="divide-y divide-slate-100">
+                  {logs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-slate-400 text-xs">
+                        No recent activity logged yet today.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    logs.map((log, idx) => (
+                      <tr
+                        key={log.id}
+                        className={`transition-colors hover:bg-slate-50/80 ${
+                          idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                        }`}
+                      >
+                        <td className="py-3 px-6">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`p-1.5 rounded-lg ${activityIconBg(log.action)}`}>
+                              <ActivityIcon action={log.action} />
+                            </div>
+                            <span className="text-slate-800 font-semibold text-xs">{log.action}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-slate-700 text-xs max-w-[180px] truncate font-medium">
+                          {log.product_name}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`font-extrabold text-xs tabular-nums ${
+                              log.quantity_change.startsWith("+")
+                                ? "text-emerald-600"
+                                : log.quantity_change.startsWith("-")
+                                ? "text-rose-600"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {log.quantity_change}
+                          </span>
+                        </td>
+                        <td className="py-3 px-6 text-slate-400 text-xs whitespace-nowrap text-right">
+                          {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -363,13 +371,13 @@ export default function ClerkDashboard() {
         </Card>
 
         {/* Quick stock status — 1/3 width */}
-        <Card className="overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <Card className="overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Stock Status</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Products needing attention</p>
+              <h2 className="text-sm font-bold text-slate-900">Stock Status</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Products needing attention</p>
             </div>
-            <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs gap-1">
+            <Button variant="ghost" size="sm" asChild className="text-blue-600 text-xs font-semibold gap-1 hover:bg-blue-50">
               <Link href="/clerk/low-stock">See all <ArrowRight className="h-3 w-3" /></Link>
             </Button>
           </div>
@@ -381,53 +389,60 @@ export default function ClerkDashboard() {
               ))}
             </div>
           ) : (
-            <div className="p-4 space-y-3">
-              {lowStockProducts.map((p) => {
+            <div className="p-4 space-y-2.5">
+              {lowStockProducts.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  <CheckCircle className="h-6 w-6 text-emerald-500 mx-auto mb-1.5" />
+                  All products are well stocked!
+                </div>
+              ) : (
+                lowStockProducts.map((p) => {
                   const isCritical = p.quantity === 0 || p.quantity <= p.reorder_level * 0.5;
                   return (
                     <div
                       key={p.id}
-                      className={`p-3 rounded-lg border ${
+                      className={`p-3 rounded-xl border transition-colors ${
                         isCritical
-                          ? "bg-red-50 border-red-200"
-                          : "bg-amber-50 border-amber-200"
+                          ? "bg-rose-50/60 border-rose-200/80"
+                          : "bg-amber-50/60 border-amber-200/80"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">{p.product_name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{p.barcode}</p>
+                          <p className="text-xs font-semibold text-slate-900 truncate">{p.product_name}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 font-mono">{p.barcode}</p>
                         </div>
                         <span
-                          className={`flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
+                          className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-bold tabular-nums shadow-sm ${
                             isCritical
-                              ? "bg-red-100 text-red-700"
-                              : "bg-amber-100 text-amber-700"
+                              ? "bg-rose-100 text-rose-700 border border-rose-200"
+                              : "bg-amber-100 text-amber-700 border border-amber-200"
                           }`}
                         >
-                          {p.quantity}
+                          {p.quantity} / {p.reorder_level}
                         </span>
                       </div>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${isCritical ? "bg-red-500" : "bg-amber-400"}`}
+                            className={`h-full rounded-full ${isCritical ? "bg-rose-500" : "bg-amber-400"}`}
                             style={{
                               width: `${Math.min(100, Math.max(4, (p.quantity / (p.reorder_level * 1.5)) * 100))}%`,
                             }}
                           />
                         </div>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">
-                          /{p.reorder_level}
+                        <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">
+                          {Math.round((p.quantity / (p.reorder_level || 1)) * 100)}%
                         </span>
                       </div>
                     </div>
                   );
-                })}
+                })
+              )}
 
               {stats.lowStockCount > 6 && (
-                <Link href="/clerk/low-stock" className="block text-center py-2 text-xs text-blue-600 hover:underline font-medium">
-                  +{stats.lowStockCount - 6} more items
+                <Link href="/clerk/low-stock" className="block text-center py-2 text-xs text-blue-600 hover:underline font-semibold">
+                  +{stats.lowStockCount - 6} more items needing attention
                 </Link>
               )}
             </div>
@@ -438,21 +453,23 @@ export default function ClerkDashboard() {
       {/* Bottom action row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "View Inventory",    href: "/clerk/inventory",        icon: Boxes,            color: "text-blue-600" },
-          { label: "Stock Count",       href: "/clerk/stock-count",      icon: ClipboardList,    color: "text-purple-600" },
-          { label: "Print Barcodes",    href: "/clerk/barcode-printing", icon: Printer,          color: "text-gray-600" },
-          { label: "Low Stock Report",  href: "/clerk/low-stock",        icon: AlertTriangle,    color: "text-amber-600" },
+          { label: "View Inventory",    href: "/clerk/inventory",        icon: Boxes,            color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Stock Count",       href: "/clerk/stock-count",      icon: ClipboardList,    color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "Print Barcodes",    href: "/clerk/barcode-printing", icon: Printer,          color: "text-slate-700", bg: "bg-slate-100" },
+          { label: "Low Stock Report",  href: "/clerk/low-stock",        icon: AlertTriangle,    color: "text-amber-600", bg: "bg-amber-50" },
         ].map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.href} href={item.href} className="block">
-              <Card className="p-4 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group">
+              <Card className="p-4 hover:shadow-md hover:border-blue-300 border-slate-200/80 transition-all cursor-pointer group rounded-xl bg-white">
                 <div className="flex items-center gap-3">
-                  <Icon className={`h-5 w-5 ${item.color}`} />
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <div className={`p-2 rounded-lg ${item.bg} ${item.color}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900">
                     {item.label}
                   </span>
-                  <ArrowRight className="h-3.5 w-3.5 text-gray-400 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-400 ml-auto group-hover:translate-x-1 transition-transform" />
                 </div>
               </Card>
             </Link>

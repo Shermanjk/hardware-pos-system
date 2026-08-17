@@ -98,8 +98,6 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
    *   so one label = one printer page = one physical label from the roll.
    * - page-break-after: always ensures the driver advances the label roll
    *   between copies without feeding a blank label.
-   * - The script uses window.print() then listens to afterprint to close the
-   *   popup so the Windows print dialog is not left open.
    */
   private _buildPrintDocument(
     barcode: string,
@@ -114,17 +112,23 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       marginBottomMm:  margin_bottom_mm,
       marginLeftMm:    margin_left_mm,
       marginRightMm:   margin_right_mm,
-      barcodeHeightMm: barcode_height_mm,
       barcodeSymbology: barcode_symbology,
       showStoreName:   show_store_name,
       showBarcodeText: show_barcode_text,
       fontFamily:      font_family,
-      fontSizePt:      font_size_pt,
     } = config;
 
+    const isSmall = label_width_mm <= 35 || label_height_mm <= 22;
+
     // Printable area inside margins
-    const printW = label_width_mm  - margin_left_mm  - margin_right_mm;
-    const printH = label_height_mm - margin_top_mm   - margin_bottom_mm;
+    const printW = Math.max(2, label_width_mm  - margin_left_mm  - margin_right_mm);
+    const printH = Math.max(2, label_height_mm - margin_top_mm   - margin_bottom_mm);
+
+    // Dynamic typography and barcode allocation
+    const storeNameFontPt = Math.max(7, Math.min(18, Math.round(label_height_mm * 0.38 * 10) / 10));
+    const barcodeFontPt   = Math.max(6.5, Math.min(16, Math.round(label_height_mm * 0.34 * 10) / 10));
+    const barcodeHeightMm = Math.max(4, Math.round(printH * 0.58 * 10) / 10);
+    const letterSpacingPx = isSmall ? "0.4px" : "1.2px";
 
     // Generate barcode SVG using JsBarcode (detached DOM element)
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -132,7 +136,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       JsBarcode(svgEl, barcode, {
         format:       barcode_symbology as string,
         displayValue: false,               // we render the text ourselves for precise placement
-        height:       barcode_height_mm * 3.7795, // mm → px (96dpi: 1mm = 3.7795px)
+        height:       barcodeHeightMm * 3.7795, // mm → px (96dpi: 1mm = 3.7795px)
         width:        1,                   // bar width multiplier — auto scaled via CSS
         margin:       0,
         background:   "#ffffff",
@@ -228,31 +232,32 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       box-sizing: border-box;
     }
 
-    /* ── Store name — pinned to top, never shrinks ── */
+    /* ── Store name — pinned to top, dynamic font size ── */
     .store-name {
       flex-shrink: 0;
       width:       100%;
-      font-family: ${font_family}, sans-serif;
-      font-size:   ${font_size_pt}pt;
-      font-weight: 700;
+      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size:   ${storeNameFontPt}pt;
+      font-weight: 800;
+      text-transform: uppercase;
       text-align:  center;
       white-space: nowrap;
       overflow:    hidden;
-      line-height: 1.2;
-      letter-spacing: 0.3px;
+      line-height: 1.15;
+      letter-spacing: 0.2px;
     }
 
     /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
     .barcode-svg {
-      flex:      1;
-      width:     100%;
-      max-width: ${printW}mm;
-      display:   flex;
+      flex:       1;
+      width:      100%;
+      max-width:  ${printW}mm;
+      display:    flex;
       align-items: center;
       justify-content: center;
-      overflow:  hidden;
+      overflow:   hidden;
       min-height: 0;
-      padding:   0.5mm 0;
+      padding:    ${isSmall ? "0.2mm" : "0.5mm"} 0;
     }
     .barcode-svg svg {
       width:      100%;
@@ -262,41 +267,62 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       display:    block;
     }
 
-    /* ── Human-readable barcode number — pinned to bottom, never shrinks ── */
+    /* ── Human-readable barcode number — pinned to bottom, dynamic font size ── */
     .barcode-text {
       flex-shrink:    0;
       width:          100%;
-      font-family:    ${font_family}, monospace;
-      font-size:      ${font_size_pt}pt;
+      font-family:    ${font_family}, "Courier New", monospace;
+      font-size:      ${barcodeFontPt}pt;
+      font-weight:    700;
       text-align:     center;
-      letter-spacing: 1px;
+      letter-spacing: ${letterSpacingPx};
       white-space:    nowrap;
-      line-height:    1.2;
+      line-height:    1.15;
     }
   </style>
 </head>
 <body>
   ${labels}
   <script>
-    // Auto-fit store name to one line by shrinking font until it fits
-    window.addEventListener('load', function() {
-      var el = document.querySelector('.store-name');
-      if (el) {
-        var minPt = 4;
-        var sizePt = parseFloat(window.getComputedStyle(el).fontSize);
-        // getComputedStyle returns px; convert: 1pt = 1.3333px
-        var sizePx = sizePt;
-        while (el.scrollWidth > el.clientWidth && sizePx > minPt * 1.3333) {
-          sizePx -= 0.5;
-          el.style.fontSize = sizePx + 'px';
+    function fitTextElements() {
+      // 1. Fit all Store Name elements across all label copies
+      var storeNames = document.querySelectorAll('.store-name');
+      storeNames.forEach(function(el) {
+        var maxW = el.clientWidth;
+        if (!maxW) return;
+        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 12;
+        var minSize = 5;
+        while (el.scrollWidth > maxW && curSize > minSize) {
+          curSize -= 0.3;
+          el.style.fontSize = curSize + 'px';
         }
-      }
-      window.print();
+      });
+
+      // 2. Fit all Barcode Text elements across all label copies
+      var barcodeTexts = document.querySelectorAll('.barcode-text');
+      barcodeTexts.forEach(function(el) {
+        var maxW = el.clientWidth;
+        if (!maxW) return;
+        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 12;
+        var minSize = 5;
+        while (el.scrollWidth > maxW && curSize > minSize) {
+          curSize -= 0.3;
+          el.style.fontSize = curSize + 'px';
+        }
+      });
+    }
+
+    window.addEventListener('load', function() {
+      fitTextElements();
+      setTimeout(function() {
+        window.print();
+      }, 50);
     });
+
     window.addEventListener('afterprint', function() {
       window.close();
     });
-  <\/script>
+  </script>
 </body>
 </html>`;
   }
@@ -309,7 +335,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
              color:red; text-align:center; padding:2mm; }
     </style></head><body>
       Invalid barcode:<br>${this._esc(barcode)}
-      <script>window.onload=function(){window.print();window.close();}<\/script>
+      <script>window.onload=function(){window.print();window.close();}</script>
     </body></html>`;
   }
 

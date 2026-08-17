@@ -18,21 +18,21 @@ export interface BarcodePrinterConfig {
   printerType:      "windows_driver";   // extend union when new engines are added
 
   // ── Label physical dimensions ──────────────────────────────────────────────
-  labelWidthMm:     number;   // 50
-  labelHeightMm:    number;   // 30
+  labelWidthMm:     number;   // e.g. 30, 50, 60, 100
+  labelHeightMm:    number;   // e.g. 20, 30, 40, 50
 
   // ── Printer hardware ───────────────────────────────────────────────────────
   dpi:              number;   // 203
 
   // ── Margins (mm) ──────────────────────────────────────────────────────────
-  marginTopMm:      number;   // 2
-  marginBottomMm:   number;   // 2
-  marginLeftMm:     number;   // 2
-  marginRightMm:    number;   // 2
+  marginTopMm:      number;
+  marginBottomMm:   number;
+  marginLeftMm:     number;
+  marginRightMm:    number;
 
   // ── Barcode ────────────────────────────────────────────────────────────────
   barcodeSymbology: string;   // "CODE128"
-  barcodeHeightMm:  number;   // 14  — optimized for scanner readability on 30 mm label
+  barcodeHeightMm:  number;   // optimized for scanner readability
 
   // ── Label content ──────────────────────────────────────────────────────────
   storeName:        string;   // "ISRA HARDWARE TRADING"
@@ -41,28 +41,64 @@ export interface BarcodePrinterConfig {
 
   // ── Typography ─────────────────────────────────────────────────────────────
   fontFamily:       string;   // "monospace"
-  fontSizePt:       number;   // 7
+  fontSizePt:       number;   // dynamically scaled
 }
 
 /**
- * The single source of truth for barcode label printing.
- * Matches the Xprinter XP-365B with 50 × 30 mm direct-thermal labels.
+ * Calculates optimal margins for any label size (small, medium, large).
  */
-export const BARCODE_PRINTER_CONFIG: BarcodePrinterConfig = {
-  printerName:      "",               // leave blank → Windows print dialog appears
-  printerType:      "windows_driver",
-  labelWidthMm:     50,
-  labelHeightMm:    30,
-  dpi:              203,
-  marginTopMm:      2,
-  marginBottomMm:   2,
-  marginLeftMm:     2,
-  marginRightMm:    2,
-  barcodeSymbology: "CODE128",
-  barcodeHeightMm:  14,
-  storeName:        "ISRA HARDWARE TRADING",
-  showStoreName:    true,
-  showBarcodeText:  true,
-  fontFamily:       "monospace",
-  fontSizePt:       7,
-};
+export function getDynamicBarcodeMargins(widthMm: number, heightMm: number) {
+  const isSmall = widthMm <= 35 || heightMm <= 22;
+  const isMedium = !isSmall && (widthMm <= 55 || heightMm <= 35);
+
+  return {
+    marginTopMm:    isSmall ? 0.8 : isMedium ? 1.2 : 1.5,
+    marginBottomMm: isSmall ? 0.8 : isMedium ? 1.2 : 1.5,
+    marginLeftMm:   isSmall ? 1.0 : isMedium ? 1.5 : 2.0,
+    marginRightMm:  isSmall ? 1.0 : isMedium ? 1.5 : 2.0,
+  };
+}
+
+/**
+ * Creates a fully calculated BarcodePrinterConfig dynamically fitted to any label width and height.
+ */
+export function createDynamicBarcodeConfig(
+  widthMm: number,
+  heightMm: number,
+  overrides?: Partial<BarcodePrinterConfig>
+): BarcodePrinterConfig {
+  const margins = getDynamicBarcodeMargins(widthMm, heightMm);
+  const marginTopMm    = overrides?.marginTopMm    ?? margins.marginTopMm;
+  const marginBottomMm = overrides?.marginBottomMm ?? margins.marginBottomMm;
+  const marginLeftMm   = overrides?.marginLeftMm   ?? margins.marginLeftMm;
+  const marginRightMm  = overrides?.marginRightMm  ?? margins.marginRightMm;
+
+  const printableHeightMm = Math.max(2, heightMm - marginTopMm - marginBottomMm);
+  const barcodeHeightMm = overrides?.barcodeHeightMm ?? Math.max(4, Math.round(printableHeightMm * 0.58 * 10) / 10);
+  const fontSizePt = overrides?.fontSizePt ?? Math.max(7, Math.min(18, Math.round(heightMm * 0.38 * 10) / 10));
+
+  return {
+    printerName:      overrides?.printerName      ?? "",
+    printerType:      overrides?.printerType      ?? "windows_driver",
+    labelWidthMm:     widthMm,
+    labelHeightMm:    heightMm,
+    dpi:              overrides?.dpi              ?? 203,
+    marginTopMm,
+    marginBottomMm,
+    marginLeftMm,
+    marginRightMm,
+    barcodeSymbology: overrides?.barcodeSymbology ?? "CODE128",
+    barcodeHeightMm,
+    storeName:        overrides?.storeName        ?? "ISRA HARDWARE TRADING",
+    showStoreName:    overrides?.showStoreName    ?? true,
+    showBarcodeText:  overrides?.showBarcodeText  ?? true,
+    fontFamily:       overrides?.fontFamily       ?? "monospace",
+    fontSizePt,
+  };
+}
+
+/**
+ * Default fallback configuration.
+ */
+export const BARCODE_PRINTER_CONFIG: BarcodePrinterConfig = createDynamicBarcodeConfig(50, 30);
+

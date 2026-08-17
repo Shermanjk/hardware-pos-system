@@ -27,20 +27,20 @@ function StatusBadge({ quantity, reorderLevel }: { quantity: number; reorderLeve
   switch (status) {
     case "Critical":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-          <Flame className="h-3 w-3" /> Critical
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+          <Flame className="h-3 w-3 text-rose-600 animate-pulse" /> Critical
         </span>
       );
     case "Low Stock":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-          <AlertTriangle className="h-3 w-3" /> Low Stock
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+          <AlertTriangle className="h-3 w-3 text-amber-600" /> Low Stock
         </span>
       );
     case "Out of Stock":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-          <XCircle className="h-3 w-3" /> Out of Stock
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+          <XCircle className="h-3 w-3 text-slate-500" /> Out of Stock
         </span>
       );
     default:
@@ -202,43 +202,43 @@ export default function ClerkLowStock() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="p-5"><Skeleton className="h-14 w-full" /></Card>
+            <Card key={i} className="p-5"><Skeleton className="h-14 w-full rounded-lg" /></Card>
           ))
         ) : (
           <>
-            <Card className="p-5 bg-red-50 border-red-200">
+            <Card className="p-5 bg-white border border-rose-200/80 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-red-600 font-semibold uppercase tracking-wide">Critical / Out of Stock</p>
-                  <p className="text-3xl font-bold text-red-700 mt-1">{criticalCount}</p>
-                  <p className="text-xs text-red-500 mt-1">Immediate action needed</p>
+                  <p className="text-xs text-rose-600 font-bold uppercase tracking-wider">Critical / Out of Stock</p>
+                  <p className="text-3xl font-extrabold text-rose-700 mt-1">{criticalCount}</p>
+                  <p className="text-xs text-slate-500 mt-1">Immediate action needed</p>
                 </div>
-                <div className="p-3 bg-red-100 rounded-xl">
-                  <Flame className="h-6 w-6 text-red-600" />
+                <div className="p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100">
+                  <Flame className="h-6 w-6" />
                 </div>
               </div>
             </Card>
-            <Card className="p-5 bg-amber-50 border-amber-200">
+            <Card className="p-5 bg-white border border-amber-200/80 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-amber-600 font-semibold uppercase tracking-wide">Low Stock</p>
-                  <p className="text-3xl font-bold text-amber-700 mt-1">{lowCount}</p>
-                  <p className="text-xs text-amber-500 mt-1">Order soon</p>
+                  <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">Low Stock</p>
+                  <p className="text-3xl font-extrabold text-amber-700 mt-1">{lowCount}</p>
+                  <p className="text-xs text-slate-500 mt-1">Order soon</p>
                 </div>
-                <div className="p-3 bg-amber-100 rounded-xl">
-                  <AlertTriangle className="h-6 w-6 text-amber-600" />
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+                  <AlertTriangle className="h-6 w-6" />
                 </div>
               </div>
             </Card>
-            <Card className="p-5 bg-orange-50 border-orange-200">
+            <Card className="p-5 bg-white border border-orange-200/80 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide">Total Units Short</p>
-                  <p className="text-3xl font-bold text-orange-700 mt-1">{totalShortage.toLocaleString()}</p>
-                  <p className="text-xs text-orange-500 mt-1">Units needed to reach reorder level</p>
+                  <p className="text-xs text-orange-600 font-bold uppercase tracking-wider">Total Units Short</p>
+                  <p className="text-3xl font-extrabold text-orange-700 mt-1">{totalShortage.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500 mt-1">Units needed to reach reorder level</p>
                 </div>
-                <div className="p-3 bg-orange-100 rounded-xl">
-                  <TrendingDown className="h-6 w-6 text-orange-600" />
+                <div className="p-3 bg-orange-50 text-orange-600 rounded-xl border border-orange-100">
+                  <TrendingDown className="h-6 w-6" />
                 </div>
               </div>
             </Card>
@@ -247,19 +247,19 @@ export default function ClerkLowStock() {
       </div>
 
       {/* Filters */}
-      <Card className="p-4">
+      <Card className="p-4 bg-white border border-slate-200/80 shadow-sm rounded-xl">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <Input
               placeholder="Search by name or barcode…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-10 bg-gray-50"
+              className="pl-10 h-10 bg-slate-50/50 hover:bg-white focus:bg-white border-slate-200 rounded-lg text-sm transition-all"
             />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-10 bg-gray-50 w-full">
+            <SelectTrigger className="h-10 bg-slate-50/50 hover:bg-white border-slate-200 w-full text-sm font-medium">
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
@@ -272,54 +272,56 @@ export default function ClerkLowStock() {
       </Card>
 
       {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold text-gray-900">{sorted.length}</span> product{sorted.length !== 1 ? "s" : ""} need attention
+      <Card className="overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
+        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <p className="text-xs text-slate-600 font-medium">
+            <span className="font-bold text-slate-900">{sorted.length}</span> product{sorted.length !== 1 ? "s" : ""} need attention
           </p>
-          <p className="text-xs text-gray-400">Click column headers to sort</p>
+          <p className="text-xs text-slate-400">Click column headers to sort</p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Barcode</th>
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+              <tr>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Barcode</th>
                 <SortHeader label="Product Name" field="productName" current={sortField} dir={sortDir} onClick={handleSort} />
-                <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Category</th>
-                <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Supplier</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Category</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Supplier</th>
                 <SortHeader label="Current Qty" field="quantity" current={sortField} dir={sortDir} onClick={handleSort} />
                 <SortHeader label="Reorder Level" field="reorderLevel" current={sortField} dir={sortDir} onClick={handleSort} />
                 <SortHeader label="Shortage" field="shortage" current={sortField} dir={sortDir} onClick={handleSort} />
-                <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Status</th>
-                <th className="text-left py-3.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Action</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Status</th>
+                <th className="text-right py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Action</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} className="border-b border-gray-50">
+                  <tr key={i} className="bg-white">
                     {Array.from({ length: 9 }).map((_, j) => (
-                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full" /></td>
+                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-14 text-center">
-                    <div className="flex flex-col items-center gap-3 text-gray-400">
-                      <AlertTriangle className="h-10 w-10 opacity-30" />
+                  <td colSpan={9} className="py-16 text-center bg-white">
+                    <div className="flex flex-col items-center gap-2.5">
+                      <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-full">
+                        <AlertTriangle className="h-7 w-7" />
+                      </div>
                       {search || categoryFilter !== "all" ? (
                         <>
-                          <p className="font-medium text-gray-600">No products match your filters</p>
-                          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setCategoryFilter("all"); }}>
+                          <p className="font-semibold text-slate-700 text-sm">No products match your filters</p>
+                          <Button variant="outline" size="sm" onClick={() => { setSearch(""); setCategoryFilter("all"); }} className="mt-1 text-xs">
                             Clear filters
                           </Button>
                         </>
                       ) : (
                         <>
-                          <p className="font-medium text-green-600">All products are sufficiently stocked!</p>
-                          <p className="text-sm">No products are at or below their reorder level.</p>
+                          <p className="font-bold text-emerald-700 text-base">All products are sufficiently stocked!</p>
+                          <p className="text-xs text-slate-500">No products are currently at or below their reorder level.</p>
                         </>
                       )}
                     </div>
@@ -330,65 +332,68 @@ export default function ClerkLowStock() {
                   const shortage = Math.max(0, product.reorder_level - product.quantity);
                   const status = deriveStatus(product.quantity, product.reorder_level);
                   const isCritical = ["Critical", "Out of Stock"].includes(status);
-                  const urgencyColor = isCritical ? "bg-red-50/40" : "bg-amber-50/20";
 
                   return (
                     <tr
                       key={product.id}
-                      className={`border-b border-gray-100 hover:bg-blue-50/40 transition-colors ${
-                        idx % 2 === 0 ? urgencyColor : "bg-white"
+                      className={`transition-colors hover:bg-slate-50/80 ${
+                        idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
                       }`}
                     >
-                      <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-sm">
                           {product.barcode}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-gray-900 max-w-[180px]">
+                      <td className="py-3 px-4 font-semibold text-slate-900 max-w-[200px]">
                         <span className="truncate block">{product.product_name}</span>
                       </td>
-                      <td className="py-3.5 px-4 text-gray-500 text-xs">{product.category}</td>
-                      <td className="py-3.5 px-4 text-gray-500 text-xs max-w-[140px]">
-                        <span className="truncate block">{product.supplier}</span>
+                      <td className="py-3 px-4 text-xs">
+                        <span className="font-medium text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block">
+                          {product.category}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4 text-slate-600 text-xs max-w-[140px]">
+                        <span className="truncate block font-medium">{product.supplier || "—"}</span>
+                      </td>
+                      <td className="py-3 px-4">
                         {(() => {
                           const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
                           return (
                             <div className="flex items-center gap-0.5">
-                              <span className={`font-bold text-base ${
-                                product.quantity === 0 ? "text-gray-400" :
-                                isCritical ? "text-red-600" : "text-amber-600"
+                              <span className={`font-bold text-sm tabular-nums ${
+                                product.quantity === 0 ? "text-slate-400" :
+                                isCritical ? "text-rose-600 font-extrabold" : "text-amber-600 font-bold"
                               }`}>
                                 {parts.number}
                               </span>
-                              {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                              {parts.unit && <span className="text-[11px] text-slate-400 ml-0.5">{parts.unit}</span>}
                             </div>
                           );
                         })()}
                       </td>
-                      <td className="py-3.5 px-4 text-gray-600 text-sm font-medium">{product.reorder_level}</td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4 text-slate-600 text-xs font-semibold tabular-nums">{product.reorder_level}</td>
+                      <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <span className={`font-bold text-sm ${isCritical ? "text-red-600" : "text-amber-600"}`}>
+                          <span className={`font-bold text-xs tabular-nums ${isCritical ? "text-rose-600" : "text-amber-600"}`}>
                             -{shortage}
                           </span>
                           {/* Mini shortage bar */}
-                          <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="w-14 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full ${isCritical ? "bg-red-500" : "bg-amber-400"}`}
-                              style={{ width: `${Math.min(100, (shortage / product.reorder_level) * 100)}%` }}
+                              className={`h-full rounded-full ${isCritical ? "bg-rose-500" : "bg-amber-400"}`}
+                              style={{ width: `${Math.min(100, Math.max(5, (shortage / (product.reorder_level || 1)) * 100))}%` }}
                             />
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <StatusBadge quantity={product.quantity} reorderLevel={product.reorder_level} />
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4 text-right">
                         <Button
                           size="sm"
-                          className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
+                          className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 font-semibold whitespace-nowrap shadow-sm"
                           onClick={() => navigate("/clerk/stock-in")}
                         >
                           <PackagePlus className="h-3.5 w-3.5" /> Stock In
@@ -405,25 +410,23 @@ export default function ClerkLowStock() {
 
       {/* Recommended re-order summary */}
       {!loading && sorted.length > 0 && (
-        <Card className="p-5 bg-blue-50 border-blue-200">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-              <PackagePlus className="h-5 w-5 text-blue-700" />
+        <Card className="p-5 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200/80 shadow-sm rounded-xl">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-sm shrink-0">
+              <PackagePlus className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-blue-900">Recommended Action</p>
-              <p className="text-xs text-blue-700 mt-1">
-                {sorted.length} product{sorted.length !== 1 ? "s" : ""} need restocking.
-                Total units short: <strong>{totalShortage}</strong>.
-                Contact your suppliers to arrange deliveries, then use
-                <strong> New Stock In</strong> to record received goods.
+            <div className="flex-1">
+              <p className="text-sm font-bold text-slate-900">Recommended Replenishment</p>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                <strong>{sorted.length}</strong> product{sorted.length !== 1 ? "s" : ""} need restocking with a total deficit of <strong>{totalShortage.toLocaleString()} units</strong>.
+                Create a new delivery record in Stock In to update inventory immediately upon arrival.
               </p>
               <Button
                 size="sm"
-                className="mt-3 gap-2 bg-blue-600 hover:bg-blue-700 h-8 text-xs"
+                className="mt-3 gap-2 bg-blue-600 hover:bg-blue-700 h-8 text-xs font-semibold shadow-sm"
                 onClick={() => navigate("/clerk/stock-in")}
               >
-                <PackagePlus className="h-3.5 w-3.5" /> Open Stock In
+                <PackagePlus className="h-3.5 w-3.5" /> Open Stock In Wizard
               </Button>
             </div>
           </div>

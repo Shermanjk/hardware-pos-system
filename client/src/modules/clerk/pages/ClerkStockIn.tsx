@@ -883,56 +883,70 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
 
       {/* Items table */}
       {items.length > 0 ? (
-        <div className="border-2 border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="border border-slate-200/80 rounded-xl overflow-hidden shadow-sm bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-gray-100 border-b-2 border-gray-300">
-                  <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Barcode</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Product</th>
-                  <th className="text-center py-3 px-3 font-bold text-gray-700 text-xs uppercase tracking-wider">Unit</th>
-                  <th className="text-center py-3 px-3 font-bold text-gray-700 text-xs uppercase tracking-wider">Qty Received</th>
-                  <th className="py-3 px-3"></th>
+                <tr className="bg-slate-100/80 border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 text-xs uppercase tracking-wider">Barcode</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 text-xs uppercase tracking-wider">Product Name</th>
+                  <th className="text-center py-3 px-3 font-semibold text-slate-700 text-xs uppercase tracking-wider">Unit</th>
+                  <th className="text-center py-3 px-3 font-semibold text-slate-700 text-xs uppercase tracking-wider">Qty Received</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-700 text-xs uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {items.map((item, idx) => {
                   const isEditing = editingId === item.productId;
                   return (
                     <tr key={item.productId}
-                      className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">{item.barcode}</span>
+                      className={`transition-colors hover:bg-slate-50/80 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-sm">
+                          {item.barcode}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-gray-900">{item.productName}</p>
+                      <td className="py-3 px-4">
+                        <p className="font-semibold text-slate-900 text-sm">{item.productName}</p>
                       </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">{item.unit}</span>
+                      <td className="py-3 px-3 text-center">
+                        <span className="text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block">
+                          {item.unit}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-3 text-center">
+                      <td className="py-3 px-3 text-center">
                         {isEditing ? (
                           <Input
                             type="number" min={1}
                             value={item.quantityReceived}
                             onChange={(e) => updateItem(item.productId, e.target.value)}
                             onBlur={() => setEditingId(null)}
-                            className="h-8 w-20 text-center mx-auto border-2 border-blue-400"
+                            className="h-8 w-24 text-center mx-auto font-bold border-2 border-blue-500 rounded-lg"
                             autoFocus
                           />
                         ) : (
-                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm border border-emerald-200 tabular-nums">+{item.quantityReceived}</span>
+                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-sm border border-emerald-200 tabular-nums shadow-sm">
+                            +{item.quantityReceived}
+                          </span>
                         )}
                       </td>
-                      <td className="py-3.5 px-3">
+                      <td className="py-3 px-4 text-right">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={() => setEditingId(isEditing ? null : item.productId)}
-                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
-                            <Edit2 className="h-3.5 w-3.5" />
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(isEditing ? null : item.productId)}
+                            title="Edit Quantity"
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors border border-transparent hover:border-amber-200"
+                          >
+                            <Edit2 className="h-4 w-4" />
                           </button>
-                          <button onClick={() => removeItem(item.productId)}
-                            className="h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.productId)}
+                            title="Remove Product"
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
@@ -941,12 +955,14 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
                 })}
               </tbody>
               <tfoot>
-                <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
-                  <td colSpan={3} className="py-3 px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    {items.length} product{items.length !== 1 ? "s" : ""}
+                <tr className="bg-slate-50/90 border-t border-slate-200 font-semibold">
+                  <td colSpan={3} className="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Total: {items.length} product{items.length !== 1 ? "s" : ""}
                   </td>
                   <td className="py-3 px-3 text-center">
-                    <span className="inline-flex items-center justify-center px-3 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-sm tabular-nums">+{totalQty}</span>
+                    <span className="inline-flex items-center justify-center px-3.5 py-1 rounded-full bg-emerald-600 text-white font-extrabold text-sm tabular-nums shadow-sm">
+                      +{totalQty}
+                    </span>
                   </td>
                   <td></td>
                 </tr>
@@ -955,10 +971,10 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
           </div>
         </div>
       ) : (
-        <div className="py-12 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400">
-          <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm font-medium">No items yet</p>
-          <p className="text-xs mt-1">Scan a barcode or search for a product above</p>
+        <div className="py-14 text-center border border-dashed border-slate-200 rounded-xl text-slate-400 bg-slate-50/40">
+          <Package className="h-9 w-9 mx-auto mb-2 text-slate-300" />
+          <p className="text-sm font-semibold text-slate-700">No items added yet</p>
+          <p className="text-xs text-slate-400 mt-0.5">Scan a barcode or use the search bar above to add products</p>
         </div>
       )}
 
@@ -998,69 +1014,88 @@ function Step3({ session, suppliers, items, saving, onBack, onSave, onCancel }: 
     <div className="space-y-5">
 
       {/* Session summary */}
-      <div className="p-5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
-        <p className="text-xs font-bold text-blue-700 uppercase tracking-widest">Session Summary</p>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-          <div>
-            <span className="text-gray-500">Source:</span>{" "}
-            <span className="font-semibold text-gray-900">{session.source}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Delivery Date:</span>{" "}
-            <span className="font-semibold text-gray-900">
+      <div className="p-5 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-3 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+          <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Delivery Session Summary</p>
+          <span className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+            {session.source}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+          <div className="flex justify-between py-1 border-b border-slate-100 sm:border-0">
+            <span className="text-slate-500 font-medium">Delivery Date:</span>{" "}
+            <span className="font-semibold text-slate-900">
               {new Date(session.deliveryDate + "T00:00:00").toLocaleDateString("en-PH", {
                 month: "long", day: "numeric", year: "numeric",
               })}
             </span>
           </div>
-          <div>
-            <span className="text-gray-500">Supplier:</span>{" "}
-            <span className="font-semibold text-gray-900">{supplierName ?? <em className="text-gray-400 font-normal">None</em>}</span>
+          <div className="flex justify-between py-1 border-b border-slate-100 sm:border-0">
+            <span className="text-slate-500 font-medium">Supplier:</span>{" "}
+            <span className="font-semibold text-slate-900">{supplierName ?? <span className="text-slate-400 font-normal italic">None</span>}</span>
           </div>
-          <div>
-            <span className="text-gray-500">Invoice / DR:</span>{" "}
-            <span className="font-semibold text-gray-900">{session.invoiceNumber || <em className="text-gray-400 font-normal">None</em>}</span>
+          <div className="flex justify-between py-1 border-b border-slate-100 sm:border-0">
+            <span className="text-slate-500 font-medium">Invoice / DR:</span>{" "}
+            <span className="font-mono font-semibold text-slate-900">{session.invoiceNumber || <span className="text-slate-400 font-normal italic font-sans">None</span>}</span>
+          </div>
+          <div className="flex justify-between py-1">
+            <span className="text-slate-500 font-medium">Total Products:</span>{" "}
+            <span className="font-bold text-blue-600">{items.length} items ({totalQty} units)</span>
           </div>
         </div>
         {session.remarks && (
-          <p className="text-xs text-gray-600 border-t border-blue-200 pt-2 mt-2">
-            <span className="font-semibold text-gray-500">Remarks:</span> {session.remarks}
+          <p className="text-xs text-slate-600 border-t border-slate-200/80 pt-2.5 mt-2">
+            <span className="font-semibold text-slate-700">Remarks:</span> {session.remarks}
           </p>
         )}
       </div>
 
       {/* Items summary */}
       <div>
-        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Items Summary</p>
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2.5">Items to be Received</p>
+        <div className="border border-slate-200/80 rounded-xl overflow-hidden shadow-sm bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b-2 border-gray-200">
-                  <th className="text-left py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Barcode</th>
-                  <th className="text-left py-2.5 px-4 font-semibold text-gray-600 text-xs uppercase tracking-wide">Product Name</th>
-                  <th className="text-center py-2.5 px-3 font-semibold text-gray-600 text-xs uppercase tracking-wide">Unit</th>
-                  <th className="text-center py-2.5 px-3 font-semibold text-gray-600 text-xs uppercase tracking-wide">Qty</th>
+                <tr className="bg-slate-100/80 border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 text-xs uppercase tracking-wider">Barcode</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700 text-xs uppercase tracking-wider">Product Name</th>
+                  <th className="text-center py-3 px-3 font-semibold text-slate-700 text-xs uppercase tracking-wider">Unit</th>
+                  <th className="text-center py-3 px-3 font-semibold text-slate-700 text-xs uppercase tracking-wider">Qty</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map((item) => (
-                    <tr key={item.productId} className="hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-xs text-gray-600">{item.barcode}</span>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-gray-900">{item.productName}</td>
-                      <td className="py-3 px-3 text-center text-xs text-gray-500">{item.unit}</td>
-                      <td className="py-3 px-3 text-center font-bold text-emerald-700 tabular-nums">+{item.quantityReceived}</td>
-                    </tr>
-                  ))}
+              <tbody className="divide-y divide-slate-100">
+                {items.map((item, idx) => (
+                  <tr key={item.productId} className={`transition-colors hover:bg-slate-50/80 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-sm">
+                        {item.barcode}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-900">{item.productName}</td>
+                    <td className="py-3 px-3 text-center">
+                      <span className="text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block">
+                        {item.unit}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span className="inline-flex items-center justify-center min-w-[2.5rem] px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-sm border border-emerald-200 tabular-nums">
+                        +{item.quantityReceived}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
-                <tr className="bg-blue-600 text-white font-bold">
-                  <td className="py-2.5 px-4 text-xs" colSpan={2}>
-                    {items.length} unique product{items.length !== 1 ? "s" : ""}
+                <tr className="bg-slate-50 border-t border-slate-200 font-semibold">
+                  <td className="py-3 px-4 text-xs font-bold text-slate-700 uppercase tracking-wider" colSpan={3}>
+                    Total ({items.length} items):
                   </td>
-                  <td className="py-2.5 px-3 text-center tabular-nums">+{totalQty}</td>
+                  <td className="py-3 px-3 text-center">
+                    <span className="inline-flex items-center justify-center px-3.5 py-1 rounded-full bg-emerald-600 text-white font-extrabold text-sm tabular-nums shadow-sm">
+                      +{totalQty}
+                    </span>
+                  </td>
                 </tr>
               </tfoot>
             </table>
@@ -1072,11 +1107,11 @@ function Step3({ session, suppliers, items, saving, onBack, onSave, onCancel }: 
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Unique Products", value: String(items.length) },
-          { label: "Total Qty Received", value: String(totalQty) },
+          { label: "Total Units Received", value: String(totalQty) },
         ].map((c) => (
-          <div key={c.label} className="bg-white border border-gray-200 rounded-xl p-3 text-center">
-            <p className="text-xs text-gray-500 font-medium">{c.label}</p>
-            <p className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">{c.value}</p>
+          <div key={c.label} className="bg-white border border-slate-200/80 rounded-xl p-3.5 text-center shadow-sm">
+            <p className="text-xs text-slate-500 font-medium">{c.label}</p>
+            <p className="text-2xl font-extrabold text-slate-900 mt-0.5 tabular-nums">{c.value}</p>
           </div>
         ))}
       </div>

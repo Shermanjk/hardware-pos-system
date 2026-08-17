@@ -20,7 +20,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getInventoryLogs, type InventoryLog } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
-import { BARCODE_PRINTER_CONFIG, getPrinterEngine } from "@/shared/services/barcodePrinter";
+import { getStoreSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import {
+    BARCODE_PRINTER_CONFIG,
+    createDynamicBarcodeConfig,
+    getPrinterEngine,
+    type BarcodePrinterConfig,
+} from "@/shared/services/barcodePrinter";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import JsBarcode from "jsbarcode";
 import {
@@ -41,7 +47,7 @@ import {
     X,
     XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 10;
@@ -53,26 +59,26 @@ function statusBadge(quantity: number, reorder_level: number) {
   switch (status) {
     case "In Stock":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          <CheckCircle2 className="h-3 w-3" /> In Stock
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <CheckCircle2 className="h-3 w-3 text-emerald-600" /> In Stock
         </span>
       );
     case "Low Stock":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-          <AlertTriangle className="h-3 w-3" /> Low Stock
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+          <AlertTriangle className="h-3 w-3 text-amber-600" /> Low Stock
         </span>
       );
     case "Critical":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-          <AlertTriangle className="h-3 w-3" /> Critical
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+          <AlertTriangle className="h-3 w-3 text-rose-600 animate-pulse" /> Critical
         </span>
       );
     case "Out of Stock":
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-          <XCircle className="h-3 w-3" /> Out of Stock
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+          <XCircle className="h-3 w-3 text-slate-500" /> Out of Stock
         </span>
       );
   }
@@ -162,24 +168,64 @@ function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductD
 
 // ─── Barcode Print Modal (inline shortcut) ────────────────────────────────────
 
+const INVENTORY_SIZE_PRESETS = [
+  { label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
+  { label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
+  { label: "38 × 25 mm",                     w: 38, h: 25 },
+  { label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
+  { label: "100 × 50 mm (Large)",            w: 100, h: 50 },
+  { label: "Custom Size",                    w: 0,  h: 0  },
+] as const;
+
 interface BarcodePrintModalProps {
   product: ProductRecord | null;
+  storeSettings: StoreSettings | null;
   open: boolean;
   onClose: () => void;
 }
 
-function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
+function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePrintModalProps) {
   const [labelCount, setLabelCount] = useState(1);
+  const [printing, setPrinting] = useState(false);
+  const [presetKey, setPresetKey] = useState(() => localStorage.getItem("pos_barcode_label_preset") || "30×20");
+  const [customW, setCustomW] = useState(30);
+  const [customH, setCustomH] = useState(20);
 
-  // Callback ref: fires the instant the <svg> node is attached to the DOM,
-  // bypassing Dialog animation timing that breaks useRef + useEffect.
+  useEffect(() => {
+    if (open) {
+      setLabelCount(1);
+      const savedPreset = localStorage.getItem("pos_barcode_label_preset") || "30×20";
+      setPresetKey(savedPreset);
+    }
+  }, [open, product?.id]);
+
+  const handlePresetChange = (newKey: string) => {
+    setPresetKey(newKey);
+    localStorage.setItem("pos_barcode_label_preset", newKey);
+  };
+
+  const storeName = storeSettings?.store_name || BARCODE_PRINTER_CONFIG.storeName || "ISRA HARDWARE TRADING";
+
+  const activeConfig: BarcodePrinterConfig = useMemo(() => {
+    if (presetKey === "custom") {
+      const w = Math.max(10, customW);
+      const h = Math.max(5, customH);
+      return createDynamicBarcodeConfig(w, h, { storeName });
+    }
+    const preset = INVENTORY_SIZE_PRESETS.find((p) => `${p.w}×${p.h}` === presetKey);
+    if (!preset || preset.w === 0) {
+      return createDynamicBarcodeConfig(30, 20, { storeName });
+    }
+    return createDynamicBarcodeConfig(preset.w, preset.h, { storeName });
+  }, [presetKey, customW, customH, storeName]);
+
   const svgCallbackRef = useCallback((node: SVGSVGElement | null) => {
     if (!node || !product?.barcode) return;
     try {
       JsBarcode(node, product.barcode, {
-        format: "CODE128",
+        format: activeConfig.barcodeSymbology,
         displayValue: false,
-        height: 52,
+        height: activeConfig.barcodeHeightMm * 3.7795,
         width: 1,
         margin: 0,
         background: "transparent",
@@ -187,79 +233,198 @@ function BarcodePrintModal({ product, open, onClose }: BarcodePrintModalProps) {
       });
       node.setAttribute("preserveAspectRatio", "none");
     } catch { /* invalid barcode — leave blank */ }
-  }, [product?.barcode, open]); // re-run when product or open state changes
+  }, [product?.barcode, activeConfig.barcodeHeightMm, activeConfig.barcodeSymbology, open]);
 
   const handlePrint = async () => {
     if (!product) return;
-    const clampedCount = Math.max(1, Math.min(100, labelCount));
+    const clampedCount = Math.max(1, Math.min(500, labelCount));
+    setPrinting(true);
     try {
-      const engine = getPrinterEngine(BARCODE_PRINTER_CONFIG);
+      const engine = getPrinterEngine(activeConfig);
       await engine.print(
         {
           barcode: product.barcode,
-          storeName: BARCODE_PRINTER_CONFIG.storeName,
+          storeName: activeConfig.storeName,
           quantity: clampedCount,
         },
-        BARCODE_PRINTER_CONFIG
+        activeConfig
       );
       toast.success(`Printed ${clampedCount} label${clampedCount !== 1 ? "s" : ""} for "${product.product_name}"`);
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Print failed");
+    } finally {
+      setPrinting(false);
     }
   };
 
   if (!product) return null;
 
+  const isSmall = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
+  const scale = isSmall ? 4.2 : 3.2;
+  const cardW = activeConfig.labelWidthMm * scale;
+  const cardH = activeConfig.labelHeightMm * scale;
+  const storeFontSize = Math.max(9, Math.min(18, activeConfig.fontSizePt * 1.15));
+  const barcodeFontSize = Math.max(8, Math.min(16, activeConfig.fontSizePt * 0.95));
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="h-5 w-5 text-blue-600" />
-            Print Barcode Label
+            Print Barcode Labels
           </DialogTitle>
           <DialogDescription>
-            Print labels using the registered barcode.
+            {activeConfig.labelWidthMm} × {activeConfig.labelHeightMm} mm · {activeConfig.barcodeSymbology}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Barcode preview */}
-          <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-between gap-1 min-h-[140px]">
-            <p className="text-xs font-bold text-gray-700 tracking-wide uppercase truncate w-full text-center">
-              {BARCODE_PRINTER_CONFIG.storeName}
-            </p>
-            <div className="w-full h-14 flex items-center justify-center my-1">
-              <svg ref={svgCallbackRef} className="w-full h-full block" />
+          {/* Product info */}
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+              <Package className="h-4 w-4 text-blue-700" />
             </div>
-            <p className="font-mono text-sm font-bold tracking-widest text-gray-900">
-              {product.barcode}
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-900 text-sm truncate">{product.product_name}</p>
+              <p className="text-xs text-gray-500 mt-0.5 font-mono">{product.barcode}</p>
+            </div>
+          </div>
+
+          {/* Label size selector */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Label Size</label>
+            <Select
+              value={presetKey}
+              onValueChange={handlePresetChange}
+              disabled={printing}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INVENTORY_SIZE_PRESETS.map((p) => (
+                  <SelectItem
+                    key={p.w === 0 ? "custom" : `${p.w}×${p.h}`}
+                    value={p.w === 0 ? "custom" : `${p.w}×${p.h}`}
+                  >
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Custom size inputs */}
+            {presetKey === "custom" && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-1.5 flex-1">
+                  <label className="text-xs text-gray-500 w-10 shrink-0">Width</label>
+                  <Input
+                    type="number" min={10} max={300} step={0.5}
+                    value={customW}
+                    onChange={(e) => setCustomW(Number(e.target.value))}
+                    className="h-8 text-sm"
+                    disabled={printing}
+                  />
+                  <span className="text-xs text-gray-400">mm</span>
+                </div>
+                <span className="text-gray-300 text-sm">×</span>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <label className="text-xs text-gray-500 w-12 shrink-0">Height</label>
+                  <Input
+                    type="number" min={5} max={300} step={0.5}
+                    value={customH}
+                    onChange={(e) => setCustomH(Number(e.target.value))}
+                    className="h-8 text-sm"
+                    disabled={printing}
+                  />
+                  <span className="text-xs text-gray-400">mm</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Live Preview */}
+          <div className="flex flex-col items-center gap-1.5 py-2 bg-gray-50/60 rounded-lg border border-gray-100">
+            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">
+              Preview ({activeConfig.labelWidthMm} × {activeConfig.labelHeightMm} mm)
             </p>
-            <p className="text-xs text-gray-400 truncate w-full text-center">{product.product_name}</p>
+            <div
+              className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm"
+              style={{
+                width: cardW,
+                height: cardH,
+                paddingTop: activeConfig.marginTopMm * scale,
+                paddingBottom: activeConfig.marginBottomMm * scale,
+                paddingLeft: activeConfig.marginLeftMm * scale,
+                paddingRight: activeConfig.marginRightMm * scale,
+                boxSizing: "border-box",
+              }}
+            >
+              {activeConfig.showStoreName && activeConfig.storeName && (
+                <p
+                  className="font-extrabold uppercase text-center leading-tight truncate w-full flex-shrink-0 mb-0.5 tracking-tight text-gray-900"
+                  style={{ fontFamily: activeConfig.fontFamily, fontSize: storeFontSize }}
+                >
+                  {activeConfig.storeName}
+                </p>
+              )}
+              <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden my-0.5">
+                <svg ref={svgCallbackRef} className="w-full h-full block" />
+              </div>
+              {activeConfig.showBarcodeText && (
+                <p
+                  className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5"
+                  style={{
+                    fontFamily: activeConfig.fontFamily,
+                    fontSize: barcodeFontSize,
+                    letterSpacing: isSmall ? "0.4px" : "1.2px",
+                  }}
+                >
+                  {product.barcode}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Number of labels */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
               Number of Labels
             </label>
-            <Input
-              type="number"
-              min={1}
-              max={100}
-              value={labelCount}
-              onChange={(e) => setLabelCount(Math.max(1, Math.min(100, Number(e.target.value))))}
-              className="h-10"
-            />
-            <p className="text-xs text-gray-400 mt-1">Maximum 100 labels per print job</p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold"
+                onClick={() => setLabelCount((n) => Math.max(1, n - 1))}
+                disabled={printing}
+              >−</Button>
+              <Input
+                type="number" min={1} max={500}
+                value={labelCount}
+                onChange={(e) => setLabelCount(Math.max(1, Math.min(500, Number(e.target.value))))}
+                className="h-10 w-20 text-center font-bold text-lg"
+                disabled={printing}
+              />
+              <Button
+                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold"
+                onClick={() => setLabelCount((n) => Math.min(500, n + 1))}
+                disabled={printing}
+              >+</Button>
+              <span className="text-xs text-gray-400 ml-1">max 500</span>
+            </div>
           </div>
         </div>
 
         <div className="flex justify-between gap-3 pt-2 border-t border-gray-100">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handlePrint} className="gap-2 bg-blue-600 hover:bg-blue-700">
-            <Printer className="h-4 w-4" /> Print {labelCount} Label{labelCount !== 1 ? "s" : ""}
+          <Button variant="outline" onClick={onClose} disabled={printing} className="gap-2">
+            <X className="h-4 w-4" /> Cancel
+          </Button>
+          <Button onClick={handlePrint} disabled={printing} className="gap-2 bg-blue-600 hover:bg-blue-700">
+            {printing
+              ? <><span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Printing…</>
+              : <><Printer className="h-4 w-4" /> Print {labelCount} Label{labelCount !== 1 ? "s" : ""}</>
+            }
           </Button>
         </div>
       </DialogContent>
@@ -402,6 +567,7 @@ export default function ClerkInventory() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [categories, setCategories] = useState<string[]>(["all"]);
   const [suppliers, setSuppliers] = useState<string[]>(["all"]);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -423,14 +589,16 @@ export default function ClerkInventory() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventoryData, categoriesData, suppliersData] = await Promise.all([
+        const [inventoryData, categoriesData, suppliersData, settingsData] = await Promise.all([
           getProducts(),
           getCategories(),
           getSuppliers(),
+          getStoreSettings().catch(() => null),
         ]);
         setProducts(inventoryData);
         setCategories(["all", ...categoriesData.map(c => c.category_name)]);
         setSuppliers(["all", ...suppliersData.map(s => s.supplier_name)]);
+        if (settingsData) setStoreSettings(settingsData);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("Failed to fetch inventory:", message.replace(/[\r\n\t]/g, " "));
@@ -540,46 +708,70 @@ export default function ClerkInventory() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="p-4"><Skeleton className="h-12 w-full" /></Card>
+            <Card key={i} className="p-4"><Skeleton className="h-12 w-full rounded-lg" /></Card>
           ))
         ) : (
           <>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-bold text-gray-900">{products.length}</p>
-              <p className="text-xs text-gray-500 mt-1 font-medium">Total Products</p>
+            <Card className="p-4 bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">{products.length}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">Total Products</p>
+                </div>
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                  <Boxes className="h-5 w-5" />
+                </div>
+              </div>
             </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-bold text-green-600">{inStockCount}</p>
-              <p className="text-xs text-gray-500 mt-1 font-medium">In Stock</p>
+            <Card className="p-4 bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-emerald-600">{inStockCount}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">In Stock</p>
+                </div>
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+              </div>
             </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-bold text-amber-600">{lowStockCount}</p>
-              <p className="text-xs text-gray-500 mt-1 font-medium">Low Stock</p>
+            <Card className="p-4 bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-amber-600">{lowStockCount}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">Low Stock</p>
+                </div>
+                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+              </div>
             </Card>
-            <Card className="p-4 text-center">
-              <p className="text-2xl font-bold text-red-600">{criticalCount}</p>
-              <p className="text-xs text-gray-500 mt-1 font-medium">Critical / Empty</p>
+            <Card className="p-4 bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-rose-600">{criticalCount}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">Critical / Empty</p>
+                </div>
+                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
+                  <XCircle className="h-5 w-5" />
+                </div>
+              </div>
             </Card>
           </>
         )}
       </div>
 
       {/* Search & Filters */}
-      <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+      <Card className="p-4 bg-white border border-slate-200/80 shadow-sm rounded-xl">
+        <div className="flex flex-col lg:flex-row gap-3.5 items-start lg:items-center">
           {/* Main Search Bar */}
           <div className="flex-1 w-full lg:w-auto min-w-[300px]">
-            <label className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2 block">
-              <ScanLine className="h-3.5 w-3.5 inline mr-1" />
-              Search Products
-            </label>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
-                placeholder="Search by product name OR scan barcode…"
+                placeholder="Search by product name or scan barcode…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -593,37 +785,32 @@ export default function ClerkInventory() {
                           const results = products.filter(p => 
                             p.barcode.toLowerCase() === val.toLowerCase()
                           );
-                          if (results.length === 1) {
+                          if (results.length >= 1) {
                             setDetailProduct(results[0]);
                             setDetailOpen(true);
                             setSearch("");
-                          } else if (results.length === 0) {
-                            toast.error("Product not found. Try a different search term.");
                           } else {
-                            setDetailProduct(results[0]);
-                            setDetailOpen(true);
-                            setSearch("");
+                            toast.error("Product not found. Try a different search term.");
                           }
                         }, 50);
                       }
                     }
                   }
                 }}
-                className="pl-12 h-11 text-base border-2 border-blue-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                className="pl-10 pr-20 h-10 text-sm border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full font-medium">
-                <ScanLine className="h-3 w-3" />
-                <span>Scan</span>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded">
+                <ScanLine className="h-3 w-3 text-slate-500" />
+                <span>Scanner</span>
               </div>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="flex gap-3 w-full lg:w-auto">
-            <div className="flex-1 lg:flex-none">
-              <label className="text-xs font-semibold text-gray-600 mb-1.5 block lg:hidden">Category</label>
+          <div className="flex gap-2.5 w-full lg:w-auto">
+            <div className="flex-1 lg:w-44">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-gray-300 w-full font-medium">
+                <SelectTrigger className="h-10 bg-slate-50/50 hover:bg-white border-slate-200 w-full text-sm font-medium">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -634,10 +821,9 @@ export default function ClerkInventory() {
               </Select>
             </div>
 
-            <div className="flex-1 lg:flex-none">
-              <label className="text-xs font-semibold text-gray-600 mb-1.5 block lg:hidden">Supplier</label>
+            <div className="flex-1 lg:w-44">
               <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-                <SelectTrigger className="h-11 bg-white border-2 border-gray-200 hover:border-gray-300 w-full font-medium">
+                <SelectTrigger className="h-10 bg-slate-50/50 hover:bg-white border-slate-200 w-full text-sm font-medium">
                   <SelectValue placeholder="Supplier" />
                 </SelectTrigger>
                 <SelectContent>
@@ -652,67 +838,76 @@ export default function ClerkInventory() {
 
         {/* Active filter chips */}
         {(search || categoryFilter !== "all" || supplierFilter !== "all") && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-blue-200">
-            <span className="text-xs text-blue-700 font-bold self-center flex items-center gap-1">
-              <Search className="h-3 w-3" /> Active:
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+            <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+              Active Filters:
             </span>
             {search && (
               <Badge 
-                className="gap-1 cursor-pointer bg-blue-600 text-white hover:bg-blue-700 font-medium" 
+                className="gap-1 cursor-pointer bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium text-xs px-2.5 py-0.5" 
                 onClick={() => setSearch("")}
               >
-                <ScanLine className="h-3 w-3" /> {search} <X className="h-3 w-3" />
+                <span>Query: "{search}"</span> <X className="h-3 w-3" />
               </Badge>
             )}
             {categoryFilter !== "all" && (
               <Badge 
-                className="gap-1 cursor-pointer bg-indigo-600 text-white hover:bg-indigo-700 font-medium" 
+                className="gap-1 cursor-pointer bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-medium text-xs px-2.5 py-0.5" 
                 onClick={() => setCategoryFilter("all")}
               >
-                {categoryFilter} <X className="h-3 w-3" />
+                <span>Category: {categoryFilter}</span> <X className="h-3 w-3" />
               </Badge>
             )}
             {supplierFilter !== "all" && (
               <Badge 
-                className="gap-1 cursor-pointer bg-purple-600 text-white hover:bg-purple-700 font-medium" 
+                className="gap-1 cursor-pointer bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-medium text-xs px-2.5 py-0.5" 
                 onClick={() => setSupplierFilter("all")}
               >
-                {supplierFilter} <X className="h-3 w-3" />
+                <span>Supplier: {supplierFilter}</span> <X className="h-3 w-3" />
               </Badge>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setSearch(""); setCategoryFilter("all"); setSupplierFilter("all"); }}
+              className="h-6 text-xs text-slate-400 hover:text-slate-700 px-2 ml-auto"
+            >
+              Reset all
+            </Button>
           </div>
         )}
       </Card>
 
       {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-          <p className="text-sm text-gray-600">
+      <Card className="overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <p className="text-xs text-slate-600 font-medium">
             Showing{" "}
-            <span className="font-semibold text-gray-900">
+            <span className="font-bold text-slate-900">
               {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
               {Math.min(page * PAGE_SIZE, filtered.length)}
             </span>{" "}
-            of <span className="font-semibold text-gray-900">{filtered.length}</span> products
+            of <span className="font-bold text-slate-900">{filtered.length}</span> products
           </p>
+          <span className="text-xs text-slate-400 hidden sm:inline">Real-time synced</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 border-y border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-36">Barcode</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product Name</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Category</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-36">Supplier</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-20">Unit</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-20">Qty</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-24">Reorder Lvl</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Status</th>
-                <th className="py-3 px-4 w-20"></th>
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+              <tr>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-36">Barcode</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider min-w-[200px]">Product Name</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-32">Category</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-36">Supplier</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-20">Unit</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-24">Qty</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-24">Reorder Lvl</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-36">Status</th>
+                <th className="text-right py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-28">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 Array.from({ length: PAGE_SIZE }).map((_, i) => (
                   <tr key={i} className="bg-white">
@@ -726,12 +921,24 @@ export default function ClerkInventory() {
               ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-16 text-center bg-white">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="p-4 bg-gray-100 rounded-full">
-                        <Boxes className="h-8 w-8 text-gray-400" />
+                    <div className="flex flex-col items-center gap-2.5">
+                      <div className="p-3.5 bg-slate-100 rounded-full text-slate-400">
+                        <Boxes className="h-7 w-7" />
                       </div>
-                      <p className="font-semibold text-gray-600">No products found</p>
-                      <p className="text-xs text-gray-400">Try adjusting your search or filters</p>
+                      <p className="font-semibold text-slate-700 text-sm">No products found</p>
+                      <p className="text-xs text-slate-400 max-w-xs">
+                        No items match your search or filters. Try clearing filters to see all inventory.
+                      </p>
+                      {(search || categoryFilter !== "all" || supplierFilter !== "all") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setSearch(""); setCategoryFilter("all"); setSupplierFilter("all"); }}
+                          className="mt-2 text-xs"
+                        >
+                          Clear all filters
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -739,81 +946,86 @@ export default function ClerkInventory() {
                 paginated.map((product, idx) => (
                   <tr
                     key={product.id}
-                    className={`transition-colors hover:bg-blue-50 ${
-                      idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"
+                    className={`transition-colors hover:bg-slate-50/80 ${
+                      idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
                     }`}
                   >
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-sm">
                         {product.barcode}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-semibold text-gray-900 text-sm leading-tight">{product.product_name}</p>
+                    <td className="py-3 px-4">
+                      <p className="font-semibold text-slate-900 text-sm leading-tight">{product.product_name}</p>
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-xs text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">{product.category}</span>
+                    <td className="py-3 px-4">
+                      <span className="text-xs font-medium text-slate-700 bg-slate-100/90 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block">
+                        {product.category}
+                      </span>
                     </td>
-                    <td className="py-3.5 px-4 text-xs text-gray-600 max-w-[140px]">
-                      <span className="truncate block">{product.supplier}</span>
+                    <td className="py-3 px-4 text-xs text-slate-600 max-w-[140px]">
+                      <span className="truncate block font-medium">{product.supplier || "—"}</span>
                     </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="text-xs font-medium text-gray-600">{product.unit}</span>
+                    <td className="py-3 px-4 text-center">
+                      <span className="text-xs font-medium text-slate-600">{product.unit}</span>
                     </td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3 px-4 text-center">
                       {(() => {
                         const parts = formatQuantityParts(product.quantity, product.unit_abbreviation, product.quantity_type);
+                        const isCritical = product.quantity === 0 || product.quantity <= product.reorder_level * 0.5;
+                        const isLow = product.quantity <= product.reorder_level;
                         return (
                           <div className="flex items-center justify-center gap-0.5">
                             <span
-                              className={`font-bold text-base tabular-nums ${
+                              className={`font-bold text-sm tabular-nums ${
                                 product.quantity === 0
-                                  ? "text-gray-400"
-                                  : product.quantity <= product.reorder_level * 0.5
-                                  ? "text-red-600"
-                                  : product.quantity <= product.reorder_level
+                                  ? "text-slate-400"
+                                  : isCritical
+                                  ? "text-rose-600 font-extrabold"
+                                  : isLow
                                   ? "text-amber-600"
-                                  : "text-gray-900"
+                                  : "text-slate-900"
                               }`}
                             >
                               {parts.number}
                             </span>
-                            {parts.unit && <span className="text-xs text-gray-500">{parts.unit}</span>}
+                            {parts.unit && <span className="text-[11px] text-slate-400 ml-0.5">{parts.unit}</span>}
                           </div>
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-4 text-center text-sm text-gray-500 tabular-nums">{product.reorder_level}</td>
-                    <td className="py-3.5 px-4">{statusBadge(product.quantity, product.reorder_level)}</td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                          title="View Details"
+                    <td className="py-3 px-4 text-center text-xs text-slate-500 font-semibold tabular-nums">
+                      {product.reorder_level}
+                    </td>
+                    <td className="py-3 px-4">
+                      {statusBadge(product.quantity, product.reorder_level)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-transparent hover:border-blue-200"
+                          title="View Product Details"
                           onClick={() => { setDetailProduct(product); setDetailOpen(true); }}
                         >
                           <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                        </button>
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-200"
                           title="View Movement Log"
                           onClick={() => { setLogProduct(product); setLogOpen(true); }}
                         >
                           <History className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                          title="Print Barcode"
+                        </button>
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-200"
+                          title="Print Barcode Sticker"
                           onClick={() => { setPrintProduct(product); setPrintOpen(true); }}
                         >
                           <Printer className="h-4 w-4" />
-                        </Button>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -825,36 +1037,42 @@ export default function ClerkInventory() {
 
         {/* Pagination */}
         {!loading && totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100">
-            <div className="flex items-center justify-center gap-1">
+          <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/40">
+            <div className="flex items-center justify-center gap-1.5">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
+                className="h-8 text-xs font-medium border-slate-200"
               >
                 Previous
               </Button>
               {pageNumbers().map((p, i) =>
                 p === "ellipsis" ? (
-                  <span key={`ell-${i}`} className="px-2 text-gray-400">…</span>
+                  <span key={`ell-${i}`} className="px-2 text-slate-400 text-xs">…</span>
                 ) : (
                   <Button
                     key={p}
-                    variant={p === page ? "default" : "ghost"}
+                    variant={p === page ? "default" : "outline"}
                     size="sm"
                     onClick={() => setPage(p)}
-                    className="h-8 w-8 p-0"
+                    className={`h-8 w-8 p-0 text-xs font-semibold ${
+                      p === page
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
                   >
                     {p}
                   </Button>
                 )
               )}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
+                className="h-8 text-xs font-medium border-slate-200"
               >
                 Next
               </Button>
@@ -877,6 +1095,7 @@ export default function ClerkInventory() {
       />
       <BarcodePrintModal
         product={printProduct}
+        storeSettings={storeSettings}
         open={printOpen}
         onClose={() => setPrintOpen(false)}
       />

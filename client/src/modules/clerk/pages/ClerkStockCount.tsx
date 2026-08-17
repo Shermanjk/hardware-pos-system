@@ -68,24 +68,24 @@ interface CountRow {
 // ─── Difference badge ─────────────────────────────────────────────────────────
 function DiffCell({ system, physical, quantityType, allowDecimal }: { system: number; physical: string; quantityType?: "WHOLE_UNIT" | "WEIGHTED"; allowDecimal?: boolean }) {
   if (physical === "") {
-    return <span className="text-gray-300 text-sm font-mono">—</span>;
+    return <span className="text-slate-300 text-sm font-mono">—</span>;
   }
   const physNum = parseFloat(physical);
   const diff = physNum - system;
   const useDecimal = allowDecimal ?? quantityType === "WEIGHTED";
 
   if (diff === 0) return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-bold text-xs">
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs">
       <Minus className="h-3 w-3" /> Match
     </span>
   );
   if (diff > 0) return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold text-xs">
       <TrendingUp className="h-3.5 w-3.5" /> +{useDecimal ? diff.toFixed(3) : Math.round(diff)} over
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-bold text-xs">
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs">
       <TrendingDown className="h-3.5 w-3.5" /> {useDecimal ? diff.toFixed(3) : Math.round(diff)} short
     </span>
   );
@@ -490,65 +490,68 @@ export default function ClerkStockCount() {
       </div>
 
       {/* Table */}
-      <Card className="overflow-hidden border border-gray-200 shadow-sm">
+      <Card className="overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
         {/* Table toolbar */}
-        <div className="px-6 py-4 border-b-2 border-gray-200 bg-white flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
           <div>
-            <p className="text-sm font-bold text-gray-900">
+            <p className="text-sm font-bold text-slate-900">
               {countedRows.length > 0
-                ? <><span className="text-purple-600">{countedRows.length}</span> of {rows.length} products counted</>  
-                : <>{rows.length} products to count</>}
+                ? <><span className="text-purple-600 font-extrabold">{countedRows.length}</span> of {rows.length} products counted</>
+                : <>{rows.length} products in count session</>}
             </p>
-            <p className="text-xs text-gray-500 mt-0.5">Click a row's Physical Count field to begin counting</p>
+            <p className="text-xs text-slate-500 mt-0.5">Enter physical counts to automatically calculate variances</p>
           </div>
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <Input
-              placeholder="Search products…"
+              placeholder="Search products by name or barcode…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-11 h-11 text-sm border-2 border-gray-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              className="pl-10 h-10 text-sm bg-white border-slate-200 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-800 text-white">
+            <thead className="sticky top-0 z-10 bg-slate-900 text-white shadow-sm">
+              <tr>
                 {[
-                  { label: "#",              cls: "w-10 text-center" },
-                  { label: "Barcode",        cls: "" },
-                  { label: "Product Name",   cls: "min-w-[180px]" },
-                  { label: "Category",       cls: "" },
-                  { label: "Unit",           cls: "text-center" },
-                  { label: "System Qty",     cls: "text-center min-w-[130px]" },
-                  { label: "Physical Count", cls: "text-center" },
-                  { label: "Difference",     cls: "text-center" },
-                  { label: "Reason",         cls: "min-w-[140px]" },
+                  { label: "#",              cls: "w-12 text-center" },
+                  { label: "Barcode",        cls: "w-36" },
+                  { label: "Product Name",   cls: "min-w-[200px]" },
+                  { label: "Category",       cls: "w-32" },
+                  { label: "Unit",           cls: "text-center w-20" },
+                  { label: "System Qty",     cls: "text-center min-w-[140px]" },
+                  { label: "Physical Count", cls: "text-center w-36" },
+                  { label: "Difference",     cls: "text-center w-32" },
+                  { label: "Reason",         cls: "min-w-[160px]" },
                   { label: "Remarks",        cls: "min-w-[160px]" },
                 ].map(({ label, cls }) => (
-                  <th key={label} className={`py-3 px-4 text-xs font-bold uppercase tracking-wider whitespace-nowrap text-left ${cls}`}>
+                  <th key={label} className={`py-3.5 px-4 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-left ${cls}`}>
                     {label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} className="border-b border-gray-100">
+                  <tr key={i} className="bg-white">
                     {Array.from({ length: 10 }).map((_, j) => (
-                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full" /></td>
+                      <td key={j} className="py-3.5 px-4"><Skeleton className="h-4 w-full rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3 text-gray-400">
-                      <ClipboardList className="h-10 w-10 opacity-30" />
-                      <p className="font-medium text-gray-500">No products match your search</p>
+                  <td colSpan={10} className="py-16 text-center bg-white">
+                    <div className="flex flex-col items-center gap-2.5">
+                      <div className="p-3.5 bg-slate-100 rounded-full text-slate-400">
+                        <ClipboardList className="h-7 w-7" />
+                      </div>
+                      <p className="font-semibold text-slate-700 text-sm">No products match your search</p>
+                      <p className="text-xs text-slate-400">Try adjusting your search terms</p>
                     </div>
                   </td>
                 </tr>
@@ -561,77 +564,79 @@ export default function ClerkStockCount() {
                   const isCounted = row.physicalCount !== "";
                   const isMarketBased = row.pricing_type === "MARKET_BASED";
 
-                  const rowBg = isOver   ? "bg-blue-50 border-l-4 border-l-blue-400"
-                              : isShort  ? "bg-red-50 border-l-4 border-l-red-400"
-                              : isCounted ? "bg-green-50 border-l-4 border-l-green-400"
-                              : idx % 2 === 0 ? "bg-white" : "bg-gray-50";
+                  const rowBg = isOver   ? "bg-blue-50/60 border-l-4 border-l-blue-500"
+                              : isShort  ? "bg-rose-50/60 border-l-4 border-l-rose-500"
+                              : isCounted ? "bg-emerald-50/60 border-l-4 border-l-emerald-500"
+                              : idx % 2 === 0 ? "bg-white" : "bg-slate-50/30";
 
                   return (
-                    <tr key={row.productId} className={`border-b border-gray-200 hover:brightness-95 transition-all ${rowBg}`}>
+                    <tr key={row.productId} className={`transition-colors hover:bg-slate-50/90 ${rowBg}`}>
                       {/* Row number */}
-                      <td className="py-3.5 px-4 text-center text-xs text-gray-400 font-mono">{idx + 1}</td>
+                      <td className="py-3 px-4 text-center text-xs text-slate-400 font-mono">{idx + 1}</td>
 
                       {/* Barcode */}
-                      <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-1 rounded">
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-sm">
                           {row.barcode}
                         </span>
                       </td>
 
                       {/* Product name */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-gray-900 text-sm leading-tight">{row.productName}</p>
+                      <td className="py-3 px-4">
+                        <p className="font-semibold text-slate-900 text-sm leading-tight">{row.productName}</p>
                         {isMarketBased && (
-                          <span className="inline-block mt-1 text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                          <span className="inline-block mt-1 text-[11px] font-semibold text-orange-700 bg-orange-100/80 border border-orange-200 px-2 py-0.5 rounded-full">
                             Market-Based
                           </span>
                         )}
                       </td>
 
                       {/* Category */}
-                      <td className="py-3.5 px-4">
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{row.category}</span>
+                      <td className="py-3 px-4">
+                        <span className="text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full inline-block">
+                          {row.category}
+                        </span>
                       </td>
 
                       {/* Unit */}
-                      <td className="py-3.5 px-4 text-center text-sm font-medium text-gray-600">{row.unit}</td>
+                      <td className="py-3 px-4 text-center text-xs font-medium text-slate-600">{row.unit}</td>
 
                       {/* System Qty + breakdown */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <SystemQtyCell productId={row.productId} systemQty={row.systemQty} unit={row.unit_abbreviation} quantityType={row.quantity_type} />
                       </td>
 
                       {/* Physical count input */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-4 text-center">
                         <Input
-                          type={row.quantity_type === "WEIGHTED" ? "number" : "number"}
+                          type="number"
                           min={0}
                           step={row.quantity_type === "WEIGHTED" ? "0.001" : "1"}
                           placeholder="—"
                           value={row.physicalCount}
                           onChange={(e) => updateRow(row.productId, "physicalCount", e.target.value)}
-                          className={`h-10 w-28 text-center font-bold text-base border-2 ${
-                            isOver    ? "border-blue-400 bg-blue-50 text-blue-700 focus:ring-blue-200"
-                            : isShort ? "border-red-400 bg-red-50 text-red-700 focus:ring-red-200"
-                            : isCounted ? "border-green-400 bg-green-50 text-green-700 focus:ring-green-200"
-                            : "border-gray-300 bg-white text-gray-900"
+                          className={`h-9 w-28 text-center font-bold text-sm mx-auto rounded-lg transition-all ${
+                            isOver    ? "border-2 border-blue-500 bg-white text-blue-700 focus:ring-2 focus:ring-blue-200"
+                            : isShort ? "border-2 border-rose-500 bg-white text-rose-700 focus:ring-2 focus:ring-rose-200"
+                            : isCounted ? "border-2 border-emerald-500 bg-white text-emerald-700 focus:ring-2 focus:ring-emerald-200"
+                            : "border-slate-300 bg-white text-slate-900 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
                           }`}
                         />
                       </td>
 
                       {/* Difference */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-4 text-center">
                         <DiffCell system={row.systemQty} physical={row.physicalCount} quantityType={row.quantity_type} allowDecimal={row.unit_allow_decimal} />
                       </td>
 
                       {/* Reason (for products with discrepancy) */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         {hasDiff ? (
                           <select
                             value={row.reason || ""}
                             onChange={(e) => updateRow(row.productId, "reason", e.target.value)}
-                            className={`h-8 text-xs border-2 rounded ${
-                              hasDiff && !row.reason ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
+                            className={`h-9 text-xs border rounded-lg px-2 w-full transition-all ${
+                              hasDiff && !row.reason ? "border-rose-400 bg-rose-50/50 text-rose-800" : "border-slate-300 bg-white text-slate-800 focus:border-purple-500"
                             }`}
                           >
                             <option value="">Select reason…</option>
@@ -640,23 +645,23 @@ export default function ClerkStockCount() {
                             ))}
                           </select>
                         ) : (
-                          <span className="text-gray-300 text-xs">—</span>
+                          <span className="text-slate-300 text-xs">—</span>
                         )}
                       </td>
 
                       {/* Remarks (only when Other is selected) */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         {row.reason === "Other" ? (
                           <Input
-                            placeholder="Required…"
+                            placeholder="Specify reason…"
                             value={row.remarks}
                             onChange={(e) => updateRow(row.productId, "remarks", e.target.value)}
-                            className={`h-8 text-xs border-2 ${
-                              !row.remarks.trim() ? "border-red-400 bg-red-50" : "border-gray-300 bg-white"
+                            className={`h-9 text-xs border rounded-lg ${
+                              !row.remarks.trim() ? "border-rose-400 bg-rose-50/50 focus:border-rose-500" : "border-slate-300 bg-white"
                             }`}
                           />
                         ) : (
-                          <span className="text-gray-300 text-xs">—</span>
+                          <span className="text-slate-300 text-xs">—</span>
                         )}
                       </td>
                     </tr>
@@ -669,24 +674,24 @@ export default function ClerkStockCount() {
 
         {/* Footer */}
         {!loading && (
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 text-xs">
+          <div className="px-6 py-3.5 border-t border-slate-200/80 bg-slate-50/80 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-green-400 inline-block" /> Matched
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm" /> Matched
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" /> Over count
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block shadow-sm" /> Over Count
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Short count
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm" /> Short Count
               </span>
             </div>
             <Button
               disabled={!canComplete}
               onClick={() => setConfirmOpen(true)}
-              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm text-xs h-9 px-4"
             >
-              <CheckCircle2 className="h-4 w-4" /> Complete Count
+              <CheckCircle2 className="h-4 w-4" /> Complete Stock Count
             </Button>
           </div>
         )}

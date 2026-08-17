@@ -48,7 +48,12 @@ export function getPrinterEngine(config: BarcodePrinterConfig): BarcodePrinterEn
   return engine;
 }
 
-export { BARCODE_PRINTER_CONFIG } from "./config";
+export {
+  BARCODE_PRINTER_CONFIG,
+  createDynamicBarcodeConfig,
+  getDynamicBarcodeMargins,
+} from "./config";
 export type { BarcodePrinterConfig } from "./config";
 export type { BarcodePrinterEngine, BarcodePrintItem } from "./types";
+
 

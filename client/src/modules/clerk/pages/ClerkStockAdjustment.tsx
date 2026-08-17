@@ -46,7 +46,15 @@ function TypeBadge({ type }: { type: string }) {
   const cfg = ADJUSTMENT_TYPES.find((t) => t.value === type) || ADJUSTMENT_TYPES[3];
   const Icon = cfg.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+      type === "Damaged"
+        ? "bg-rose-50 text-rose-700 border-rose-200"
+        : type === "Lost"
+        ? "bg-orange-50 text-orange-700 border-orange-200"
+        : type === "Expired"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-blue-50 text-blue-700 border-blue-200"
+    }`}>
       <Icon className="h-3 w-3" />{cfg.label}
     </span>
   );
@@ -502,51 +510,61 @@ export default function ClerkStockAdjustment() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Adjustments", value: totalAdjustments, color: "text-gray-900", bg: "bg-gray-50", border: "" },
-          { label: "Damaged", value: damagedCount, color: "text-red-600", bg: "bg-red-50", border: "border-red-100" },
-          { label: "Lost", value: lostCount, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
-          { label: "Expired", value: expiredCount, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
-        ].map((s) => (
-          <Card key={s.label} className={`p-4 text-center ${s.bg} ${s.border}`}>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-500 mt-1 font-medium">{s.label}</p>
-          </Card>
-        ))}
+          { label: "Total Adjustments", value: totalAdjustments, color: "text-slate-900", iconColor: "text-slate-600", bg: "bg-slate-50", icon: SlidersHorizontal },
+          { label: "Damaged Items", value: damagedCount, color: "text-rose-700", iconColor: "text-rose-600", bg: "bg-rose-50", icon: Flame },
+          { label: "Lost Items", value: lostCount, color: "text-orange-700", iconColor: "text-orange-600", bg: "bg-orange-50", icon: PackageX },
+          { label: "Expired Items", value: expiredCount, color: "text-amber-700", iconColor: "text-amber-600", bg: "bg-amber-50", icon: Clock4 },
+        ].map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.label} className="p-4 bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">{s.label}</p>
+                </div>
+                <div className={`p-2.5 rounded-xl ${s.bg} ${s.iconColor} shrink-0`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
       {/* History table */}
-      <Card className="overflow-hidden">
-        <div className="px-6 py-4 border-b-2 border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <Card className="overflow-hidden border border-slate-200/80 shadow-sm rounded-xl bg-white">
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Adjustment History</h2>
-            <p className="text-xs text-gray-500 mt-0.5">All recorded stock adjustments</p>
+            <h2 className="text-sm font-bold text-slate-900">Adjustment History</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Audit log of all stock adjustments</p>
           </div>
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <Input
-              placeholder="Search adjustments…"
+              placeholder="Search by product, barcode, or type…"
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
-              className="pl-11 h-11 text-sm border-2 border-gray-300 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              className="pl-10 h-10 text-sm bg-white border-slate-200 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-100 transition-all"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-100 border-y border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide whitespace-nowrap w-16">ID</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[180px]">Product</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Type</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-32">Deducted / Set</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">Prev. Qty</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-28">New Qty</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide min-w-[200px]">Reason</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 text-xs uppercase tracking-wide w-40">Date</th>
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+              <tr>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-16">ID</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider min-w-[200px]">Product</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-36">Type</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-32">Adjustment</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-24">Prev Qty</th>
+                <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-24">New Qty</th>
+                <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider min-w-[200px]">Reason / Reference</th>
+                <th className="text-right py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider w-40">Date & Time</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {loadingLogs ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="bg-white">
@@ -558,48 +576,50 @@ export default function ClerkStockAdjustment() {
               ) : filteredHistory.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-16 text-center bg-white">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="p-4 bg-gray-100 rounded-full">
-                        <SlidersHorizontal className="h-8 w-8 text-gray-400" />
+                    <div className="flex flex-col items-center gap-2.5">
+                      <div className="p-3.5 bg-slate-100 rounded-full text-slate-400">
+                        <SlidersHorizontal className="h-7 w-7" />
                       </div>
-                      <p className="font-semibold text-gray-600">No adjustments found</p>
-                      <p className="text-xs text-gray-400">Try adjusting your search or create a new adjustment</p>
+                      <p className="font-semibold text-slate-700 text-sm">No adjustments found</p>
+                      <p className="text-xs text-slate-400 max-w-xs">
+                        No adjustment records match your search. Record a new adjustment when stock variances occur.
+                      </p>
                     </div>
                   </td>
                 </tr>
               ) : filteredHistory.map((r, idx) => (
-                <tr key={r.id} className={`transition-colors hover:bg-amber-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                  <td className="py-3.5 px-4">
-                    <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                <tr key={r.id} className={`transition-colors hover:bg-slate-50/80 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
+                  <td className="py-3 px-4">
+                    <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded shadow-sm">
                       #{r.id}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4">
-                    <p className="font-semibold text-gray-900 text-sm leading-tight">{r.product_name}</p>
-                    <p className="text-xs text-gray-400 font-mono mt-0.5">{r.barcode}</p>
+                  <td className="py-3 px-4">
+                    <p className="font-semibold text-slate-900 text-sm leading-tight">{r.product_name}</p>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">{r.barcode}</p>
                   </td>
-                  <td className="py-3.5 px-4"><TypeBadge type={r.action} /></td>
-                  <td className="py-3.5 px-4 text-center">
-                    <span className={`inline-flex items-center justify-center font-bold text-sm px-2.5 py-1 rounded-lg ${
+                  <td className="py-3 px-4"><TypeBadge type={r.action} /></td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`inline-flex items-center justify-center font-extrabold text-xs px-2.5 py-1 rounded-full tabular-nums shadow-sm ${
                       r.action === 'Correction'
                         ? 'text-blue-700 bg-blue-50 border border-blue-200'
-                        : 'text-red-700 bg-red-50 border border-red-200'
+                        : 'text-rose-700 bg-rose-50 border border-rose-200'
                     }`}>
                       {r.action === 'Correction' ? `→ ${Math.abs(r.quantity_change)}` : `− ${Math.abs(r.quantity_change)}`}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <span className="text-sm font-medium text-gray-500">{r.quantity}</span>
+                  <td className="py-3 px-4 text-center">
+                    <span className="text-xs font-semibold text-slate-500 tabular-nums">{r.quantity}</span>
                   </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <span className="text-sm font-bold text-gray-900">{r.remaining_stock}</span>
+                  <td className="py-3 px-4 text-center">
+                    <span className="text-sm font-bold text-slate-900 tabular-nums">{r.remaining_stock}</span>
                   </td>
-                  <td className="py-3.5 px-4">
-                    <p className="text-sm text-gray-700 line-clamp-2 max-w-[220px]">{r.reference}</p>
+                  <td className="py-3 px-4">
+                    <p className="text-xs text-slate-700 line-clamp-2 max-w-[220px] font-medium">{r.reference || r.notes || "—"}</p>
                   </td>
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <p className="text-xs font-medium text-gray-700">{new Date(r.created_at).toLocaleDateString()}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <p className="text-xs font-semibold text-slate-800">{new Date(r.created_at).toLocaleDateString()}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </td>
                 </tr>
               ))}

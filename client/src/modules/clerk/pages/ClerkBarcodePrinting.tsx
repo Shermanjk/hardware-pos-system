@@ -21,8 +21,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProducts, type ProductRecord } from "@/shared/api/productsApi";
+import { getStoreSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import {
     BARCODE_PRINTER_CONFIG,
+    createDynamicBarcodeConfig,
     getPrinterEngine,
     type BarcodePrinterConfig,
 } from "@/shared/services/barcodePrinter";
@@ -55,7 +57,7 @@ function BarcodePreview({ code, heightMm, symbology }: {
         background:   "transparent",
         lineColor:    "#000",
       });
-      // Stretch bars horizontally to fill the label width seamlessly (e.g. 0004 or long EANs)
+      // Stretch bars horizontally to fill the label width seamlessly
       node.setAttribute("preserveAspectRatio", "none");
     } catch { /* leave empty for invalid code */ }
   }, [code, heightMm, symbology]);
@@ -63,21 +65,24 @@ function BarcodePreview({ code, heightMm, symbology }: {
   return <svg ref={svgCallbackRef} className="w-full h-full block" />;
 }
 
-// ─── To-scale label preview card ─────────────────────────────────────────────
+// ─── To-scale dynamic label preview card ─────────────────────────────────────
 
 function LabelCard({ product, config }: { product: ProductRecord; config: BarcodePrinterConfig }) {
-  const scale = 3.2; // px per mm for on-screen preview
-  const w     = config.labelWidthMm  * scale;
-  const h     = config.labelHeightMm * scale;
-  const fs    = config.fontSizePt * 1.1;
-  const pt    = config.marginTopMm    * scale;
-  const pb    = config.marginBottomMm * scale;
-  const pl    = config.marginLeftMm   * scale;
-  const pr    = config.marginRightMm  * scale;
+  const isSmall = config.labelWidthMm <= 35 || config.labelHeightMm <= 22;
+  const scale   = isSmall ? 4.2 : 3.2; // px per mm for crisp on-screen preview
+  const w       = config.labelWidthMm  * scale;
+  const h       = config.labelHeightMm * scale;
+  const pt      = config.marginTopMm    * scale;
+  const pb      = config.marginBottomMm * scale;
+  const pl      = config.marginLeftMm   * scale;
+  const pr      = config.marginRightMm  * scale;
+
+  const storeFontSize   = Math.max(9, Math.min(18, config.fontSizePt * 1.15));
+  const barcodeFontSize = Math.max(8, Math.min(16, config.fontSizePt * 0.95));
 
   return (
     <div
-      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-sm rounded-sm"
+      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm"
       style={{
         width: w,
         height: h,
@@ -90,8 +95,9 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
     >
       {config.showStoreName && config.storeName && (
         <p
-          className="font-bold text-center leading-tight truncate w-full flex-shrink-0 mb-0.5"
-          style={{ fontFamily: config.fontFamily, fontSize: fs }}
+          className="font-extrabold uppercase text-center leading-tight truncate w-full flex-shrink-0 mb-0.5 tracking-tight text-gray-900"
+          style={{ fontFamily: config.fontFamily, fontSize: storeFontSize }}
+          title={config.storeName}
         >
           {config.storeName}
         </p>
@@ -105,8 +111,12 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       </div>
       {config.showBarcodeText && (
         <p
-          className="font-mono text-center tracking-widest leading-none flex-shrink-0 mt-0.5 font-semibold"
-          style={{ fontFamily: config.fontFamily, fontSize: fs * 0.85 }}
+          className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5"
+          style={{
+            fontFamily: config.fontFamily,
+            fontSize: barcodeFontSize,
+            letterSpacing: isSmall ? "0.4px" : "1.2px",
+          }}
         >
           {product.barcode}
         </p>
@@ -118,66 +128,59 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 // ─── Label size presets ───────────────────────────────────────────────────────
 
 const SIZE_PRESETS = [
-  { label: "50 × 30 mm (Standard)", w: 50, h: 30 },
-  { label: "30 × 20 mm (Small)",    w: 30, h: 20 },
-  { label: "38 × 25 mm",            w: 38, h: 25 },
-  { label: "60 × 40 mm (Medium)",   w: 60, h: 40 },
-  { label: "100 × 50 mm (Large)",   w: 100, h: 50 },
-  { label: "Custom",                w: 0,  h: 0  },
+  { label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
+  { label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
+  { label: "38 × 25 mm",                     w: 38, h: 25 },
+  { label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
+  { label: "100 × 50 mm (Large)",            w: 100, h: 50 },
+  { label: "Custom Size",                    w: 0,  h: 0  },
 ] as const;
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────
 
 interface PrintModalProps {
-  product:   ProductRecord | null;
-  open:      boolean;
-  onClose:   () => void;
-  onPrinted: (product: ProductRecord, count: number) => void;
+  product:       ProductRecord | null;
+  storeSettings: StoreSettings | null;
+  open:          boolean;
+  onClose:       () => void;
+  onPrinted:     (product: ProductRecord, count: number) => void;
 }
 
-function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
+function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintModalProps) {
   const [quantity,   setQuantity]   = useState(1);
   const [printing,   setPrinting]   = useState(false);
-  const [presetKey,  setPresetKey]  = useState("50×30");
-  const [customW,    setCustomW]    = useState(BARCODE_PRINTER_CONFIG.labelWidthMm);
-  const [customH,    setCustomH]    = useState(BARCODE_PRINTER_CONFIG.labelHeightMm);
+  const [presetKey,  setPresetKey]  = useState(() => localStorage.getItem("pos_barcode_label_preset") || "30×20");
+  const [customW,    setCustomW]    = useState(30);
+  const [customH,    setCustomH]    = useState(20);
 
   useEffect(() => {
     if (open) {
       setQuantity(1);
-      setPresetKey("50×30");
-      setCustomW(BARCODE_PRINTER_CONFIG.labelWidthMm);
-      setCustomH(BARCODE_PRINTER_CONFIG.labelHeightMm);
+      const savedPreset = localStorage.getItem("pos_barcode_label_preset") || "30×20";
+      setPresetKey(savedPreset);
     }
   }, [open, product?.id]);
 
-  // Build the active config, merging the selected physical dimensions directly
-  const activeConfig: BarcodePrinterConfig = (() => {
+  const handlePresetChange = (newKey: string) => {
+    setPresetKey(newKey);
+    localStorage.setItem("pos_barcode_label_preset", newKey);
+  };
+
+  const storeName = storeSettings?.store_name || BARCODE_PRINTER_CONFIG.storeName || "ISRA HARDWARE TRADING";
+
+  // Build the active config dynamically based on chosen dimensions
+  const activeConfig: BarcodePrinterConfig = useMemo(() => {
     if (presetKey === "custom") {
       const w = Math.max(10, customW);
       const h = Math.max(5, customH);
-      return {
-        ...BARCODE_PRINTER_CONFIG,
-        labelWidthMm:     w,
-        labelHeightMm:    h,
-        barcodeHeightMm:  Math.min(
-          BARCODE_PRINTER_CONFIG.barcodeHeightMm,
-          Math.max(5, h - BARCODE_PRINTER_CONFIG.marginTopMm - BARCODE_PRINTER_CONFIG.marginBottomMm - 6)
-        ),
-      };
+      return createDynamicBarcodeConfig(w, h, { storeName });
     }
     const preset = SIZE_PRESETS.find((p) => `${p.w}×${p.h}` === presetKey);
-    if (!preset || preset.w === 0) return BARCODE_PRINTER_CONFIG;
-    return {
-      ...BARCODE_PRINTER_CONFIG,
-      labelWidthMm:     preset.w,
-      labelHeightMm:    preset.h,
-      barcodeHeightMm:  Math.min(
-        BARCODE_PRINTER_CONFIG.barcodeHeightMm,
-        Math.max(5, preset.h - BARCODE_PRINTER_CONFIG.marginTopMm - BARCODE_PRINTER_CONFIG.marginBottomMm - 6)
-      ),
-    };
-  })();
+    if (!preset || preset.w === 0) {
+      return createDynamicBarcodeConfig(30, 20, { storeName });
+    }
+    return createDynamicBarcodeConfig(preset.w, preset.h, { storeName });
+  }, [presetKey, customW, customH, storeName]);
 
   const clampedQty = Math.max(1, Math.min(500, quantity));
 
@@ -236,7 +239,7 @@ function PrintModal({ product, open, onClose, onPrinted }: PrintModalProps) {
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Label Size</label>
             <Select
               value={presetKey}
-              onValueChange={setPresetKey}
+              onValueChange={handlePresetChange}
               disabled={printing}
             >
               <SelectTrigger className="h-9">
@@ -356,6 +359,7 @@ type PrintTabType = "products" | "history";
 export default function ClerkBarcodePrinting() {
   const [loading,         setLoading]         = useState(true);
   const [products,        setProducts]        = useState<ProductRecord[]>([]);
+  const [storeSettings,   setStoreSettings]   = useState<StoreSettings | null>(null);
   const [search,          setSearch]          = useState("");
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
   const [modalOpen,       setModalOpen]       = useState(false);
@@ -366,9 +370,11 @@ export default function ClerkBarcodePrinting() {
   }[]>([]);
 
   useEffect(() => {
-    getProducts()
-      .then(setProducts)
-      .catch(() => toast.error("Failed to load products"))
+    Promise.all([
+      getProducts().then(setProducts),
+      getStoreSettings().then(setStoreSettings).catch(() => null),
+    ])
+      .catch(() => toast.error("Failed to load products or store settings"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -414,54 +420,54 @@ export default function ClerkBarcodePrinting() {
       </div>
 
       {/* Search / scan bar */}
-      <div className="bg-white border-2 border-gray-300 rounded-xl p-4 shadow-sm">
+      <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm">
         <div className="relative">
           <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
           <Input
-            placeholder="Scan barcode or search by product name…"
+            placeholder="Scan barcode with scanner or search by product name…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setLookupError(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } }}
-            className="pl-12 h-12 text-base border-2 border-gray-300 bg-white font-medium rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            className="pl-12 h-11 text-base border-slate-200 bg-white font-medium rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
           />
         </div>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          Scan a barcode to print instantly, or type a product name to filter
+        <p className="text-xs text-slate-400 mt-2 text-center">
+          Scan a barcode to open print preview instantly, or type a product name to filter below
         </p>
         {lookupError && (
-          <div className="mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mt-3 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-700">
             <Barcode className="h-4 w-4 shrink-0" /> {lookupError}
           </div>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex items-center border-b border-gray-200 bg-gray-50">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="flex items-center border-b border-slate-200 bg-slate-50/70 px-2">
           {(["products", "history"] as PrintTabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all capitalize ${
+              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all capitalize ${
                 activeTab === tab
-                  ? "border-blue-500 text-blue-800 bg-white"
-                  : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  ? "border-blue-600 text-blue-700 bg-white rounded-t-lg"
+                  : "border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100/60"
               }`}
             >
               {tab === "products" ? (
                 <>
-                  <Package className={`h-4 w-4 ${activeTab === tab ? "text-blue-600" : "text-gray-400"}`} />
+                  <Package className={`h-4 w-4 ${activeTab === tab ? "text-blue-600" : "text-slate-400"}`} />
                   Products
                   {filtered.length > 0 && (
-                    <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{filtered.length}</span>
+                    <span className="text-[11px] bg-slate-200/80 px-2 py-0.5 rounded-full text-slate-700 font-bold">{filtered.length}</span>
                   )}
                 </>
               ) : (
                 <>
-                  <Printer className={`h-4 w-4 ${activeTab === tab ? "text-blue-600" : "text-gray-400"}`} />
+                  <Printer className={`h-4 w-4 ${activeTab === tab ? "text-blue-600" : "text-slate-400"}`} />
                   Print History
                   {printHistory.length > 0 && (
-                    <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{printHistory.length}</span>
+                    <span className="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{printHistory.length}</span>
                   )}
                 </>
               )}
@@ -475,53 +481,55 @@ export default function ClerkBarcodePrinting() {
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <Card key={i} className="p-4"><Skeleton className="h-28 w-full" /></Card>
+                  <Card key={i} className="p-4 border-slate-200"><Skeleton className="h-28 w-full rounded-lg" /></Card>
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="py-16 text-center text-gray-400">
-                <Barcode className="h-12 w-12 opacity-30 mx-auto mb-3" />
-                <p className="font-medium text-gray-600">No products found</p>
-                <p className="text-sm">Try a different search term</p>
+              <div className="py-16 text-center text-slate-400">
+                <Barcode className="h-10 w-10 opacity-30 mx-auto mb-2 text-slate-400" />
+                <p className="font-semibold text-slate-700 text-sm">No products found</p>
+                <p className="text-xs text-slate-400 mt-0.5">Try searching with a different name or barcode</p>
               </div>
             ) : (
               <>
-                <p className="px-4 pt-4 pb-2 text-sm text-gray-500">
-                  <span className="font-semibold text-gray-900">{filtered.length}</span> product{filtered.length !== 1 ? "s" : ""} — click a card to print
+                <p className="px-5 pt-4 pb-2 text-xs text-slate-500 font-medium">
+                  Showing <span className="font-bold text-slate-900">{filtered.length}</span> registered product{filtered.length !== 1 ? "s" : ""} — click any card to configure and print
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
                   {filtered.map((product) => (
                     <Card
                       key={product.id}
-                      className="p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
+                      className="p-4 cursor-pointer hover:shadow-md hover:border-blue-300 border-slate-200/80 transition-all group rounded-xl bg-white flex flex-col justify-between"
                       onClick={() => openModal(product)}
                     >
-                      <div className="flex justify-center mb-3 p-2 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors">
-                        <div className="w-full max-w-[130px]">
-                          <BarcodePreview
-                            code={product.barcode}
-                            heightMm={BARCODE_PRINTER_CONFIG.barcodeHeightMm * 0.7}
-                            symbology={BARCODE_PRINTER_CONFIG.barcodeSymbology}
-                          />
+                      <div>
+                        <div className="flex justify-center mb-3 p-2.5 bg-slate-50 border border-slate-100 rounded-lg group-hover:bg-blue-50/50 transition-colors">
+                          <div className="w-full max-w-[130px]">
+                            <BarcodePreview
+                              code={product.barcode}
+                              heightMm={BARCODE_PRINTER_CONFIG.barcodeHeightMm * 0.7}
+                              symbology={BARCODE_PRINTER_CONFIG.barcodeSymbology}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <p className="font-mono text-xs font-bold tracking-widest text-gray-600 text-center mb-2">
-                        {product.barcode}
-                      </p>
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
-                          {product.product_name}
+                        <p className="font-mono text-xs font-bold tracking-widest text-slate-700 text-center mb-2">
+                          {product.barcode}
                         </p>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                          <Tag className="h-3 w-3" /><span>{product.category}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                          <Layers className="h-3 w-3" /><span>{product.unit}</span>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-slate-900 leading-tight line-clamp-2">
+                            {product.product_name}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <Tag className="h-3 w-3 text-slate-400" /><span>{product.category}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <Layers className="h-3 w-3 text-slate-400" /><span>{product.unit}</span>
+                          </div>
                         </div>
                       </div>
                       <Button
                         size="sm"
-                        className="w-full mt-3 gap-1.5 bg-blue-600 hover:bg-blue-700 text-xs h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="w-full mt-3.5 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8 shadow-sm transition-all"
                         onClick={(e) => { e.stopPropagation(); openModal(product); }}
                       >
                         <Printer className="h-3.5 w-3.5" /> Print Label
@@ -537,32 +545,34 @@ export default function ClerkBarcodePrinting() {
         {/* History tab */}
         {activeTab === "history" && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {["Product", "Labels", "Time"].map((h) => (
-                    <th key={h} className="text-left py-3 px-5 font-semibold text-gray-600 text-xs uppercase tracking-wide">{h}</th>
-                  ))}
+                <tr className="bg-slate-100/70 border-b border-slate-200">
+                  <th className="text-left py-3 px-5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Product</th>
+                  <th className="text-center py-3 px-5 font-semibold text-slate-600 text-xs uppercase tracking-wider w-36">Labels Printed</th>
+                  <th className="text-right py-3 px-5 font-semibold text-slate-600 text-xs uppercase tracking-wider w-40">Time</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {printHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-12 text-center text-gray-400 text-sm">
-                      No labels printed this session
+                    <td colSpan={3} className="py-14 text-center text-slate-400 text-xs">
+                      No labels printed in this session yet.
                     </td>
                   </tr>
                 ) : (
                   printHistory.map((entry, i) => (
-                    <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <tr key={i} className={`transition-colors hover:bg-slate-50/80 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
                       <td className="py-3 px-5">
-                        <p className="text-sm font-semibold text-gray-900">{entry.product.product_name}</p>
-                        <p className="text-xs text-gray-400 font-mono mt-0.5">{entry.product.barcode}</p>
+                        <p className="text-sm font-semibold text-slate-900">{entry.product.product_name}</p>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">{entry.product.barcode}</p>
                       </td>
-                      <td className="py-3 px-5 text-sm font-medium text-gray-700">
-                        {entry.count} label{entry.count !== 1 ? "s" : ""}
+                      <td className="py-3 px-5 text-center">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold tabular-nums">
+                          {entry.count} label{entry.count !== 1 ? "s" : ""}
+                        </span>
                       </td>
-                      <td className="py-3 px-5 text-xs text-gray-500 whitespace-nowrap">
+                      <td className="py-3 px-5 text-xs text-slate-500 whitespace-nowrap text-right font-medium">
                         {entry.time.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </td>
                     </tr>
@@ -576,6 +586,7 @@ export default function ClerkBarcodePrinting() {
 
       <PrintModal
         product={selectedProduct}
+        storeSettings={storeSettings}
         open={modalOpen}
         onClose={() => { setModalOpen(false); setSelectedProduct(null); }}
         onPrinted={(p, count) => setPrintHistory((h) => [{ product: p, count, time: new Date() }, ...h])}
