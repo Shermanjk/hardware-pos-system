@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { pool } from "../db.js";
+import { getLatestAvailableDatabaseVersion } from "./migrationService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,11 +94,18 @@ export async function getInstalledVersion(): Promise<SystemVersion | null> {
 export async function getVersionStatus(): Promise<VersionStatus> {
   const versionFile = readVersionFile();
   const installedVersion = await getInstalledVersion();
+  const latestDbFileVer = getLatestAvailableDatabaseVersion();
 
   const downloadedAppVersion = versionFile?.applicationVersion || "1.0.0";
-  const downloadedDbVersion = versionFile?.databaseVersion || "030";
+  let downloadedDbVersion = versionFile?.databaseVersion || "000";
+  
+  // If migration files on disk have a higher version than version.json, use disk version
+  if (compareVersions(latestDbFileVer, downloadedDbVersion) > 0) {
+    downloadedDbVersion = latestDbFileVer;
+  }
+
   const installedAppVersion = installedVersion?.application_version || "1.0.0";
-  const installedDbVersion = installedVersion?.database_version || "030";
+  const installedDbVersion = installedVersion?.database_version || "000";
 
   // Production updates are forward-only. A stale configuration file must
   // never make the updater offer (or record) a downgrade.

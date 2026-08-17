@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "server": "tsx watch server/index.ts",
-    "build": "vite build && rimraf server-dist && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server-dist && mkdir server-dist\\config && copy config\\version.json server-dist\\config\\version.json && copy config\\backup.json server-dist\\config\\backup.json",
+    "build": "vite build && node scripts/build-server.js",
     "start": "set NODE_ENV=production && node server-dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",

@@ -1,18 +1,20 @@
 import { Request, Response, Router } from "express";
+import fs from "fs";
+import path from "path";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
+import { createBackup } from "../services/backupService.js";
 import {
-    createBackup,
-} from "../services/backupService.js";
-import { checkForUpdates, pullApplicationUpdate, buildApplicationUpdate } from "../services/gitUpdateService.js";
+    applyStagedUpdate,
+    checkForReleaseUpdates,
+    downloadReleaseZip,
+    extractReleaseBundle,
+    fetchLatestRelease,
+} from "../services/githubReleaseService.js";
+import { checkForUpdates, pullApplicationUpdate } from "../services/gitUpdateService.js";
 import { maintenanceService } from "../services/maintenanceService.js";
-import {
-    executePendingMigrations,
-} from "../services/migrationService.js";
-import {
-    getVersionStatus,
-    updateInstalledVersion,
-} from "../services/versionService.js";
+import { executePendingMigrations } from "../services/migrationService.js";
+import { getVersionStatus, updateInstalledVersion } from "../services/versionService.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 
 const router = Router();
@@ -21,7 +23,28 @@ const router = Router();
 router.get("/version", authenticate, async (req: Request, res: Response) => {
   try {
     const status = await getVersionStatus();
-    res.status(200).json(status);
+    
+    // Optionally augment with latest release info if reachable
+    let releaseInfo = null;
+    try {
+      const check = await checkForReleaseUpdates();
+      if (check.release) {
+        releaseInfo = {
+          latestVersion: check.latestVersion,
+          releaseName: check.release.name,
+          releaseNotes: check.release.body,
+          publishedAt: check.release.publishedAt,
+          hasUpdate: check.hasUpdate,
+        };
+      }
+    } catch {
+      // Offline or GitHub unreachable - proceed with local status
+    }
+
+    res.status(200).json({
+      ...status,
+      releaseInfo,
+    });
   } catch (error) {
     console.error("[systemUpdate/version] Error:", error);
     res.status(500).json({ message: "Failed to get version status" });
@@ -34,10 +57,11 @@ router.get("/check", async (req: Request, res: Response) => {
   try {
     const status = await getVersionStatus();
     const clientVersion = req.headers["x-client-version"] as string;
-    
-    // If client version differs from installed version, an update was installed
-    const updateInstalled = !!(clientVersion && clientVersion !== status.installedVersion);
-    
+
+    const updateInstalled = Boolean(
+      clientVersion && clientVersion !== status.installedVersion
+    );
+
     res.status(200).json({
       installedVersion: status.installedVersion,
       updateInstalled,
@@ -49,41 +73,48 @@ router.get("/check", async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/system-update/fetch ───────────────────────────────────────────
-// Check for available updates by running git fetch + comparing commits.
-// Does NOT modify the working tree — safe to call at any time.
+// Check for available updates via GitHub Releases (or Git fallback)
 router.post("/fetch", authenticate, requireRole("Admin"), async (req: Request, res: Response) => {
   try {
-    const fetchResult = await checkForUpdates();
     const versionStatus = await getVersionStatus();
-    res.status(200).json({
-      message: fetchResult.hasUpdates ? "Updates are available" : "Already up to date",
-      hasUpdates: fetchResult.hasUpdates,
-      ...versionStatus,
-    });
+    let releaseCheck = null;
+
+    try {
+      releaseCheck = await checkForReleaseUpdates();
+    } catch (ghErr: any) {
+      console.log("[systemUpdate/fetch] GitHub check skipped/unavailable:", ghErr.message);
+    }
+
+    if (releaseCheck?.release) {
+      const hasUpdates = releaseCheck.hasUpdate || versionStatus.databaseUpdateRequired;
+      return res.status(200).json({
+        ...versionStatus,
+        message: hasUpdates ? "New release update available" : "Already running latest version",
+        hasUpdates,
+        updateAvailable: releaseCheck.hasUpdate,
+        downloadedVersion: releaseCheck.latestVersion,
+        release: releaseCheck.release,
+      });
+    }
+
+    // Fallback: Git comparison
+    try {
+      const gitFetch = await checkForUpdates();
+      return res.status(200).json({
+        message: gitFetch.hasUpdates ? "Updates are available" : "Already up to date",
+        hasUpdates: gitFetch.hasUpdates,
+        ...versionStatus,
+      });
+    } catch {
+      return res.status(200).json({
+        message: "Already up to date",
+        hasUpdates: false,
+        ...versionStatus,
+      });
+    }
   } catch (error) {
     console.error("[systemUpdate/fetch] Error:", error);
     res.status(500).json({ message: "Failed to check for updates" });
-  }
-});
-
-// ─── POST /api/system-update/pull ────────────────────────────────────────────
-// Pull latest changes from remote repository (git pull --ff-only).
-// After this, config/version.json in the working tree is up-to-date so
-// GET /version will reflect the new downloaded version immediately.
-router.post("/pull", authenticate, requireRole("Admin"), async (req: Request, res: Response) => {
-  try {
-    const pullResult = await pullApplicationUpdate();
-    // Re-read version status after pull so the response includes the new versions
-    const versionStatus = await getVersionStatus();
-    res.status(200).json({
-      message: pullResult.changed ? "Updates downloaded successfully" : "Already up to date",
-      changed: pullResult.changed,
-      output: pullResult.output,
-      ...versionStatus,
-    });
-  } catch (error) {
-    console.error("[systemUpdate/pull] Error:", error);
-    res.status(500).json({ message: "Failed to pull from repository" });
   }
 });
 
@@ -93,14 +124,13 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
     return res.status(409).json({ message: "An update or maintenance operation is already in progress" });
   }
 
-  // Leave maintenance only when no database/application change was attempted.
-  // After migrations begin, recovery must be deliberate; after success the
-  // restarted process begins in normal mode.
   let keepMaintenance = false;
+  const tempDir = path.resolve(process.cwd(), "temp-update");
+  const tempZipPath = path.join(tempDir, "isra-pos-update.zip");
+  const stagingDir = path.join(tempDir, "staging");
+
   try {
     const userId = req.user!.id;
-    // Maintenance first blocks all new writes. Existing critical work is allowed
-    // to finish before backup, source update, or migrations begin.
     const drained = await maintenanceService.waitForDrain();
     if (!drained) {
       return res.status(409).json({
@@ -109,52 +139,140 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
       });
     }
 
-    // Update the working tree before reading the target versions so migrations
-    // always come from the exact application revision being installed.
-    const pullResult = await pullApplicationUpdate();
-    const versionStatus = await getVersionStatus();
-
-    if (!pullResult.changed && !versionStatus.updateAvailable && !versionStatus.databaseUpdateRequired) {
-      return res.status(400).json({ message: "No update available" });
+    // Step 1: Check GitHub Release
+    let releaseInfo = null;
+    try {
+      releaseInfo = await fetchLatestRelease();
+    } catch (err: any) {
+      console.log("[systemUpdate/install] GitHub Release fetch warning:", err.message);
     }
 
-    // Step 1: Create backup
-    const backupResult = await createBackup(userId, "pre_update");
-    if (!backupResult.success) {
-      return res.status(500).json({
-        message: "Failed to create backup before update",
-        error: backupResult.error,
+    let targetAppVersion = "";
+    let targetDbVersion = "";
+
+    // Step 2: Download & unpack pre-built release bundle if available
+    if (releaseInfo?.zipAssetUrl) {
+      console.log(`[systemUpdate/install] Downloading release ${releaseInfo.tagName}...`);
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await downloadReleaseZip(releaseInfo.zipAssetUrl, tempZipPath);
+      console.log("[systemUpdate/install] Extracting release bundle...");
+      await extractReleaseBundle(tempZipPath, stagingDir);
+
+      // Step 3: Create database pre-update backup
+      console.log("[systemUpdate/install] Creating pre-update backup...");
+      const backupResult = await createBackup(userId, "pre_update");
+      if (!backupResult.success) {
+        return res.status(500).json({
+          message: "Failed to create backup before update",
+          error: backupResult.error,
+        });
+      }
+
+      // Read target version from staging config if available
+      const stagingVersionPath = path.join(stagingDir, "config", "version.json");
+      if (fs.existsSync(stagingVersionPath)) {
+        try {
+          const vData = JSON.parse(fs.readFileSync(stagingVersionPath, "utf-8"));
+          targetAppVersion = vData.applicationVersion || releaseInfo.version;
+          targetDbVersion = vData.databaseVersion || "000";
+        } catch {
+          targetAppVersion = releaseInfo.version;
+        }
+      } else {
+        targetAppVersion = releaseInfo.version;
+      }
+
+      // Step 4: Apply staging files
+      console.log("[systemUpdate/install] Applying staged files...");
+      await applyStagedUpdate(stagingDir);
+
+      // Get backup ID for migration history
+      const [backupRows] = await (await import("../db.js")).pool.execute<any[]>(
+        "SELECT id FROM backup_metadata WHERE filename = ? ORDER BY created_at DESC LIMIT 1",
+        [backupResult.filename || ""]
+      );
+      const backupId = backupRows[0]?.id;
+
+      // Step 5: Execute pending migrations
+      keepMaintenance = true;
+      console.log("[systemUpdate/install] Executing pending migrations...");
+      const migrationResult = await executePendingMigrations(userId, backupId);
+      if (!migrationResult.success) {
+        return res.status(500).json({
+          message: "Migration failed. Maintenance Mode remains enabled; restore verified pre-update backup.",
+          error: migrationResult.error,
+        });
+      }
+
+      // Step 6: Update database version
+      const statusAfterUpdate = await getVersionStatus();
+      await updateInstalledVersion(
+        targetAppVersion || statusAfterUpdate.downloadedVersion,
+        statusAfterUpdate.downloadedDatabaseVersion
+      );
+
+      // Step 7: Log audit event
+      await logAuditEvent({
+        action: "UPDATE_INSTALLED",
+        performedById: userId,
+        performedByUsername: req.user!.username,
+        entityType: "system_update",
+        metadata: {
+          previousVersion: statusAfterUpdate.installedVersion,
+          newVersion: targetAppVersion || statusAfterUpdate.downloadedVersion,
+          migrationsExecuted: migrationResult.executed,
+          releaseSource: "github_release",
+        },
+      });
+
+      // Cleanup temp directory
+      try {
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+
+      keepMaintenance = false;
+      maintenanceService.exit();
+
+      console.log("[systemUpdate/install] Update applied. Triggering process restart...");
+      setTimeout(() => {
+        process.exit(0); // NSSM Windows Service restarts the server
+      }, 1000);
+
+      return res.status(200).json({
+        message: "Update installed successfully",
+        newVersion: targetAppVersion || statusAfterUpdate.downloadedVersion,
+        migrationsExecuted: migrationResult.executed,
       });
     }
 
-    // Get backup ID from metadata
+    // ─── Git Fallback (Development Environment) ─────────────────────────────
+    console.log("[systemUpdate/install] Running Git fallback update...");
+    const pullResult = await pullApplicationUpdate();
+    const versionStatus = await getVersionStatus();
+
+    const backupResult = await createBackup(userId, "pre_update");
+    if (!backupResult.success) {
+      return res.status(500).json({ message: "Failed to create backup", error: backupResult.error });
+    }
+
     const [backupRows] = await (await import("../db.js")).pool.execute<any[]>(
       "SELECT id FROM backup_metadata WHERE filename = ? ORDER BY created_at DESC LIMIT 1",
       [backupResult.filename || ""]
     );
     const backupId = backupRows[0]?.id;
 
-    // Step 2: Execute migrations
     keepMaintenance = true;
     const migrationResult = await executePendingMigrations(userId, backupId);
     if (!migrationResult.success) {
-      return res.status(500).json({
-        message: "Migration failed. Maintenance Mode remains enabled; restore the verified pre-update backup only under an explicit recovery procedure.",
-        error: migrationResult.error,
-      });
+      return res.status(500).json({ message: "Migration failed", error: migrationResult.error });
     }
 
-    // Step 3: Rebuild the application now that migrations are complete.
-    // In the browser-based architecture, we rebuild before restart since
-    // there's no Electron to handle it on next launch.
-    await buildApplicationUpdate();
-
-    // Step 4: Update installed version in the database.
-    // The database version is advanced by each successful forward-only
-    // migration. Keep it unchanged when this release has no DB migration.
     await updateInstalledVersion(versionStatus.downloadedVersion, versionStatus.downloadedDatabaseVersion);
 
-    // Step 5: Log audit event
     await logAuditEvent({
       action: "UPDATE_INSTALLED",
       performedById: userId,
@@ -164,40 +282,34 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
         previousVersion: versionStatus.installedVersion,
         newVersion: versionStatus.downloadedVersion,
         migrationsExecuted: migrationResult.executed,
+        releaseSource: "git_pull",
       },
     });
 
-    // Step 6: Exit maintenance now — the update succeeded. The restart will
-    // bring up a fresh process anyway, but exiting here means that if the
-    // restart signal is delayed or missed, the server is not left permanently
-    // locked out of writes.
     keepMaintenance = false;
     maintenanceService.exit();
 
-    // Step 7: Restart the server process
-    // In the browser-based architecture, we restart the Node.js server directly
-    console.log("[systemUpdate/install] Restarting server process...");
     setTimeout(() => {
-      process.exit(0); // Exit cleanly - process manager (PM2/supervisor) will restart
+      process.exit(0);
     }, 1000);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Update installed successfully",
-      previousVersion: versionStatus.installedVersion,
       newVersion: versionStatus.downloadedVersion,
       migrationsExecuted: migrationResult.executed,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[systemUpdate/install] Error:", error);
-    res.status(500).json({ message: "Failed to install update" });
+    res.status(500).json({ message: "Failed to install update", error: error.message });
   } finally {
     if (!keepMaintenance) maintenanceService.exit();
+    try {
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
   }
 });
 
 // ─── POST /api/system-update/reset-maintenance ───────────────────────────────
-// Emergency exit from maintenance mode. Only use this if the server got stuck
-// in maintenance after a failed or interrupted install.
 router.post("/reset-maintenance", authenticate, requireRole("Admin"), (req: Request, res: Response) => {
   const wasMaintenance = maintenanceService.isMaintenanceMode();
   if (wasMaintenance) {
@@ -211,9 +323,7 @@ router.post("/reset-maintenance", authenticate, requireRole("Admin"), (req: Requ
 // ─── GET /api/system-update/migration-history ────────────────────────────────
 router.get("/migration-history", authenticate, async (req: Request, res: Response) => {
   try {
-    const { getMigrationHistory } = await import(
-      "../services/migrationService.js"
-    );
+    const { getMigrationHistory } = await import("../services/migrationService.js");
     const history = await getMigrationHistory(100);
     res.status(200).json(history);
   } catch (error) {

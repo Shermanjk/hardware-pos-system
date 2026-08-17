@@ -28,9 +28,14 @@ interface MigrationRecord {
  * Get list of migration files from migrations directory
  */
 function getMigrationFiles(): MigrationFile[] {
-  const migrationsDir = path.resolve(__dirname, "../../migrations");
-  
-  if (!fs.existsSync(migrationsDir)) {
+  const candidates = [
+    path.resolve(__dirname, "../../migrations"),
+    path.resolve(__dirname, "../migrations"),
+    path.resolve(process.cwd(), "migrations"),
+  ];
+
+  const migrationsDir = candidates.find((dir) => fs.existsSync(dir));
+  if (!migrationsDir) {
     return [];
   }
 
@@ -45,6 +50,15 @@ function getMigrationFiles(): MigrationFile[] {
     .sort((a, b) => parseInt(a.number) - parseInt(b.number));
 
   return migrationFiles;
+}
+
+/**
+ * Get the latest migration number available on disk (e.g. "043")
+ */
+export function getLatestAvailableDatabaseVersion(): string {
+  const migrations = getMigrationFiles();
+  if (migrations.length === 0) return "000";
+  return migrations[migrations.length - 1].number;
 }
 
 /**

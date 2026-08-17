@@ -13,11 +13,21 @@ import {
     CheckCircle,
     Clock,
     Download,
+    FileText,
     RefreshCw,
-    Upload
+    Sparkles,
+    Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+interface ReleaseInfo {
+  latestVersion: string;
+  releaseName: string;
+  releaseNotes: string;
+  publishedAt: string;
+  hasUpdate: boolean;
+}
 
 interface VersionStatus {
   installedVersion: string;
@@ -26,24 +36,32 @@ interface VersionStatus {
   downloadedDatabaseVersion: string;
   updateAvailable: boolean;
   databaseUpdateRequired: boolean;
+  releaseInfo?: ReleaseInfo | null;
 }
 
 interface FetchResult extends VersionStatus {
   message: string;
   hasUpdates: boolean;
+  release?: {
+    name: string;
+    body: string;
+    publishedAt: string;
+    version: string;
+  } | null;
 }
 
 type UpdateStep =
   | "idle"         // nothing happening
-  | "checking"     // git fetch in progress
+  | "checking"     // fetching release info
   | "ready"        // update available, ready to install
-  | "installing"   // install in progress
+  | "installing"   // download + backup + migration in progress
   | "restarting";  // waiting for app restart
 
 export default function SystemUpdate() {
   const [versionStatus, setVersionStatus] = useState<VersionStatus | null>(null);
   const [step, setStep] = useState<UpdateStep>("idle");
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
 
   useEffect(() => {
     loadVersionStatus();
@@ -60,7 +78,9 @@ export default function SystemUpdate() {
         headers: authHeaders(),
       });
       setVersionStatus(response.data);
-      // If there's already an update pending, jump straight to ready state
+      if (response.data.releaseInfo?.releaseNotes) {
+        setReleaseNotes(response.data.releaseInfo.releaseNotes);
+      }
       if (response.data.updateAvailable || response.data.databaseUpdateRequired) {
         setStep("ready");
       }
@@ -69,7 +89,7 @@ export default function SystemUpdate() {
     }
   };
 
-  // ─── Step 1: Check for updates (git fetch, no working-tree change) ──────────
+  // ─── Step 1: Check for updates (GitHub Releases & local version check) ───────
   const handleCheckUpdates = async () => {
     setStep("checking");
     try {
@@ -82,19 +102,16 @@ export default function SystemUpdate() {
       setVersionStatus(data);
       setLastChecked(new Date());
 
+      if (data.release?.body) {
+        setReleaseNotes(data.release.body);
+      }
+
       if (data.hasUpdates || data.updateAvailable || data.databaseUpdateRequired) {
-        // Pull the changes so version.json is up-to-date and migrations are available
-        await axios.post("/api/system-update/pull", {}, { headers: authHeaders() });
-        // Reload version status after pull
-        const statusRes = await axios.get<VersionStatus>("/api/system-update/version", {
-          headers: authHeaders(),
-        });
-        setVersionStatus(statusRes.data);
         setStep("ready");
-        toast.success("Update downloaded and ready to install");
+        toast.success(`Update ${data.downloadedVersion} is available to install`);
       } else {
         setStep("idle");
-        toast.success("You are already up to date");
+        toast.success("You are running the latest version");
       }
     } catch (error: any) {
       console.error("Failed to check for updates:", error);
@@ -104,7 +121,7 @@ export default function SystemUpdate() {
     }
   };
 
-  // ─── Step 2: Install update (migrations → version bump → restart) ──────────
+  // ─── Step 2: Install update (Download -> Backup -> Auto-Migrate -> Restart) ─
   const handleInstallUpdate = async () => {
     if (!versionStatus?.updateAvailable && !versionStatus?.databaseUpdateRequired) return;
 
@@ -112,30 +129,28 @@ export default function SystemUpdate() {
     try {
       await axios.post("/api/system-update/install", {}, { headers: authHeaders() });
       setStep("restarting");
-      toast.success("Update installed. The system will restart now…");
+      toast.success("Update installed! Restarting server now…");
 
-      // Persist the session token across the restart so the user doesn't have
-      // to re-login. AuthContext will restore it from localStorage on relaunch.
+      // Persist session token across restart
       const token = sessionStorage.getItem("pos_token");
       if (token) {
         localStorage.setItem("pos_token_persist_restart", token);
       }
 
-      // Give Electron a moment to detect the restart flag, then reload as fallback
+      // Reload window after restart delay
       setTimeout(() => {
         window.location.reload();
-      }, 4000);
+      }, 5000);
     } catch (error: any) {
       console.error("Failed to install update:", error);
       const status = error.response?.status;
       const message = error.response?.data?.message || "Failed to install update";
 
       if (status === 409) {
-        // Maintenance mode stuck from a previous interrupted install — auto-reset
         toast.error("System was stuck in maintenance mode. Resetting — please try again.");
         try {
           await axios.post("/api/system-update/reset-maintenance", {}, { headers: authHeaders() });
-        } catch { /* ignore reset errors */ }
+        } catch { /* ignore */ }
       } else {
         toast.error(message);
       }
@@ -152,7 +167,7 @@ export default function SystemUpdate() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">System Update</h1>
         <p className="text-gray-500 mt-1">
-          Manage application updates and database migrations
+          Automated cloud releases and database migrations
         </p>
       </div>
 
@@ -177,7 +192,7 @@ export default function SystemUpdate() {
                 {step === "checking" ? (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Checking…
+                    Checking GitHub…
                   </>
                 ) : (
                   <>
@@ -189,7 +204,7 @@ export default function SystemUpdate() {
             </div>
           </CardTitle>
           <CardDescription>
-            Compare your installed version with the latest available
+            Compare installed version with the latest GitHub release
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -202,12 +217,13 @@ export default function SystemUpdate() {
                   <p className="text-lg font-semibold">{versionStatus.installedVersion}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-gray-500">Latest Version</p>
+                  <p className="text-sm text-gray-500">Latest Available Version</p>
                   <div className="flex items-center gap-2">
                     <p className="text-lg font-semibold">{versionStatus.downloadedVersion}</p>
                     {versionStatus.updateAvailable && (
                       <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
-                        New
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        New Release
                       </Badge>
                     )}
                   </div>
@@ -217,12 +233,12 @@ export default function SystemUpdate() {
                   <p className="text-lg font-semibold">{versionStatus.installedDatabaseVersion}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-gray-500">Required Database Version</p>
+                  <p className="text-sm text-gray-500">Target Database Version</p>
                   <div className="flex items-center gap-2">
                     <p className="text-lg font-semibold">{versionStatus.downloadedDatabaseVersion}</p>
                     {versionStatus.databaseUpdateRequired && (
                       <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs">
-                        Pending
+                        Migration Pending
                       </Badge>
                     )}
                   </div>
@@ -234,9 +250,9 @@ export default function SystemUpdate() {
                 <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
                   <div>
-                    <p className="font-medium text-blue-900">Restarting…</p>
+                    <p className="font-medium text-blue-900">Restarting Server…</p>
                     <p className="text-sm text-blue-700">
-                      The system is restarting to apply the update. Please wait.
+                      The service is restarting to apply the update. Reconnecting automatically…
                     </p>
                   </div>
                 </div>
@@ -246,9 +262,9 @@ export default function SystemUpdate() {
                 <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
                   <div className="flex-1">
-                    <p className="font-medium text-blue-900">Installing update…</p>
+                    <p className="font-medium text-blue-900">Installing Release…</p>
                     <p className="text-sm text-blue-700">
-                      Running database migrations and preparing restart. Please do not close the app.
+                      Downloading pre-compiled release, backing up database, and applying migrations.
                     </p>
                   </div>
                 </div>
@@ -261,13 +277,13 @@ export default function SystemUpdate() {
                     <p className="font-medium text-blue-900">Update Ready to Install</p>
                     <p className="text-sm text-blue-700">
                       {versionStatus.updateAvailable && versionStatus.databaseUpdateRequired
-                        ? `Version ${versionStatus.downloadedVersion} with database migration ${versionStatus.downloadedDatabaseVersion} is ready`
+                        ? `Version ${versionStatus.downloadedVersion} with database migration ${versionStatus.downloadedDatabaseVersion} is ready.`
                         : versionStatus.updateAvailable
-                        ? `Version ${versionStatus.downloadedVersion} is ready`
-                        : `Database migration to version ${versionStatus.downloadedDatabaseVersion} is ready`}
+                        ? `Version ${versionStatus.downloadedVersion} is ready to install.`
+                        : `Database migration to version ${versionStatus.downloadedDatabaseVersion} is pending.`}
                     </p>
                     <p className="text-xs text-blue-600 mt-1">
-                      A backup will be created automatically before any changes are applied.
+                      A MySQL database snapshot is automatically taken before applying migrations.
                     </p>
                   </div>
                   <Button
@@ -276,7 +292,7 @@ export default function SystemUpdate() {
                     className="bg-blue-600 hover:bg-blue-700 shrink-0"
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    Install Update
+                    Install Update Now
                   </Button>
                 </div>
               )}
@@ -285,10 +301,25 @@ export default function SystemUpdate() {
                 <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                   <div>
-                    <p className="font-medium text-green-900">Up to Date</p>
+                    <p className="font-medium text-green-900">System Up to Date</p>
                     <p className="text-sm text-green-700">
-                      You are running the latest version of the system.
+                      You are running the latest version with all database migrations applied.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Release Notes / Changelog */}
+              {releaseNotes && (
+                <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="w-4 h-4 text-gray-600" />
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Release Notes
+                    </p>
+                  </div>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-gray-100 max-h-48 overflow-y-auto">
+                    {releaseNotes}
                   </div>
                 </div>
               )}
@@ -309,9 +340,10 @@ export default function SystemUpdate() {
         </CardHeader>
         <CardContent>
           <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-            <li><span className="font-medium">Check for Updates</span> — fetches the latest changes from the repository</li>
-            <li><span className="font-medium">Install Update</span> — creates a database backup, applies pending migrations, and schedules a rebuild</li>
-            <li><span className="font-medium">Restart</span> — the system restarts automatically, builds the new version, and comes back online</li>
+            <li><span className="font-medium">Cloud CI/CD</span> — GitHub automatically compiles the frontend & backend on push</li>
+            <li><span className="font-medium">Pre-Update Backup</span> — Takes an automated MySQL dump snapshot for recovery</li>
+            <li><span className="font-medium">Zero-Touch Migrations</span> — Automatically executes any new SQL migrations sequentially</li>
+            <li><span className="font-medium">Instant Restart</span> — NSSM Windows Service restarts cleanly in ~5 seconds</li>
           </ol>
         </CardContent>
       </Card>
