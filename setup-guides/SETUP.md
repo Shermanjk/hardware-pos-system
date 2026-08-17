@@ -18,37 +18,36 @@ This guide provides step-by-step instructions for setting up the Isra Hardware P
 ## Prerequisites
 
 ### Server Machine Requirements
-- **Operating System**: Windows 10/11 (this guide is Windows-specific)
-- **Node.js**: Version 18.x or higher ([Download](https://nodejs.org/))
-- **pnpm**: Package manager (install after Node.js)
-- **MySQL**: Version 8.0 or higher ([Download](https://dev.mysql.com/downloads/mysql/))
-- **Git**: For cloning the repository (optional)
-
-### Client Machine Requirements
-- Modern web browser (Chrome, Edge, Firefox)
-- Network access to the server machine
+- **Operating System**: Windows 10/11 (64-bit)
+- **Node.js**: Version 20.x or 22.x LTS ([Download](https://nodejs.org/))
+- **pnpm**: Fast package manager (install via `npm install -g pnpm`)
+- **MySQL**: Version 8.0, 8.4 LTS, or higher ([Download](https://dev.mysql.com/downloads/mysql/))
+- **Git**: For version control and updates ([Download](https://git-scm.com/))
+- **NSSM**: Non-Sucking Service Manager for auto-starting the server as a Windows Service
 
 ### Installation Steps
 
-1. **Install Node.js**
+1. **Install Node.js & pnpm**
    ```bash
-   # Download and install from https://nodejs.org/
-   # Verify installation:
-   node --version
-   ```
-
-2. **Install pnpm**
-   ```bash
+   # Download and install Node.js from https://nodejs.org/
+   # Install pnpm package manager:
    npm install -g pnpm
-   # Verify installation:
-   pnpm --version
+   
+   # Verify installations:
+   node -v
+   pnpm -v
    ```
 
-3. **Install MySQL**
+2. **Configure Git Permissions (Required for Windows Service)**
+   Open Command Prompt / PowerShell as **Administrator** and run:
+   ```cmd
+   git config --system --add safe.directory *
+   ```
+   *(This ensures the Windows Background Service running under SYSTEM can read and update the repository without ownership errors).*
+
+3. **Install MySQL Server**
    - Download MySQL Community Server from https://dev.mysql.com/downloads/mysql/
-   - Run the installer and follow the setup wizard
-   - Set a root password (remember this for database setup)
-   - Configure MySQL to start automatically
+   - Complete the setup wizard, set a strong root password, and configure MySQL to start on boot.
 
 ## Database Setup
 
@@ -222,42 +221,41 @@ Check that the following directories exist:
 
 ## Running the System
 
-### Option 1: Development Mode (for testing)
+### Option 1: As a Windows Service with NSSM (Recommended for 24/7 Production)
+
+The POS server should run as a background Windows Service so it starts automatically on Windows boot, restarts on crashes, and supports seamless 1-click in-app updates.
+
+1. **Download NSSM**:
+   Double-click `download-nssm.bat` (or download from https://nssm.cc/ and extract `nssm.exe` to `C:\nssm\nssm.exe`).
+
+2. **Install the Windows Service**:
+   Right-click `install-nssm-service.bat` and select **Run as administrator**.
+
+3. **Manage the Service**:
+   ```cmd
+   nssm start IsraPOSServer    # Start service
+   nssm stop IsraPOSServer     # Stop service
+   nssm restart IsraPOSServer  # Restart service
+   nssm status IsraPOSServer   # Check service status
+   ```
+
+Logs are stored in `C:\POS-Logs\server.log` and `C:\POS-Logs\server-error.log`.
+
+### Option 2: Manual Production Mode (Command Line)
 
 ```bash
-# Terminal 1: Start backend server
-pnpm server
-
-# Terminal 2: Start frontend dev server
-pnpm dev
-```
-
-Access at: `http://localhost:3000`
-
-### Option 2: Production Mode (recommended)
-
-```bash
-# Start the production server
+# Start the production server manually
 pnpm start
 ```
-
 Access at: `http://localhost:3001`
 
-### Option 3: Electron Desktop Application
+### Option 3: Development Mode (for Local Laptop Development)
 
 ```bash
-# Run as Electron app
-pnpm electron
+# Start Vite client and tsx backend concurrently
+pnpm dev      # Frontend dev server on port 3000
+pnpm server   # Backend tsx watcher on port 3001
 ```
-
-### Option 4: Build Electron Installer
-
-```bash
-# Create Windows installer
-pnpm electron:build
-```
-
-The installer will be in the `dist/` directory.
 
 ## Accessing from Network
 
@@ -439,32 +437,59 @@ Then set a proper password using the Users page in the Admin panel.
 - Application logs: `app.log` (in application directory)
 - Database logs: MySQL error log (configured in MySQL)
 
-### Updates
+### Database Migrations (Automatic)
 
-To update the system:
+You **never need to manually execute SQL files**.
+Whenever the server starts up (via `nssm restart IsraPOSServer` or `pnpm start`), it scans the `migrations/` folder and **automatically applies all unexecuted migrations in sequential order**, updates the `system_version` table, and logs the execution in `migration_history`.
 
-```bash
-# Pull latest changes (if using git)
+### System Updates
+
+The POS system uses an **Automated Cloud CI/CD & 1-Click Release Pipeline**:
+
+#### 1. How to Release an Update (From Your Dev Laptop)
+1. Increment the version in `config/version.json`:
+   ```json
+   {
+     "applicationVersion": "2.15.0",
+     "databaseVersion": "044"
+   }
+   ```
+2. (Optional) Add your new SQL migration file in `migrations/` (e.g. `044_new_feature.sql`).
+3. Commit and push:
+   ```bash
+   git add .
+   git commit -m "Release v2.15.0"
+   git push origin main
+   ```
+   *GitHub Actions will automatically compile the application and publish a release package (`isra-pos-update.zip`) on GitHub Releases.*
+
+#### 2. How to Install the Update on the Client Server PC
+
+**Method A: In-App 1-Click Update (Recommended)**
+1. Open the POS Admin panel in your web browser.
+2. Go to **Settings** → **System Update**.
+3. Click **Check for Updates** → then click **Install Update Now**.
+4. The system automatically:
+   - Takes a MySQL pre-update snapshot backup.
+   - Downloads and stages the pre-built release package.
+   - Executes any pending database migrations.
+   - Restarts the Windows Service in ~5 seconds.
+
+**Method B: Command-Line Manual Update (Fallback)**
+```cmd
+cd /d "E:\POS System"
 git pull
-
-# Install new dependencies
-pnpm install
-
-# Rebuild
 pnpm build
-
-# Restart server
-pnpm start
+nssm restart IsraPOSServer
 ```
 
 ## Support
 
 For issues not covered in this guide:
 
-1. Check the application logs in `app.log`
+1. Check application logs in `C:\POS-Logs\server.log` and `C:\POS-Logs\server-error.log`
 2. Review MySQL error logs
-3. Verify all configuration settings
-4. Test with minimal configuration (disable optional features)
+3. Verify all configuration settings in `.env`
 
 ## Appendix
 
@@ -478,43 +503,35 @@ For issues not covered in this guide:
 
 ```
 POS System/
-├── client/              # Frontend React application
-├── server/              # Backend Node.js server
-├── electron/            # Electron desktop app
-├── Database-schema/     # MySQL schema file
-├── config/              # Configuration files
-├── migrations/          # Database migration scripts
-├── scripts/             # Utility scripts
-├── dist/                # Build output
-├── server-dist/         # Compiled server
-└── .env                 # Environment variables (create this)
+├── client/              # Frontend React application (Vite + Tailwind)
+├── server/              # Backend Node.js server (Express + WebSocket + MySQL)
+├── config/              # Version & backup configuration files
+├── migrations/          # SQL database migration scripts (001...043+)
+├── scripts/             # Build & administration utility scripts
+├── dist/                # Pre-compiled frontend static bundle
+├── server-dist/         # Pre-compiled backend server bundle
+├── .github/workflows/   # Automated CI/CD release workflow
+└── .env                 # Database & port environment variables
 ```
 
 ### Useful Commands
 
 ```bash
-# Install dependencies
-pnpm install
+# Production build & verification
+pnpm build        # Bundles frontend to dist/ and server to server-dist/
+pnpm check        # Runs TypeScript typechecker
 
-# Development mode
-pnpm dev          # Frontend dev server
-pnpm server       # Backend dev server
+# Windows Service management (Admin CMD)
+nssm status IsraPOSServer
+nssm restart IsraPOSServer
 
-# Production
-pnpm build        # Build for production
-pnpm start        # Start production server
-
-# Electron
-pnpm electron     # Run Electron app
-pnpm electron:build  # Build installer
-
-# Database utilities
-node scripts/check-admin-credentials.js
+# Password reset utility
 node scripts/reset-admin-password.js
 ```
 
 ---
 
-**Version**: 2.13.0  
+**Version**: 2.14.0  
+**Database Version**: 043  
 **Last Updated**: August 2026  
-**System Requirements**: Windows 10/11, Node.js 18+, MySQL 8.0+
+**System Requirements**: Windows 10/11 (64-bit), Node.js 20+, MySQL 8.0+
