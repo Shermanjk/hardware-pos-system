@@ -4,7 +4,9 @@ import path from "path";
 
 function runGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile("git", args, { cwd, windowsHide: true, timeout: 120_000 }, (error, stdout, stderr) => {
+    // Pass -c safe.directory=* so Git commands succeed even when executed under NT AUTHORITY/SYSTEM Windows Service
+    const fullArgs = ["-c", "safe.directory=*", ...args];
+    execFile("git", fullArgs, { cwd, windowsHide: true, timeout: 120_000 }, (error, stdout, stderr) => {
       if (error) reject(new Error(stderr.trim() || error.message));
       else resolve({ stdout, stderr });
     });
