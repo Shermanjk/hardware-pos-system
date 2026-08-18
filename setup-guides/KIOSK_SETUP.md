@@ -36,12 +36,16 @@ Choose **Method A** (Google Chrome) or **Method B** (Microsoft Edge) or **Method
 2. Copy and paste the following into the **Type the location of the item** text box:
 
    ```text
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --app=http://isra-pos-server:3001
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
    ```
 
 3. Click **Next**, enter `POS Cashier Kiosk` as the shortcut name, and click **Finish**.
 
-> **Note**: The `--user-data-dir="C:\ChromePOSProfile"` flag ensures Chrome opens in 100% fullscreen and silent printing mode every time, even if standard Chrome is already open in the background.
+> **Privacy & Kiosk Flags Breakdown**:
+> - `--user-data-dir="C:\ChromePOSProfile"`: Isolates the POS terminal in a dedicated profile separated from personal browsing.
+> - `--disable-features=AutofillServerCommunication,PasswordManager`: Completely disables Chrome's "Save Password?" prompts and credential autofill.
+> - `--password-store=basic`: Prevents Chrome from saving cashier credentials to Windows Credential Manager.
+> - `--kiosk --kiosk-printing`: Locks into 100% full-screen and prints receipts directly without print dialogs.
 
 ---
 
@@ -51,7 +55,7 @@ Choose **Method A** (Google Chrome) or **Method B** (Microsoft Edge) or **Method
 2. Paste the following target:
 
    ```text
-   "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk --kiosk-printing --edge-kiosk-type=fullscreen --app=http://isra-pos-server:3001
+   "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk --kiosk-printing --edge-kiosk-type=fullscreen --no-first-run --disable-features=msAutofillServerCommunication,msPasswordManager --app=http://isra-pos-server:3001
    ```
 
 3. Name it `POS Cashier Kiosk` and click **Finish**.
@@ -70,7 +74,7 @@ You can create a standalone executable script file on the cashier desktop:
    title POS Cashier Kiosk Launcher
    echo Launching POS Kiosk connected to http://isra-pos-server:3001...
 
-   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --app=http://isra-pos-server:3001
+   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
 
    exit
    ```

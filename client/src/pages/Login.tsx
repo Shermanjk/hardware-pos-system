@@ -110,7 +110,7 @@ export default function Login() {
             <p className="text-gray-400 text-sm mt-1">Sign in to Isra Hardware POS</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5" noValidate>
+          <form onSubmit={handleLogin} className="space-y-5" noValidate autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false}>
 
             {/* Error banner */}
             {error && (
@@ -127,6 +127,7 @@ export default function Login() {
               </label>
               <Input
                 id="username"
+                name="pos_user_login"
                 type="text"
                 placeholder="Enter your username"
                 value={username}
@@ -138,7 +139,11 @@ export default function Login() {
                 className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all ${
                   fieldErrors.username ? "border-red-400 focus:border-red-400" : ""
                 }`}
-                autoComplete="username"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                data-lpignore="true"
                 disabled={isLoading}
               />
               {fieldErrors.username && (
@@ -154,6 +159,7 @@ export default function Login() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="pos_pass_login"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
@@ -165,7 +171,8 @@ export default function Login() {
                   className={`h-11 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 pr-10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all ${
                     fieldErrors.password ? "border-red-400 focus:border-red-400" : ""
                   }`}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
                   disabled={isLoading}
                 />
                 <button
