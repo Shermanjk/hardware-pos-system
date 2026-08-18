@@ -28,58 +28,57 @@ This guide provides step-by-step instructions for setting up a Windows cashier t
 
 ## Step 2: Create the Kiosk Mode Shortcut
 
-Choose **Method A** (Google Chrome) or **Method B** (Microsoft Edge) or **Method C** (Batch Launcher).
+Choose from the following options to set up the cashier kiosk shortcut:
 
-### Method A: Google Chrome (Recommended)
+### Option 1: Clean & Short Shortcut (Recommended — 164 Characters)
+Using the `--incognito` flag achieves the exact same privacy (zero saved passwords, zero username history, zero autofill) in a much shorter command that fits easily into the Windows shortcut box:
 
-1. Go to your Windows **Desktop**, right-click an empty space → **New** → **Shortcut**.
-2. Copy and paste the following into the **Type the location of the item** text box:
+```text
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --incognito --app=http://isra-pos-server:3001
+```
 
+---
+
+### Option 2: Use the `.bat` Launcher (No Character Limit)
+A batch file has no character limits and opens with a single double-click:
+
+1. Right-click on your Desktop $\rightarrow$ **New** $\rightarrow$ **Text Document**.
+2. Paste the following:
+   ```bat
+   @echo off
+   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
+   exit
+   ```
+3. Click **File** $\rightarrow$ **Save As...**
+4. Set *Save as type* to **All Files (*.*)** and name it **`Launch_POS_Kiosk.bat`**.
+
+---
+
+### Option 3: Edit Shortcut Properties (Bypasses Wizard Limit)
+Windows only limits characters during the initial wizard creation. The Shortcut Properties window allows up to 1,024 characters:
+
+1. In the New Shortcut wizard, paste just the Chrome path:
+   ```text
+   "C:\Program Files\Google\Chrome\Application\chrome.exe"
+   ```
+2. Click **Next** $\rightarrow$ **Finish**.
+3. Right-click the newly created shortcut on your desktop $\rightarrow$ select **Properties**.
+4. In the **Target** field, replace the text with the full command:
    ```text
    "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
    ```
-
-3. Click **Next**, enter `POS Cashier Kiosk` as the shortcut name, and click **Finish**.
-
-> **Privacy & Kiosk Flags Breakdown**:
-> - `--user-data-dir="C:\ChromePOSProfile"`: Isolates the POS terminal in a dedicated profile separated from personal browsing.
-> - `--disable-features=AutofillServerCommunication,PasswordManager`: Completely disables Chrome's "Save Password?" prompts and credential autofill.
-> - `--password-store=basic`: Prevents Chrome from saving cashier credentials to Windows Credential Manager.
-> - `--kiosk --kiosk-printing`: Locks into 100% full-screen and prints receipts directly without print dialogs.
+5. Click **Apply** $\rightarrow$ **OK**.
 
 ---
 
-### Method B: Microsoft Edge
+### Option 4: Microsoft Edge (Alternative)
 
-1. Right-click Desktop → **New** → **Shortcut**.
+1. Right-click Desktop $\rightarrow$ **New** $\rightarrow$ **Shortcut**.
 2. Paste the following target:
-
    ```text
    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk --kiosk-printing --edge-kiosk-type=fullscreen --no-first-run --disable-features=msAutofillServerCommunication,msPasswordManager --app=http://isra-pos-server:3001
    ```
-
 3. Name it `POS Cashier Kiosk` and click **Finish**.
-
----
-
-### Method C: One-Click Batch Script (`Launch_POS_Kiosk.bat`)
-
-You can create a standalone executable script file on the cashier desktop:
-
-1. Right-click Desktop → **New** → **Text Document**.
-2. Paste the following script:
-
-   ```bat
-   @echo off
-   title POS Cashier Kiosk Launcher
-   echo Launching POS Kiosk connected to http://isra-pos-server:3001...
-
-   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
-
-   exit
-   ```
-
-3. Save the file as **`Launch_POS_Kiosk.bat`** (set *Save as type* to **All Files (*.*)**).
 
 ---
 
