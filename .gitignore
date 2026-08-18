@@ -143,3 +143,5 @@ client/public/__manus__/version.json
 # Update/restart flag files (written at runtime, must not be committed)
 .restart-flag
 .rebuild-needed
+temp-update/
+*.zip
