@@ -16,6 +16,7 @@ import { maintenanceService } from "../services/maintenanceService.js";
 import { executePendingMigrations } from "../services/migrationService.js";
 import { getVersionStatus, updateInstalledVersion } from "../services/versionService.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { broadcastServerMaintenance } from "../ws.js";
 
 const router = Router();
 
@@ -123,6 +124,12 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
   if (!maintenanceService.enter()) {
     return res.status(409).json({ message: "An update or maintenance operation is already in progress" });
   }
+
+  // Notify all connected terminals in real time that maintenance is starting
+  broadcastServerMaintenance({
+    status: "started",
+    message: "System update in progress. Server will restart momentarily.",
+  });
 
   let keepMaintenance = false;
   const tempDir = path.resolve(process.cwd(), "temp-update");
@@ -302,7 +309,10 @@ router.post("/install", authenticate, requireRole("Admin"), async (req: Request,
     console.error("[systemUpdate/install] Error:", error);
     res.status(500).json({ message: "Failed to install update", error: error.message });
   } finally {
-    if (!keepMaintenance) maintenanceService.exit();
+    if (!keepMaintenance) {
+      maintenanceService.exit();
+      broadcastServerMaintenance({ status: "ended" });
+    }
     try {
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     } catch {}
@@ -314,6 +324,7 @@ router.post("/reset-maintenance", authenticate, requireRole("Admin"), (req: Requ
   const wasMaintenance = maintenanceService.isMaintenanceMode();
   if (wasMaintenance) {
     maintenanceService.exit();
+    broadcastServerMaintenance({ status: "ended" });
   }
   res.status(200).json({
     message: wasMaintenance ? "Maintenance mode cleared" : "System was not in maintenance mode",

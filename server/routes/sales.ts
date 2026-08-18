@@ -530,12 +530,12 @@ router.post(
           }
         }
 
-        // Insert CREDIT_SALE ledger entry
+        // Insert CREDIT_SALE ledger entry with gross invoice total
         const [ledgerResult] = await conn.execute<any>(
           `INSERT INTO credit_ledger
              (customer_id, sale_id, entry_type, amount, reference, recorded_by)
            VALUES (?, ?, 'CREDIT_SALE', ?, ?, ?)`,
-          [customer_id, sale_id, creditAmount, invoice_number, req.user!.id]
+          [customer_id, sale_id, final_total_amount, invoice_number, req.user!.id]
         );
         const saleLedgerId: number = ledgerResult.insertId;
 
@@ -881,6 +881,17 @@ router.post(
         return;
       }
 
+      // Check for active or completed returns on this sale
+      const [returnCheckRows] = await conn.execute<any[]>(
+        `SELECT COUNT(*) AS cnt FROM returns WHERE sale_id = ? AND status NOT IN ('rejected')`,
+        [saleId]
+      );
+      if (Number(returnCheckRows[0]?.cnt ?? 0) > 0) {
+        await conn.rollback();
+        res.status(422).json({ message: "Cannot void a transaction with active or completed returns." });
+        return;
+      }
+
       await conn.execute(
         `UPDATE sales SET void_status = 'void_requested' WHERE id = ?`,
         [saleId]
@@ -962,21 +973,35 @@ router.patch(
         return;
       }
 
-      // ── Restore inventory for each sold item (exactly once) ───────────────
+      // ── Restore inventory for each sold item (deducting any already returned items) ───
       const [saleItems] = await conn.execute<any[]>(
-        `SELECT product_id, quantity FROM sale_items WHERE sale_id = ?`,
+        `SELECT id, product_id, quantity FROM sale_items WHERE sale_id = ?`,
         [voidRow.sale_id]
       );
+      const [completedReturns] = await conn.execute<any[]>(
+        `SELECT ri.sale_item_id, COALESCE(SUM(ri.quantity_returned), 0) AS returned_qty
+         FROM return_items ri
+         JOIN returns r ON r.id = ri.return_id
+         WHERE r.sale_id = ? AND r.status = 'completed'
+         GROUP BY ri.sale_item_id`,
+        [voidRow.sale_id]
+      );
+      const returnedMap = new Map(completedReturns.map((r: any) => [r.sale_item_id, Number(r.returned_qty)]));
+
       for (const item of saleItems) {
-        await conn.execute(
-          `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
-          [item.quantity, item.product_id]
-        );
-        await conn.execute(
-          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
-           VALUES (?, 'Void', 'void_restore', ?, ?, ?)`,
-          [item.product_id, item.quantity, voidRow.invoice_number, req.user!.id]
-        );
+        const alreadyReturned = returnedMap.get(item.id) || 0;
+        const qtyToRestore = Math.max(0, Number(item.quantity) - alreadyReturned);
+        if (qtyToRestore > 0) {
+          await conn.execute(
+            `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
+            [qtyToRestore, item.product_id]
+          );
+          await conn.execute(
+            `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+             VALUES (?, 'Void', 'void_restore', ?, ?, ?)`,
+            [item.product_id, qtyToRestore, voidRow.invoice_number, req.user!.id]
+          );
+        }
       }
 
       await conn.execute(

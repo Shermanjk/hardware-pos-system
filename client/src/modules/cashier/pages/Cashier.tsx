@@ -12,7 +12,8 @@ import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
-import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
+import { useRealtimeSync, useServerStatus } from "@/shared/hooks/useRealtimeSync";
+import { ServerStatusBanner, ServerStatusBadge } from "@/shared/components/ServerStatusBanner";
 import { ChevronDown, Clock, CreditCard, HandCoins, LogOut, PowerOff, Printer, User, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -116,23 +117,26 @@ export default function Cashier() {
   });
   useEffect(() => { getSettings().then(setStoreSettings).catch(() => {}); }, []);
 
-  // ── Offline indicator ─────────────────────────────────────────────────────
-  // Polls GET /api/health every 15 s. When unreachable, shows a red banner and
-  // disables the payment button so the cashier doesn't attempt doomed transactions.
-  const [isOffline, setIsOffline] = useState(false);
+  // ── Offline & Server Health indicator ─────────────────────────────────────
+  // Combines sub-second WebSocket connection status with active HTTP health check polling.
+  const { status: serverConnStatus, isOffline: wsOffline, isMaintenance } = useServerStatus();
+  const [isHealthOffline, setIsHealthOffline] = useState(false);
+
   useEffect(() => {
     async function checkHealth() {
       try {
         await httpClient.get("/api/health", { timeout: 5_000 });
-        setIsOffline(false);
+        setIsHealthOffline(false);
       } catch {
-        setIsOffline(true);
+        setIsHealthOffline(true);
       }
     }
     checkHealth();
     const id = setInterval(checkHealth, HEALTH_POLL_MS);
     return () => clearInterval(id);
   }, []);
+
+  const isOffline = isHealthOffline || wsOffline || serverConnStatus === "disconnected" || isMaintenance;
 
   // ── Cart state ────────────────────────────────────────────────────────────
   const [cartItems, setCartItemsRaw]    = useState<CartItem[]>([]);
@@ -1208,13 +1212,8 @@ export default function Cashier() {
             <span className="hidden sm:inline">Reprint Last</span>
           </Button>
 
-          {/* Offline badge in header (compact) */}
-          {isOffline && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-100 border border-red-300 rounded-lg">
-              <WifiOff className="h-3.5 w-3.5 text-red-600" />
-              <span className="text-xs font-semibold text-red-700">Offline</span>
-            </div>
-          )}
+          {/* Live Server Status badge in header */}
+          <ServerStatusBadge className="mr-1" />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1257,13 +1256,8 @@ export default function Cashier() {
         </div>
       </header>
 
-      {/* ── Offline banner ─────────────────────────────────────────────────── */}
-      {isOffline && (
-        <div className="shrink-0 bg-red-600 text-white text-sm font-semibold text-center py-2 px-4 flex items-center justify-center gap-2 z-10">
-          <WifiOff className="h-4 w-4" />
-          Server Unreachable — Transactions Unavailable. Waiting to reconnect…
-        </div>
-      )}
+      {/* ── Live Server Status & Maintenance banner ─────────────────────────── */}
+      <ServerStatusBanner />
 
       {/* ── No-shift banner ────────────────────────────────────────────────── */}
       {/* Shown after session check completes and no open session exists.       */}

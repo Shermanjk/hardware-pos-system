@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
 import { useClerkNotifications } from "@/shared/hooks/useClerkNotifications";
+import { ServerStatusBadge } from "@/shared/components/ServerStatusBanner";
 
 interface ClerkTopNavProps {
   onMenuClick: () => void;
@@ -69,6 +70,9 @@ export default function ClerkTopNav({ onMenuClick }: ClerkTopNavProps) {
 
       {/* Right */}
       <div className="flex items-center gap-2">
+        {/* Live Server Status */}
+        <ServerStatusBadge className="mr-1" />
+
         {/* Date & time */}
         <div className="hidden md:flex flex-col items-end mr-2">
           <span className="text-sm font-semibold text-gray-800 tabular-nums">{time}</span>

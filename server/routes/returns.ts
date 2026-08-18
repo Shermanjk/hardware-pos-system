@@ -9,6 +9,7 @@ import { logAuditEvent } from "../utils/auditLogger.js";
 import { generateReturnNumber } from "../utils/returnNumber.js";
 import { ReturnItemPayload, validateReturnItems } from "../utils/validateReturn.js";
 import { broadcastReturnRequest, sendReturnDecision } from "../ws.js";
+import { recalcCustomerBalance } from "./customers.js";
 
 const router = Router();
 
@@ -54,34 +55,49 @@ async function fetchReturnSummary(conn: PoolConnection, id: number): Promise<any
        r.sale_id,
        s.invoice_number,
        s.customer_name,
+       s.customer_id,
+       s.payment_type,
        r.processed_by,
        u1.full_name  AS cashier_name,
        r.approved_by,
        u2.full_name  AS admin_name,
+       r.resolved_by,
+       u3.full_name  AS resolved_by_name,
        r.status,
        r.resolution,
        r.item_condition,
        r.return_reason,
        r.refund_amount,
+       r.credit_refund_amount,
+       r.cash_refund_amount,
        r.exchange_product_id,
        r.exchange_quantity,
        r.additional_payment,
        r.refund_difference,
        exchange_product.barcode AS exchange_barcode,
        r.created_at,
-       r.resolved_at
+       r.resolved_at,
+       c.current_balance AS customer_balance
      FROM returns r
      JOIN sales  s  ON s.id  = r.sale_id
-      JOIN users  u1 ON u1.id = r.processed_by
-      LEFT JOIN users u2 ON u2.id = r.approved_by
-      LEFT JOIN products exchange_product ON exchange_product.id = r.exchange_product_id
+     LEFT JOIN customers c ON c.id = s.customer_id
+     JOIN users  u1 ON u1.id = r.processed_by
+     LEFT JOIN users u2 ON u2.id = r.approved_by
+     LEFT JOIN users u3 ON u3.id = r.resolved_by
+     LEFT JOIN products exchange_product ON exchange_product.id = r.exchange_product_id
      WHERE r.id = ?
      LIMIT 1`,
     [id]
   );
   if (!rows[0]) return null;
   const r = rows[0];
-  return { ...r, refund_amount: r.refund_amount != null ? Number(r.refund_amount) : null };
+  return {
+    ...r,
+    refund_amount: r.refund_amount != null ? Number(r.refund_amount) : null,
+    credit_refund_amount: r.credit_refund_amount != null ? Number(r.credit_refund_amount) : 0,
+    cash_refund_amount: r.cash_refund_amount != null ? Number(r.cash_refund_amount) : 0,
+    customer_balance: r.customer_balance != null ? Number(r.customer_balance) : null,
+  };
 }
 
 // ─── Helper: fetch return items ───────────────────────────────────────────────
@@ -94,13 +110,18 @@ async function fetchReturnItems(conn: PoolConnection, returnId: number): Promise
        ri.product_id,
        p.product_name   AS product_name,
        ri.quantity_returned,
-       ri.unit_price
+       ri.unit_price,
+       ri.effective_unit_price
      FROM return_items ri
      JOIN products p ON p.id = ri.product_id
      WHERE ri.return_id = ?`,
     [returnId]
   );
-  return rows.map((r: any) => ({ ...r, unit_price: Number(r.unit_price) }));
+  return rows.map((r: any) => ({
+    ...r,
+    unit_price: Number(r.unit_price),
+    effective_unit_price: Number(r.effective_unit_price || r.unit_price),
+  }));
 }
 
 // ─── Task 5.4 — POST / (Cashier, Admin) ──────────────────────────────────────
@@ -150,18 +171,19 @@ router.post(
       );
       const return_id: number = returnResult.insertId;
 
-      // Insert return_items
-      for (const item of items) {
+      // Insert return_items with effective_unit_price
+      for (const item of validation.validatedItems) {
         await conn.execute(
           `INSERT INTO return_items
-             (return_id, sale_item_id, product_id, quantity_returned, unit_price)
-           VALUES (?, ?, ?, ?, ?)`,
+             (return_id, sale_item_id, product_id, quantity_returned, unit_price, effective_unit_price)
+           VALUES (?, ?, ?, ?, ?, ?)`,
           [
             return_id,
             item.sale_item_id,
             item.product_id,
             item.quantity_returned,
             item.unit_price,
+            item.effective_unit_price,
           ]
         );
       }
@@ -700,7 +722,7 @@ router.patch(
 
       // Fetch return items inside the transaction
       const [itemRows] = await conn.execute<any[]>(
-        `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, p.product_name AS product_name
+        `SELECT ri.product_id, ri.quantity_returned, ri.unit_price, ri.effective_unit_price, p.product_name AS product_name
          FROM return_items ri
          JOIN products p ON p.id = ri.product_id
          WHERE ri.return_id = ?`,
@@ -710,12 +732,15 @@ router.patch(
       // Use the item_condition from the return record (set during initial submission)
       const finalItemCondition = returnRow.item_condition || "good";
 
-      let refund_amount = 0;
+      let total_return_value = 0;
+      let cash_refund = 0;
+      let credit_reversal = 0;
 
       if (returnRow.resolution === "refund") {
-        // Refund path
+        // Compute total return value using effective unit price
         for (const item of itemRows) {
-          refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
+          const itemEffectivePrice = Number(item.effective_unit_price || item.unit_price);
+          total_return_value += Math.round(itemEffectivePrice * Number(item.quantity_returned) * 100) / 100;
 
           if (finalItemCondition === "good") {
             await conn.execute(
@@ -736,12 +761,94 @@ router.patch(
             [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
           );
         }
+        total_return_value = Math.round(total_return_value * 100) / 100;
+
+        // Fetch original sale info with FOR UPDATE
+        const [saleRows] = await conn.execute<any[]>(
+          `SELECT id, payment_type, customer_id, total_amount, amount_paid_at_sale
+           FROM sales WHERE id = ? FOR UPDATE`,
+          [returnRow.sale_id]
+        );
+        const sale = saleRows[0];
+
+        if (sale && sale.payment_type === "CREDIT" && sale.customer_id) {
+          // Per-sale isolated credit calculation
+          // 1. Locate the specific CREDIT_SALE entry in credit_ledger
+          const [saleLedgerRows] = await conn.execute<any[]>(
+            `SELECT id, amount FROM credit_ledger
+             WHERE sale_id = ? AND entry_type = 'CREDIT_SALE'
+             ORDER BY id ASC LIMIT 1 FOR UPDATE`,
+            [sale.id]
+          );
+
+          if (saleLedgerRows.length > 0) {
+            const saleLedgerId = saleLedgerRows[0].id;
+
+            // 2. Query total payments allocated specifically to this sale
+            const [allocRows] = await conn.execute<any[]>(
+              `SELECT COALESCE(SUM(amount_applied), 0) AS total_applied
+               FROM credit_allocations
+               WHERE sale_ledger_id = ?`,
+              [saleLedgerId]
+            );
+            const paymentsApplied = Number(allocRows[0].total_applied || 0);
+
+            // 3. Query prior cash refunds for this sale
+            const [priorRefundRows] = await conn.execute<any[]>(
+              `SELECT COALESCE(SUM(refund_amount), 0) AS prior_cash_refunds
+               FROM returns
+               WHERE sale_id = ? AND status = 'completed' AND id != ?`,
+              [sale.id, id]
+            );
+            const priorCashRefunds = Number(priorRefundRows[0].prior_cash_refunds || 0);
+
+            const saleRemainingDebt = Math.max(0, Math.round((Number(sale.total_amount) - paymentsApplied) * 100) / 100);
+            const cashPaidForSale = paymentsApplied; // cash down payment + cash utang collections allocated to this sale
+            const refundableCash = Math.max(0, Math.round((cashPaidForSale - priorCashRefunds) * 100) / 100);
+
+            credit_reversal = Math.min(total_return_value, saleRemainingDebt);
+            const uncreditedReturn = Math.max(0, Math.round((total_return_value - credit_reversal) * 100) / 100);
+            cash_refund = Math.min(uncreditedReturn, refundableCash);
+
+            if (credit_reversal > 0) {
+              const [ledgerResult] = await conn.execute<any>(
+                `INSERT INTO credit_ledger
+                   (customer_id, sale_id, entry_type, amount, reference, notes, recorded_by)
+                 VALUES (?, ?, 'RETURN_CREDIT', ?, ?, 'Credit return reversal', ?)`,
+                [sale.customer_id, sale.id, -credit_reversal, returnRow.return_number, req.user!.id]
+              );
+              const returnLedgerId = ledgerResult.insertId;
+
+              // Allocate return credit strictly against this sale's CREDIT_SALE entry
+              await conn.execute(
+                `INSERT INTO credit_allocations (payment_ledger_id, sale_ledger_id, amount_applied)
+                 VALUES (?, ?, ?)`,
+                [returnLedgerId, saleLedgerId, credit_reversal]
+              );
+
+              // Recalculate customer's balance
+              await recalcCustomerBalance(conn, sale.customer_id);
+            }
+          } else {
+            // Fallback if no CREDIT_SALE entry found: treat as pure cash refund
+            cash_refund = total_return_value;
+          }
+        } else {
+          // Pure CASH sale
+          cash_refund = total_return_value;
+          credit_reversal = 0;
+        }
 
         await conn.execute(
           `UPDATE returns
-           SET refund_amount = ?, resolved_at = NOW(), status = 'completed'
+           SET refund_amount = ?,
+               credit_refund_amount = ?,
+               cash_refund_amount = ?,
+               resolved_by = ?,
+               resolved_at = NOW(),
+               status = 'completed'
            WHERE id = ?`,
-          [refund_amount.toFixed(2), id]
+          [cash_refund.toFixed(2), credit_reversal.toFixed(2), cash_refund.toFixed(2), req.user!.id, id]
         );
       } else if (returnRow.resolution === "exchange") {
         // Exchange path
@@ -788,13 +895,14 @@ router.patch(
         );
 
         await conn.execute(
-          `UPDATE returns SET resolved_at = NOW(), status = 'completed' WHERE id = ?`,
-          [id]
+          `UPDATE returns SET resolved_by = ?, resolved_at = NOW(), status = 'completed' WHERE id = ?`,
+          [req.user!.id, id]
         );
       } else if (returnRow.resolution === "store_credit") {
         // Store Credit path
         for (const item of itemRows) {
-          refund_amount += Number(item.unit_price) * Number(item.quantity_returned);
+          const itemEffectivePrice = Number(item.effective_unit_price || item.unit_price);
+          total_return_value += Math.round(itemEffectivePrice * Number(item.quantity_returned) * 100) / 100;
 
           if (finalItemCondition === "good") {
             await conn.execute(
@@ -814,27 +922,34 @@ router.patch(
             [item.product_id, item.quantity_returned, returnRow.return_number, req.user!.id]
           );
         }
+        total_return_value = Math.round(total_return_value * 100) / 100;
 
         // Fetch customer info from sale
         const [saleRows] = await conn.execute<any[]>(
-          `SELECT customer_name FROM sales WHERE id = ?`,
+          `SELECT customer_name, customer_id FROM sales WHERE id = ?`,
           [returnRow.sale_id]
         );
         const customerName = saleRows[0]?.customer_name || "Unknown";
+        const customerId = saleRows[0]?.customer_id || null;
 
         // Create store credit record
         await conn.execute(
           `INSERT INTO customer_store_credit
              (customer_id, customer_name, credit_amount, remaining_balance, return_id)
            VALUES (?, ?, ?, ?, ?)`,
-          [null, customerName, refund_amount.toFixed(2), refund_amount.toFixed(2), id]
+          [customerId, customerName, total_return_value.toFixed(2), total_return_value.toFixed(2), id]
         );
 
         await conn.execute(
           `UPDATE returns
-           SET refund_amount = ?, resolved_at = NOW(), status = 'completed'
+           SET refund_amount = 0.00,
+               credit_refund_amount = ?,
+               cash_refund_amount = 0.00,
+               resolved_by = ?,
+               resolved_at = NOW(),
+               status = 'completed'
            WHERE id = ?`,
-          [refund_amount.toFixed(2), id]
+          [total_return_value.toFixed(2), req.user!.id, id]
         );
       }
 
@@ -851,7 +966,13 @@ router.patch(
         performedByUsername: req.user!.username,
         entityType: "returns",
         entityId: id,
-        newValues: { return_number: returnRow.return_number, resolution: returnRow.resolution, refund_amount: refund_amount.toFixed(2) },
+        newValues: {
+          return_number: returnRow.return_number,
+          resolution: returnRow.resolution,
+          refund_amount: cash_refund.toFixed(2),
+          credit_refund_amount: credit_reversal.toFixed(2),
+          total_return_value: total_return_value.toFixed(2),
+        },
       });
 
       // Return full resolved return

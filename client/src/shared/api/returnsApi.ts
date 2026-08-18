@@ -29,6 +29,9 @@ export interface Return {
   item_condition: "good" | "damaged" | "defective" | null;
   return_reason: string;
   refund_amount: number | null;
+  credit_refund_amount?: number | null;
+  cash_refund_amount?: number | null;
+  customer_balance?: number | null;
   exchange_product_id?: number | null;
   exchange_barcode?: string | null;
   exchange_quantity?: number | null;

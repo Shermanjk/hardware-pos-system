@@ -14,6 +14,9 @@ export interface ReturnReceiptData {
   resolution: "refund" | "exchange" | "store_credit" | "rejected";
   item_condition: "good" | "damaged" | "defective";
   refund_amount: number | null;
+  credit_refund_amount?: number | null;
+  cash_refund_amount?: number | null;
+  customer_balance?: number | null;
   items: ReturnReceiptItem[];
   resolved_at?: string;
   settings: StoreSettings;
@@ -67,7 +70,18 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
 
   let resolutionHTML = "";
   if (data.resolution === "refund") {
-    resolutionHTML = `<div class="section">AMOUNT REFUNDED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>`;
+    const cashRefund = Number(data.cash_refund_amount ?? data.refund_amount ?? 0);
+    const creditRefund = Number(data.credit_refund_amount ?? 0);
+    const totalReturnVal = cashRefund + creditRefund;
+
+    resolutionHTML = `
+    <div class="row"><span>TOTAL RETURN VALUE:</span><span>${currSym} ${fmtPeso(totalReturnVal)}</span></div>
+    ${creditRefund > 0 ? `<div class="row"><span>CREDIT DEBT REDUCED:</span><span>${currSym} ${fmtPeso(creditRefund)}</span></div>` : ''}
+    <div class="row bold"><span>CASH REFUNDED:</span><span>${currSym} ${fmtPeso(cashRefund)}</span></div>
+    ${data.customer_balance !== undefined && data.customer_balance !== null ? `
+    <div class="divider"></div>
+    <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${currSym} ${fmtPeso(data.customer_balance)}</span></div>
+    ` : ''}`;
   } else if (data.resolution === "exchange") {
     resolutionHTML = `
     ${data.exchange_barcode ? `<div class="section">EXCHANGE BARCODE: ${data.exchange_barcode}</div>` : ''}

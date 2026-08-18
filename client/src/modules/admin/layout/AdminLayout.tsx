@@ -4,6 +4,7 @@ import AdminTopNav from "./AdminTopNav";
 import DailyBackupReminder from "@/components/DailyBackupReminder";
 import PageTransition from "@/shared/components/PageTransition";
 import BackToTop from "@/shared/components/BackToTop";
+import { ServerStatusBanner } from "@/shared/components/ServerStatusBanner";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 
@@ -85,6 +86,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <div className="flex h-screen bg-slate-100 overflow-hidden">
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <ServerStatusBanner />
         <AdminTopNav onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
           <PageTransition>

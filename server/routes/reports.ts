@@ -1114,12 +1114,13 @@ router.get("/credit-receivables", async (req: Request, res: Response) => {
       WHERE status = 'Active'
     `);
 
-    // 2. Period activity (Credit sales and payments made in the selected date range)
+    // 2. Period activity (Credit sales, payments, void reversals, return credits, and adjustments)
     const [activityRows] = await pool.execute<any[]>(`
       SELECT
         COALESCE(SUM(CASE WHEN entry_type = 'CREDIT_SALE' THEN amount ELSE 0 END), 0) AS period_credit_sales,
         COALESCE(SUM(CASE WHEN entry_type = 'PAYMENT' THEN ABS(amount) ELSE 0 END), 0) AS period_payments,
         COALESCE(SUM(CASE WHEN entry_type = 'VOID_REVERSAL' THEN ABS(amount) ELSE 0 END), 0) AS period_void_reversals,
+        COALESCE(SUM(CASE WHEN entry_type = 'RETURN_CREDIT' THEN ABS(amount) ELSE 0 END), 0) AS period_return_credits,
         COALESCE(SUM(CASE WHEN entry_type = 'ADJUSTMENT' THEN amount ELSE 0 END), 0) AS period_adjustments
       FROM credit_ledger
       WHERE DATE(created_at) BETWEEN ? AND ?
@@ -1223,6 +1224,7 @@ router.get("/credit-receivables", async (req: Request, res: Response) => {
         period_credit_sales: Number(activityRows[0]?.period_credit_sales || 0),
         period_payments: Number(activityRows[0]?.period_payments || 0),
         period_void_reversals: Number(activityRows[0]?.period_void_reversals || 0),
+        period_return_credits: Number(activityRows[0]?.period_return_credits || 0),
         period_adjustments: Number(activityRows[0]?.period_adjustments || 0),
         aging_summary: totalAging,
       },

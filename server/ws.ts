@@ -356,3 +356,31 @@ export function sendCreditLimitOverrideDecision(
     if (client.readyState === WebSocket.OPEN) client.send(message);
   }
 }
+
+// ─── Server Maintenance notifications ─────────────────────────────────────────
+
+export interface ServerMaintenanceNotification {
+  type: "server_maintenance";
+  status: "started" | "ended";
+  message?: string;
+  timestamp?: string;
+}
+
+export function broadcastServerMaintenance(
+  notification: Omit<ServerMaintenanceNotification, "type">
+): void {
+  const message = JSON.stringify({
+    type: "server_maintenance",
+    ...notification,
+    timestamp: notification.timestamp || new Date().toISOString(),
+  });
+  for (const client of Array.from(allClients)) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch {
+        /* silent */
+      }
+    }
+  }
+}

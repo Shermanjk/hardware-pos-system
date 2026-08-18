@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadToken } from "@/shared/utils/auth";
+import axios from "axios";
 
 export type EntityType =
   | "sales"
@@ -25,24 +26,47 @@ export interface EntityUpdateEvent {
   timestamp: string;
 }
 
+export type ConnectionStatus = "connected" | "connecting" | "disconnected";
+
+export interface ServerStatusState {
+  status: ConnectionStatus;
+  isOffline: boolean;
+  isMaintenance: boolean;
+  maintenanceMessage: string;
+  lastConnectedAt: Date | null;
+  retryCount: number;
+}
+
 type SyncCallback = (event: EntityUpdateEvent) => void;
+type StatusCallback = (state: ServerStatusState) => void;
 
 // ─── Singleton Real-time Event Hub ────────────────────────────────────────────
 class RealtimeSyncHub {
   private ws: WebSocket | null = null;
   private retryDelay = 1000;
-  private readonly maxDelay = 30_000;
+  private readonly maxDelay = 15_000; // Cap at 15 s for fast POS reconnects
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private healthProbeTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Map<EntityType, Set<SyncCallback>>();
   private wildcardListeners = new Set<SyncCallback>();
+  private statusListeners = new Set<StatusCallback>();
   private isConnecting = false;
+
+  private state: ServerStatusState = {
+    status: "connecting",
+    isOffline: false,
+    isMaintenance: false,
+    maintenanceMessage: "",
+    lastConnectedAt: null,
+    retryCount: 0,
+  };
 
   constructor() {
     if (typeof window !== "undefined") {
       window.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
-          this.ensureConnected();
-          // Trigger wildcard refresh on tab focus
+          this.reconnectNow();
+          // Trigger refresh on tab focus
           this.notifyListeners({
             type: "entity_updated",
             entity: "dashboard",
@@ -50,10 +74,28 @@ class RealtimeSyncHub {
           });
         }
       });
+
       window.addEventListener("online", () => {
-        this.ensureConnected();
+        this.reconnectNow();
+      });
+
+      window.addEventListener("offline", () => {
+        this.updateState({ status: "disconnected", isOffline: true });
       });
     }
+  }
+
+  public getStatus(): ServerStatusState {
+    return { ...this.state };
+  }
+
+  public subscribeStatus(callback: StatusCallback): () => void {
+    this.statusListeners.add(callback);
+    callback(this.getStatus());
+    this.ensureConnected();
+    return () => {
+      this.statusListeners.delete(callback);
+    };
   }
 
   public subscribe(entities: EntityType | EntityType[], callback: SyncCallback): () => void {
@@ -85,10 +127,67 @@ class RealtimeSyncHub {
     };
   }
 
+  public reconnectNow() {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.retryDelay = 1000;
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    this.isConnecting = false;
+    this.ensureConnected();
+  }
+
+  private updateState(partial: Partial<ServerStatusState>) {
+    this.state = { ...this.state, ...partial };
+    for (const listener of Array.from(this.statusListeners)) {
+      try {
+        listener(this.getStatus());
+      } catch (err) {
+        console.error("[RealtimeSync] Status listener error:", err);
+      }
+    }
+  }
+
+  private startFastHealthProbe() {
+    if (this.healthProbeTimer) return;
+    // Fast probing every 3 seconds while disconnected to reconnect immediately when server starts
+    this.healthProbeTimer = setInterval(async () => {
+      if (this.state.status === "connected") {
+        this.stopFastHealthProbe();
+        return;
+      }
+      try {
+        const res = await axios.get("/api/health", { timeout: 2000 });
+        if (res.status === 200) {
+          this.stopFastHealthProbe();
+          this.reconnectNow();
+        }
+      } catch {
+        // Still down
+      }
+    }, 3000);
+  }
+
+  private stopFastHealthProbe() {
+    if (this.healthProbeTimer) {
+      clearInterval(this.healthProbeTimer);
+      this.healthProbeTimer = null;
+    }
+  }
+
   private ensureConnected() {
     if (typeof window === "undefined") return;
     const token = loadToken();
-    if (!token) return;
+    if (!token) {
+      this.updateState({ status: "disconnected", isOffline: false });
+      return;
+    }
 
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
@@ -96,6 +195,7 @@ class RealtimeSyncHub {
 
     if (this.isConnecting) return;
     this.isConnecting = true;
+    this.updateState({ status: "connecting" });
 
     try {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -105,6 +205,13 @@ class RealtimeSyncHub {
       this.ws.onopen = () => {
         this.isConnecting = false;
         this.retryDelay = 1000;
+        this.stopFastHealthProbe();
+        this.updateState({
+          status: "connected",
+          isOffline: false,
+          lastConnectedAt: new Date(),
+          retryCount: 0,
+        });
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
@@ -112,6 +219,12 @@ class RealtimeSyncHub {
           const data = JSON.parse(event.data);
           if (data && data.type === "entity_updated") {
             this.notifyListeners(data as EntityUpdateEvent);
+          } else if (data && data.type === "server_maintenance") {
+            const isMaint = data.status === "started";
+            this.updateState({
+              isMaintenance: isMaint,
+              maintenanceMessage: data.message || (isMaint ? "System maintenance in progress." : ""),
+            });
           }
         } catch {
           /* ignore non-json messages */
@@ -121,20 +234,33 @@ class RealtimeSyncHub {
       this.ws.onclose = (event: CloseEvent) => {
         this.isConnecting = false;
         this.ws = null;
-        if (event.code === 1008) return; // unauthorized — do not reconnect
+
+        // Instant sub-second disconnection state
+        this.updateState({
+          status: "disconnected",
+          isOffline: true,
+          retryCount: this.state.retryCount + 1,
+        });
+
+        this.startFastHealthProbe();
+
+        if (event.code === 1008) return; // unauthorized — do not auto-reconnect
 
         if (this.retryTimer) clearTimeout(this.retryTimer);
         this.retryTimer = setTimeout(() => {
-          this.retryDelay = Math.min(this.retryDelay * 2, this.maxDelay);
+          this.retryDelay = Math.min(this.retryDelay * 1.5, this.maxDelay);
           this.ensureConnected();
         }, this.retryDelay);
       };
 
       this.ws.onerror = () => {
         this.isConnecting = false;
+        this.updateState({ status: "disconnected", isOffline: true });
       };
     } catch {
       this.isConnecting = false;
+      this.updateState({ status: "disconnected", isOffline: true });
+      this.startFastHealthProbe();
     }
   }
 
@@ -160,6 +286,26 @@ class RealtimeSyncHub {
 }
 
 export const realtimeHub = new RealtimeSyncHub();
+
+/**
+ * React hook that subscribes to live server connection and maintenance status.
+ * Re-renders automatically on connection state changes within milliseconds.
+ */
+export function useServerStatus(): ServerStatusState & { reconnect: () => void } {
+  const [statusState, setStatusState] = useState<ServerStatusState>(() => realtimeHub.getStatus());
+
+  useEffect(() => {
+    const unsubscribe = realtimeHub.subscribeStatus((nextState) => {
+      setStatusState(nextState);
+    });
+    return unsubscribe;
+  }, []);
+
+  return {
+    ...statusState,
+    reconnect: () => realtimeHub.reconnectNow(),
+  };
+}
 
 /**
  * React hook that automatically triggers a callback whenever the specified entity

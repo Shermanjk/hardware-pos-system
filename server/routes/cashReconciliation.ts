@@ -209,15 +209,15 @@ router.post(
       // Total gross cash inflow into the drawer
       const cashSales = cashFromSales + creditCollections;
 
-      // 3. Cash refunds paid out (approved refunds) during this session
-      //    Refunds are money paid OUT of the drawer back to the customer.
+      // 3. Cash refunds paid out (completed refunds) during this session
+      //    Refunds are physical cash paid OUT of the drawer back to the customer.
       const [refundRows] = await pool.execute<any[]>(
         `SELECT COALESCE(SUM(r.refund_amount), 0) AS total_refunds
          FROM returns r
-         WHERE r.processed_by = ?
-           AND r.status IN ('approved', 'completed')
+         WHERE r.resolved_by = ?
+           AND r.status = 'completed'
            AND r.resolution = 'refund'
-           AND r.created_at >= ?`,
+           AND r.resolved_at >= ?`,
         [cashierId, openedAt]
       );
       const cashRefunds = Number(refundRows[0]?.total_refunds ?? 0);

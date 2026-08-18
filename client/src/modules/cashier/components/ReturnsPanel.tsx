@@ -195,6 +195,9 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
         resolution: resolved.resolution!,
         item_condition: resolved.item_condition!,
         refund_amount: resolved.refund_amount,
+        credit_refund_amount: resolved.credit_refund_amount,
+        cash_refund_amount: resolved.cash_refund_amount,
+        customer_balance: resolved.customer_balance,
         items: resolved.items.map((i) => ({
           product_name: i.product_name,
           quantity_returned: i.quantity_returned,

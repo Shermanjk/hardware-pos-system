@@ -26,6 +26,7 @@ import { useLocation } from "wouter";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 import { toast } from "sonner";
+import { ServerStatusBadge } from "@/shared/components/ServerStatusBanner";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -132,6 +133,9 @@ export default function AdminTopNav({ onMenuClick }: TopNavProps) {
 
         {/* Right */}
         <div className="flex items-center gap-2">
+          {/* Live Server Status */}
+          <ServerStatusBadge className="mr-1" />
+
           {/* Date & time */}
           <div className="hidden md:flex flex-col items-end mr-2">
             <span className="text-sm font-semibold text-gray-800 tabular-nums">{time}</span>
