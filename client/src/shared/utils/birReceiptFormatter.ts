@@ -9,6 +9,8 @@
  */
 
 import type { StoreSettings } from "@/shared/api/settingsApi";
+import { buildPlainTextEscpos } from "@/shared/services/escpos/escposBuilder";
+import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 
 const RECEIPT_WIDTH = 42;
 
@@ -483,6 +485,16 @@ export function formatZReadingText(params: ZReadingParams): string {
 // ─── Browser Thermal Print Execution ───────────────────────────────────────────
 
 export function printThermalMonospace(text: string): void {
+  if (webSerialPrinter.isConnected()) {
+    try {
+      const bytes = buildPlainTextEscpos(text);
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct report print failed, falling back to HTML iframe print:", err);
+    }
+  }
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -546,9 +558,17 @@ export function printThermalMonospace(text: string): void {
 
   const win = iframe.contentWindow;
   if (win) {
+    let printed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handlePrint = () => {
+      if (printed) return;
+      printed = true;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
       try {
-        win.focus();
         win.print();
       } catch (e) {
         console.error("Print thermal error:", e);
@@ -560,7 +580,7 @@ export function printThermalMonospace(text: string): void {
       handlePrint();
     } else {
       win.addEventListener("load", handlePrint, { once: true });
-      setTimeout(handlePrint, 250);
+      fallbackTimer = setTimeout(handlePrint, 250);
     }
   } else {
     setTimeout(cleanup, 2000);

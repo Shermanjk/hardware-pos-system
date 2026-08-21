@@ -13,7 +13,8 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { saveToken } from "@/shared/utils/auth";
 import axios from "axios";
-import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Pencil, X } from "lucide-react";
+import { webSerialPrinter, type SerialPrinterState } from "@/shared/services/escpos/webSerialPrinter";
+import { AlertCircle, Check, CheckCircle2, DollarSign, Eye, EyeOff, Pencil, Printer, RefreshCw, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BackupSettings from "./BackupSettings";
 import SystemUpdate from "./SystemUpdate";
@@ -169,6 +170,117 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
             onSave={handleSave}
           />
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function DirectThermalPrinterSettingsCard({ storeName = "ISRA HARDWARE POS" }: { storeName?: string }) {
+  const [state, setState] = useState<SerialPrinterState>(webSerialPrinter.getState());
+
+  useEffect(() => {
+    const unsub = webSerialPrinter.subscribe((s) => setState(s));
+    return () => unsub();
+  }, []);
+
+  if (!state.isSupported) {
+    return null;
+  }
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-blue-600" />
+            Direct USB Thermal Receipt Printer (0% Flash ESC/POS)
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Bypass browser print dialogs completely by streaming raw ESC/POS commands directly over USB.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            {state.isConnected ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </>
+            ) : (
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-300"></span>
+            )}
+          </span>
+          <span className={`text-xs font-bold uppercase ${state.isConnected ? "text-emerald-700" : "text-slate-500"}`}>
+            {state.isConnected ? "Direct USB Connected" : "Not Paired / Offline"}
+          </span>
+        </div>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <Label className="text-xs font-semibold text-slate-700 block mb-1">Printer Serial Baud Rate</Label>
+            <select
+              value={state.baudRate}
+              onChange={(e) => webSerialPrinter.setBaudRate(Number(e.target.value))}
+              className="h-9 px-3 text-xs border border-slate-300 rounded-md bg-white font-mono"
+            >
+              <option value={9600}>9600 bps (Standard Xprinter / POS-80)</option>
+              <option value={19200}>19200 bps</option>
+              <option value={38400}>38400 bps (High Speed)</option>
+              <option value={115200}>115200 bps (Ultra High Speed)</option>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!state.isConnected ? (
+              <Button
+                type="button"
+                onClick={() => webSerialPrinter.requestAndConnect()}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold gap-1.5 shadow-sm"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Pair / Connect Thermal Printer
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => webSerialPrinter.printTestReceipt(storeName)}
+                  className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 text-xs h-9 font-semibold gap-1.5"
+                >
+                  <Printer className="h-3.5 w-3.5 text-slate-500" />
+                  Test Print (0% Flash)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => webSerialPrinter.openCashDrawer()}
+                  className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 text-xs h-9 font-semibold gap-1.5"
+                >
+                  <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                  Kick Cash Drawer
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => webSerialPrinter.disconnect()}
+                  className="bg-white border-red-200 text-red-600 hover:bg-red-50 text-xs h-9 font-semibold gap-1.5"
+                >
+                  Disconnect
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-500 border-t border-slate-200 pt-3">
+          💡 <strong>Tip</strong>: When paired once, Chrome remembers the connection permission and auto-reconnects every time the POS Kiosk is launched.
+        </div>
       </div>
     </Card>
   );
@@ -539,9 +651,10 @@ export default function Settings() {
         </Card>
       ) : (
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="business">Business</TabsTrigger>
+            <TabsTrigger value="printers">Printer / Hardware</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="system-update">System Update</TabsTrigger>
             <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
@@ -549,6 +662,7 @@ export default function Settings() {
 
           <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
           <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
+          <TabsContent value="printers" className="space-y-6"><DirectThermalPrinterSettingsCard storeName={settings?.store_name} /></TabsContent>
           <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
           <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
           <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>

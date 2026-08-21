@@ -1,6 +1,8 @@
 import type { TaxType } from "@/shared/api/productsApi";
 import type { SaleItemSnapshot } from "@/shared/api/salesApi";
 import type { StoreSettings } from "@/shared/api/settingsApi";
+import { buildCreditPaymentReceiptEscpos, buildSaleReceiptEscpos } from "@/shared/services/escpos/escposBuilder";
+import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { toCentavos } from "./money";
 
 export interface CartItem {
@@ -361,9 +363,17 @@ function printHtmlSilently(html: string): void {
 
   const win = iframe.contentWindow;
   if (win) {
+    let printed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handlePrint = () => {
+      if (printed) return;
+      printed = true;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
       try {
-        win.focus();
         win.print();
       } catch (e) {
         console.error("Silent receipt print error:", e);
@@ -375,7 +385,7 @@ function printHtmlSilently(html: string): void {
       handlePrint();
     } else {
       win.addEventListener("load", handlePrint, { once: true });
-      setTimeout(handlePrint, 250);
+      fallbackTimer = setTimeout(handlePrint, 250);
     }
   } else {
     setTimeout(cleanup, 2000);
@@ -383,11 +393,30 @@ function printHtmlSilently(html: string): void {
 }
 
 export function printSaleReceipt(params: SaleReceiptParams): void {
+  if (webSerialPrinter.isConnected()) {
+    try {
+      const bytes = buildSaleReceiptEscpos(params);
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct print failed, falling back to HTML iframe print:", err);
+    }
+  }
   const html = buildReceiptHTML(params);
   printHtmlSilently(html);
 }
 
 export function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): void {
+  if (webSerialPrinter.isConnected()) {
+    try {
+      const bytes = buildCreditPaymentReceiptEscpos(params);
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct credit print failed, falling back to HTML iframe print:", err);
+    }
+  }
+
   const {
     receiptNumber, customerName, customerCode,
     amountPaidCents, newBalanceCents, cashierName,
