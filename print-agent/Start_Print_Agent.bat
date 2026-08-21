@@ -1,6 +1,7 @@
 @echo off
-title Isra POS Print Agent
-echo Starting Isra POS Print Agent on http://127.0.0.1:18181...
+title Isra POS Hardware Print Agent
 cd /d "%~dp0"
-node agent.js
+echo Starting Isra POS Native Hardware Print Agent on http://127.0.0.1:18181...
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0agent.ps1"
 pause
