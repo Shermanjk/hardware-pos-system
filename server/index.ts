@@ -126,7 +126,7 @@ async function startServer() {
   // ─── Auto-run pending database migrations on startup ─────────────────────────
   try {
     const { executePendingMigrations } = await import("./services/migrationService.js");
-    const migResult = await executePendingMigrations(1);
+    const migResult = await executePendingMigrations();
     if (migResult.executed.length > 0) {
       console.log(`[Database] Successfully applied migrations on startup: ${migResult.executed.join(", ")}`);
     }

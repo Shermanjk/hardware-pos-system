@@ -199,13 +199,30 @@ async function executeMigration(
   }
 }
 
+async function resolveValidUserId(userId?: number): Promise<number> {
+  if (userId) {
+    try {
+      const [rows] = await pool.execute<any[]>("SELECT id FROM users WHERE id = ? LIMIT 1", [userId]);
+      if (rows.length > 0) return rows[0].id;
+    } catch {}
+  }
+  try {
+    const [firstAdmin] = await pool.execute<any[]>("SELECT id FROM users WHERE role = 'Admin' ORDER BY id ASC LIMIT 1");
+    if (firstAdmin.length > 0) return firstAdmin[0].id;
+    const [firstUser] = await pool.execute<any[]>("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+    if (firstUser.length > 0) return firstUser[0].id;
+  } catch {}
+  return 1;
+}
+
 /**
  * Execute all pending migrations
  */
 export async function executePendingMigrations(
-  userId: number,
+  userId?: number,
   backupId?: number
 ): Promise<{ success: boolean; executed: string[]; error?: string }> {
+  const effectiveUserId = await resolveValidUserId(userId);
   const pendingMigrations = await getPendingMigrations();
 
   if (pendingMigrations.length === 0) {
@@ -217,7 +234,7 @@ export async function executePendingMigrations(
   for (const migration of pendingMigrations) {
     await logAuditEvent({
       action: "MIGRATION_STARTED",
-      performedById: userId,
+      performedById: effectiveUserId,
       performedByUsername: "system",
       entityType: "migration",
       metadata: {
@@ -226,13 +243,13 @@ export async function executePendingMigrations(
       },
     });
 
-    const result = await executeMigration(migration, userId, backupId);
+    const result = await executeMigration(migration, effectiveUserId, backupId);
 
     if (result.success) {
       executed.push(migration.number);
       await logAuditEvent({
         action: "MIGRATION_COMPLETED",
-        performedById: userId,
+        performedById: effectiveUserId,
         performedByUsername: "system",
         entityType: "migration",
         metadata: {
@@ -243,7 +260,7 @@ export async function executePendingMigrations(
     } else {
       await logAuditEvent({
         action: "MIGRATION_FAILED",
-        performedById: userId,
+        performedById: effectiveUserId,
         performedByUsername: "system",
         entityType: "migration",
         metadata: {
