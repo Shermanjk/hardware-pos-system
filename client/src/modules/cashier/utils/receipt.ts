@@ -91,7 +91,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const storePhone             = settings.contact_number          || "";
   const storeAddress           = settings.address                || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
-  const storeTIN               = settings.tin || settings.business_license || "";
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : (settings.tin || "000-000-000");
+  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
+  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const ptuNo = settings.ptu_or_accn_no || "";
   const documentType           = settings.document_type           || "SALES INVOICE";
   const taxRate                = Number(settings.vat_rate) > 0 ? Number(settings.vat_rate) : 12;
   const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
@@ -128,58 +134,52 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     </tr>`;
   }).join("");
 
-  let vatBreakdownHTML = "";
+  const snaps = params.itemSnapshots || [];
+  let vatableNetCents = 0;
+  let vatAmountCents = 0;
+  let vatExemptCentsCalculated = 0;
+  let zeroRatedCents = 0;
+  let nonTaxableCents = 0;
+
   if (settings.vat_enabled) {
-    const snaps = params.itemSnapshots || [];
     if (isScPwd) {
-      // SC/PWD: VAT is exempted. Show the VAT-exempt base as the VAT-Exempt Sales.
-      const scPwdVatExemptCents = snaps
+      vatAmountCents = 0;
+      vatExemptCentsCalculated = snaps
         .filter((s) => s.tax_type === "VAT_EXEMPT")
-        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      const zeroRatedCents = snaps
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0) + vatExemptCents;
+      zeroRatedCents = snaps
         .filter((s) => s.tax_type === "ZERO_RATED")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      const nonTaxableCents = snaps
+      nonTaxableCents = snaps
         .filter((s) => s.tax_type === "NON_TAXABLE")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      vatBreakdownHTML = `
-      <div class="divider"></div>
-      <div class="center bold">VAT BREAKDOWN</div>
-      <div class="row"><span>VATable Sales (VAT-Exempt for SC/PWD):</span><span>${currSym} ${fmtCents(vatExemptCents)}</span></div>
-      <div class="row"><span>VAT Amount (${taxRate}%):</span><span>${currSym} 0.00</span></div>
-      <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(scPwdVatExemptCents)}</span></div>
-      <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
-      <div class="row"><span>Non-Taxable Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>`;
     } else {
-      // Regular customer: use raw snapshot values.
-      const vatableNetCents = snaps
+      vatableNetCents = snaps
         .filter((s) => s.tax_type === "VATABLE")
         .reduce((acc, s) => acc + toCentavos(Number(s.taxable_amount)), 0);
-      const vatExemptCategoryCents = snaps
+      vatAmountCents = displayTaxCents;
+      vatExemptCentsCalculated = snaps
         .filter((s) => s.tax_type === "VAT_EXEMPT")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      const zeroRatedCents = snaps
+      zeroRatedCents = snaps
         .filter((s) => s.tax_type === "ZERO_RATED")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      const nonTaxableCents = snaps
+      nonTaxableCents = snaps
         .filter((s) => s.tax_type === "NON_TAXABLE")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
-      vatBreakdownHTML = `
-      <div class="divider"></div>
-      <div class="center bold">VAT BREAKDOWN</div>
-      <div class="row"><span>VATable Sales (Net of VAT):</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
-      <div class="row"><span>VAT Amount (${taxRate}%):</span><span>${currSym} ${fmtCents(displayTaxCents)}</span></div>
-      <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCategoryCents)}</span></div>
-      <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
-      <div class="row"><span>Non-Taxable Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>`;
     }
   } else {
-    vatBreakdownHTML = `
-    <div class="divider"></div>
-    <div class="center bold">VAT BREAKDOWN</div>
-    <div class="row"><span>Non-VAT Sales:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
-    <div class="row"><span>Total VAT Amount:</span><span>${currSym} 0.00</span></div>`;
+    nonTaxableCents = finalTotalCents;
   }
+
+  const vatBreakdownHTML = `
+  <div class="divider"></div>
+  <div class="center bold">TAX BREAKDOWN</div>
+  <div class="row"><span>VATable Sales:</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
+  <div class="row"><span>12% VAT Amount:</span><span>${currSym} ${fmtCents(vatAmountCents)}</span></div>
+  <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCentsCalculated)}</span></div>
+  <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
+  ${nonTaxableCents > 0 && !settings.vat_enabled ? `<div class="row"><span>Non-VAT Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>` : ''}`;
 
   let discountHTML = "";
   if (discountCents > 0) {
@@ -255,9 +255,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="store-name">${storeName}</div>
     ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
     ${proprietor ? `<div class="center">PROPRIETOR: ${proprietor}</div>` : ''}
-    <div class="center">${storeAddress}</div>
-    <div class="center">${settings.vat_enabled ? 'VAT REGISTERED | ' : ''}TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+    <div class="center">${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
     ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
+    ${ptuNo ? `<div class="center">PTU / ACCN: ${ptuNo}</div>` : ''}
     <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
     <div class="divider"></div>
     <div class="center bold">${documentType}</div>
@@ -315,11 +315,17 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
-    <div class="center">Thank you for your business.</div>
-    <div class="center">We sincerely appreciate your trust</div>
-    <div class="center">and look forward to serving you again.</div>
-    <div class="center">This is your ${documentType}.</div>
-    <div class="center">"Not valid for claiming input taxes."</div>
+    <div class="center">POS Software: Antigravity POS v2.0</div>
+    <div class="center">Accreditation No: 000-000000000-000000</div>
+    <div class="divider"></div>
+    ${posMin ? `
+    <div class="center bold">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
+    <div class="center">Thank you for your business!</div>
+    ` : `
+    <div class="center bold">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
+    <div class="center bold">***      CLAIM OF INPUT TAX        ***</div>
+    <div class="center bold">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
+    `}
     <div class="divider"></div>
   </div>
 </body>

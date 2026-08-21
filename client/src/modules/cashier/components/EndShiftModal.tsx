@@ -16,7 +16,10 @@ import {
     type CashSession,
     type CloseSessionResult,
 } from "@/shared/api/cashReconciliationApi";
-import { AlertCircle, CheckCircle2, LogOut, TrendingDown, TrendingUp } from "lucide-react";
+import { getXReading } from "@/shared/api/birApi";
+import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import { formatXReadingText, printThermalMonospace } from "@/shared/utils/birReceiptFormatter";
+import { AlertCircle, CheckCircle2, LogOut, Printer, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -176,6 +179,53 @@ export default function EndShiftModal({
       setError(msg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const [printingXReading, setPrintingXReading] = useState(false);
+
+  const handlePrintXReading = async (targetSessionId?: number) => {
+    const sId = targetSessionId || session?.id;
+    if (!sId) {
+      toast.error("No active shift session found to print.");
+      return;
+    }
+    setPrintingXReading(true);
+    try {
+      const [xData, settings] = await Promise.all([
+        getXReading(sId),
+        getSettings().catch(() => ({}) as StoreSettings),
+      ]);
+      const formatted = formatXReadingText({
+        sessionId: xData.session_id,
+        shiftLabel: xData.shift_label,
+        cashierName: xData.cashier_name,
+        openedAt: xData.opened_at,
+        closedAt: xData.closed_at,
+        begInvoiceNo: xData.beg_invoice_no,
+        endInvoiceNo: xData.end_invoice_no,
+        transactionCount: xData.transaction_count,
+        shiftGross: xData.shift_gross,
+        shiftDiscounts: xData.shift_discounts,
+        shiftRefunds: xData.shift_refunds,
+        shiftNet: xData.shift_net,
+        openingCash: xData.opening_cash,
+        cashSales: xData.cash_sales,
+        creditCollections: xData.credit_collections,
+        cashRefunds: xData.cash_refunds,
+        expectedCash: xData.expected_cash,
+        actualCash: xData.actual_cash,
+        variance: xData.variance,
+        status: xData.status,
+        settings: settings as StoreSettings,
+      });
+      printThermalMonospace(formatted);
+      toast.success("X-Reading sent to thermal printer.");
+    } catch (err) {
+      console.error("Print X-Reading error:", err);
+      toast.error("Failed to generate X-Reading printout.");
+    } finally {
+      setPrintingXReading(false);
     }
   };
 
@@ -343,6 +393,16 @@ export default function EndShiftModal({
               )}
 
               <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
+                  onClick={() => handlePrintXReading()}
+                  disabled={submitting || printingXReading}
+                >
+                  <Printer className="h-4 w-4 text-slate-600" />
+                  {printingXReading ? "Printing…" : "Print X-Reading"}
+                </Button>
                 <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>
                   Cancel
                 </Button>
@@ -404,6 +464,17 @@ export default function EndShiftModal({
                   </tbody>
                 </table>
               </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-slate-300 font-semibold text-slate-800 hover:bg-slate-100"
+                onClick={() => handlePrintXReading(session?.id)}
+                disabled={printingXReading}
+              >
+                <Printer className="h-4 w-4 text-slate-600" />
+                {printingXReading ? "Printing X-Reading…" : "Print X-Reading Report (80mm)"}
+              </Button>
 
               <div className="text-xs text-gray-500 text-center">
                 This record has been submitted and sent to the Admin for review.

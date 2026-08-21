@@ -19,10 +19,11 @@ export type AuditAction =
   | "SALE_VOIDED"
   | "SALE_VOIDED_LOCAL_OVERRIDE"
   | "SALE_CANCELLATION_REJECTED"
-  // ── Cash Reconciliation / Shifts ─────────────────────────────────────────────
+  // ── Cash Reconciliation / Shifts / BIR ─────────────────────────────────────
   | "SHIFT_OPENED"
   | "SHIFT_CLOSED"
   | "SHIFT_REVIEWED"
+  | "Z_READING_GENERATED"
   // ── Returns ─────────────────────────────────────────────────────────────────
   | "RETURN_REQUESTED"
   | "RETURN_APPROVED"

@@ -139,6 +139,10 @@ router.post(
           res.status(422).json({ message: "Statutory SC/PWD discounts require a valid ID number." });
           return;
         }
+        if (!customer_name || customer_name.trim().toLowerCase() === "walk-in customer" || customer_name.trim().toLowerCase() === "walk-in" || customer_name.trim().length < 2) {
+          res.status(422).json({ message: "Statutory SC/PWD discounts require the customer's full name (not walk-in)." });
+          return;
+        }
       }
 
       // If discount requires approval, validate the approval request

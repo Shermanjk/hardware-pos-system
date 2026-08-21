@@ -11,6 +11,7 @@ export interface StoreSettings {
   proprietor:               string; // new field
   registered_taxpayer_name: string;
   tin:                      string;
+  branch_code?:             string;
   business_license:         string;
   document_type:            string;
   vat_rate:                 number; // renamed from tax_rate
@@ -20,9 +21,10 @@ export interface StoreSettings {
   receipt_footer:           string | null; // new field
   printer_name:             string | null; // new field
   cash_drawer_enabled:      boolean; // new field
-  // POS machine
+  // POS machine & Accreditation
   pos_min:                  string | undefined;
   pos_serial:               string | undefined;
+  ptu_or_accn_no?:          string | null;
 }
 
 export async function getSettings(): Promise<StoreSettings> {

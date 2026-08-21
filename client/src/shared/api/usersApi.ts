@@ -18,7 +18,7 @@ export interface UserRecord {
 export interface CreateUserPayload {
   full_name: string;
   username: string;
-  employee_id?: string;
+  employee_id?: string | null;
   role: "Cashier" | "Inventory Clerk";
   status: "Active" | "Inactive";
 }
@@ -32,7 +32,7 @@ export interface UpdateUserPayload {
   full_name?: string;
   role?: "Cashier" | "Inventory Clerk";
   status?: "Active" | "Inactive";
-  employee_id?: string;
+  employee_id?: string | null;
 }
 
 export interface ChangePasswordPayload {

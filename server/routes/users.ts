@@ -33,14 +33,14 @@ const createUserSchema = z.object({
   username:    z.string().min(1, "Username is required"),
   role:        z.enum(["Cashier", "Inventory Clerk"], { error: "Role must be Cashier or Inventory Clerk" }),
   status:      z.enum(["Active", "Inactive"], { error: "Status must be Active or Inactive" }),
-  employee_id: z.string().optional(),
+  employee_id: z.string().nullable().optional(),
 });
 
 const updateUserSchema = z.object({
   full_name:   z.string().min(1).optional(),
   role:        z.enum(["Cashier", "Inventory Clerk"]).optional(),
   status:      z.enum(["Active", "Inactive"]).optional(),
-  employee_id: z.string().optional(),
+  employee_id: z.string().nullable().optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -87,17 +87,32 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const { full_name, username, role, status, employee_id } = parsed.data;
+  const { full_name, username, role, status } = parsed.data;
+  const cleanEmpId = parsed.data.employee_id?.trim() || null;
 
   try {
     // Check for duplicate username
-    const [existing] = await pool.execute<any[]>(
+    const [existingUser] = await pool.execute<any[]>(
       "SELECT id FROM users WHERE username = ? LIMIT 1",
       [username]
     );
-    if ((existing as any[]).length > 0) {
+    if ((existingUser as any[]).length > 0) {
       res.status(409).json({ message: "Username already exists." });
       return;
+    }
+
+    // Check for duplicate employee_id if provided
+    if (cleanEmpId) {
+      const [existingEmpId] = await pool.execute<any[]>(
+        "SELECT id, full_name FROM users WHERE employee_id = ? LIMIT 1",
+        [cleanEmpId]
+      );
+      if ((existingEmpId as any[]).length > 0) {
+        res.status(409).json({
+          message: `Employee ID "${cleanEmpId}" is already assigned to ${(existingEmpId as any[])[0].full_name}.`,
+        });
+        return;
+      }
     }
 
     // Generate and hash temporary password — plain text is NEVER stored
@@ -109,7 +124,7 @@ router.post("/", async (req: Request, res: Response) => {
          (full_name, username, password_hash, role, employee_id, status,
           must_change_password, password_changed_at)
        VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL)`,
-      [full_name, username, passwordHash, role, employee_id || null, status]
+      [full_name, username, passwordHash, role, cleanEmpId, status]
     );
 
     const newUserId: number = result.insertId;
@@ -135,7 +150,11 @@ router.post("/", async (req: Request, res: Response) => {
       user: newRows[0],
       tempPassword,
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      res.status(409).json({ message: "A user with this username or Employee ID already exists." });
+      return;
+    }
     console.error("[users/POST /] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
   }
@@ -168,6 +187,21 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 
   try {
+    // If employee_id is being updated, verify uniqueness
+    if (updates.employee_id !== undefined && updates.employee_id !== null && updates.employee_id.trim() !== "") {
+      const cleanEmpId = updates.employee_id.trim();
+      const [existingEmpId] = await pool.execute<any[]>(
+        "SELECT id, full_name FROM users WHERE employee_id = ? AND id != ? LIMIT 1",
+        [cleanEmpId, userId]
+      );
+      if ((existingEmpId as any[]).length > 0) {
+        res.status(409).json({
+          message: `Employee ID "${cleanEmpId}" is already assigned to ${(existingEmpId as any[])[0].full_name}.`,
+        });
+        return;
+      }
+    }
+
     // Build SET clause dynamically from provided fields
     const setClauses: string[] = ["updated_at = NOW()"];
     const values: unknown[] = [];
@@ -186,7 +220,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (updates.employee_id !== undefined) {
       setClauses.push("employee_id = ?");
-      values.push(updates.employee_id);
+      values.push(updates.employee_id ? updates.employee_id.trim() : null);
     }
 
     values.push(userId);

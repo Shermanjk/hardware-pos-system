@@ -10,12 +10,47 @@ import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
-import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, Search, ShieldOff, UserCog, UserPlus, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, Search, ShieldOff, Sparkles, UserCog, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const DRAFT_KEY_CREATE_USER = "admin-user-create";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Auto-generates the next sequential Employee ID (e.g. EMP-001, EMP-002, EMP-010).
+ * Scans existing users for ID patterns and increments the highest found sequence number.
+ * Guarantees that the returned ID is unique among existing users.
+ */
+export function generateNextEmployeeId(existingUsers: UserRecord[]): string {
+  const existingIds = new Set(
+    existingUsers
+      .map((u) => u.employee_id?.trim().toUpperCase())
+      .filter((id): id is string => Boolean(id))
+  );
+
+  let maxSeq = 0;
+  for (const id of Array.from(existingIds)) {
+    // Match patterns like EMP-001, EMP001, E-001, or purely numeric 001
+    const match = id.match(/^(?:EMP-?|E-?)?(\d+)$/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+
+  let nextSeq = maxSeq + 1;
+  let candidate = `EMP-${String(nextSeq).padStart(3, "0")}`;
+
+  while (existingIds.has(candidate)) {
+    nextSeq++;
+    candidate = `EMP-${String(nextSeq).padStart(3, "0")}`;
+  }
+
+  return candidate;
+}
 
 function formatLastLogin(record: UserRecord): string {
   if (record.password_changed_at && record.password_changed_at !== "0") {
@@ -129,9 +164,10 @@ interface CreateUserModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: (user: UserRecord) => void;
+  existingUsers: UserRecord[];
 }
 
-function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
+function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUserModalProps) {
   const [fullName,    setFullName]    = useState("");
   const [username,    setUsername]    = useState("");
   const [employeeId,  setEmployeeId]  = useState("");
@@ -179,6 +215,11 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
   };
 
   const handleClose = () => { reset(); onClose(); };
+
+  const handleAutoGenerateEmpId = () => {
+    const nextId = generateNextEmployeeId(existingUsers);
+    setEmployeeId(nextId);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,11 +317,35 @@ function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
               </div>
 
               <div>
-                <Label htmlFor="cu-empid" className="mb-1.5 block font-semibold">
-                  Employee ID <span className="text-gray-400 font-normal">(optional)</span>
-                </Label>
-                <Input id="cu-empid" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
-                  placeholder="e.g. EMP-001" disabled={isLoading} />
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label htmlFor="cu-empid" className="font-semibold">
+                    Employee ID <span className="text-gray-400 font-normal">(optional)</span>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateEmpId}
+                    disabled={isLoading}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 hover:underline focus:outline-none transition-colors"
+                  >
+                    <Sparkles className="h-3 w-3" /> Auto-generate
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input id="cu-empid" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
+                    placeholder="e.g. EMP-001" disabled={isLoading}
+                    className={errors.employee_id ? "border-red-400 pr-8" : "pr-8"} />
+                  {employeeId && !isLoading && (
+                    <button
+                      type="button"
+                      onClick={() => setEmployeeId("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title="Clear Employee ID"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {errors.employee_id && <p className="mt-1 text-xs text-red-600">{errors.employee_id}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -335,9 +400,10 @@ interface EditUserModalProps {
   user: UserRecord | null;
   onClose: () => void;
   onUpdated: (user: UserRecord) => void;
+  existingUsers: UserRecord[];
 }
 
-function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
+function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModalProps) {
   const [fullName,  setFullName]  = useState(user?.full_name  ?? "");
   const [employeeId,setEmployeeId]= useState(user?.employee_id ?? "");
   const [role,      setRole]      = useState<"Cashier" | "Inventory Clerk">(
@@ -357,6 +423,12 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
     }
   }, [user]);
 
+  const handleAutoGenerateEmpId = () => {
+    const otherUsers = existingUsers.filter((u) => u.id !== user?.id);
+    const nextId = generateNextEmployeeId(otherUsers);
+    setEmployeeId(nextId);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -364,7 +436,7 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
     const payload: UpdateUserPayload = {
       full_name: fullName.trim() || undefined,
       role, status,
-      ...(employeeId.trim() ? { employee_id: employeeId.trim() } : {}),
+      employee_id: employeeId.trim() ? employeeId.trim() : null,
     };
     setIsLoading(true);
     try {
@@ -408,8 +480,35 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
               {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
             </div>
             <div>
-              <Label className="mb-1.5 block font-semibold">Employee ID <span className="text-gray-400 font-normal">(optional)</span></Label>
-              <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} disabled={isLoading} />
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="font-semibold">
+                  Employee ID <span className="text-gray-400 font-normal">(optional)</span>
+                </Label>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerateEmpId}
+                  disabled={isLoading}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 hover:underline focus:outline-none transition-colors"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto-generate
+                </button>
+              </div>
+              <div className="relative">
+                <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
+                  placeholder="e.g. EMP-001" disabled={isLoading}
+                  className={errors.employee_id ? "border-red-400 pr-8" : "pr-8"} />
+                {employeeId && !isLoading && (
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeId("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Clear Employee ID"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {errors.employee_id && <p className="mt-1 text-xs text-red-600">{errors.employee_id}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -777,7 +876,14 @@ export default function Users() {
                   .map((user) => (
                   <tr key={user.id} className="hover:bg-blue-50/50 transition-colors">
                     <td className="py-3.5 px-5">
-                      <p className="font-bold text-slate-900">{user.full_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-slate-900">{user.full_name}</p>
+                        {user.employee_id && (
+                          <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-1.5 py-0.5 rounded">
+                            {user.employee_id}
+                          </span>
+                        )}
+                      </div>
                       {user.must_change_password === true && (
                         <span className="inline-block px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-200 mt-0.5">
                           Temp Password
@@ -852,11 +958,13 @@ export default function Users() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={handleCreated}
+        existingUsers={users}
       />
       <EditUserModal
         user={editTarget}
         onClose={() => setEditTarget(null)}
         onUpdated={handleUpdated}
+        existingUsers={users}
       />
       <ResetPasswordModal
         user={resetTarget}

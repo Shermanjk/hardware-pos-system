@@ -633,6 +633,22 @@ export default function Cashier() {
     }
     const effectiveDiscountRequestId = overrideDiscountRequestId ?? discountRequestId;
 
+    // SC/PWD validation — require type, ID, and customer full name when an SC/PWD discount is selected
+    if (isScPwdSelected) {
+      if (!customerInfo.scPwdType || customerInfo.scPwdType === "NONE") {
+        toast.error("Please select Senior Citizen or PWD as the customer type.");
+        return;
+      }
+      if (!customerInfo.scPwdId || !customerInfo.scPwdId.trim()) {
+        toast.error(`Please enter the ${customerInfo.scPwdType === "SENIOR_CITIZEN" ? "OSCA / Senior Citizen" : "PWD"} ID number.`);
+        return;
+      }
+      if (!customerInfo.name || customerInfo.name.trim().toLowerCase() === "walk-in customer" || customerInfo.name.trim().length < 2) {
+        toast.error("Please enter the Senior Citizen / PWD customer's full name (not walk-in).");
+        return;
+      }
+    }
+
     // ── Credit mode validation ──────────────────────────────────────────────
     if (paymentMode === "CREDIT") {
       if (cartItems.length === 0 || !customerInfo.name.trim()) return;

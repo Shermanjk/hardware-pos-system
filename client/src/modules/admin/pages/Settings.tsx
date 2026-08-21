@@ -178,8 +178,8 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
 
 function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
-    proprietor: "", registered_taxpayer_name: "", tin: "", business_license: "",
-    document_type: "", pos_min: "", pos_serial: "",
+    proprietor: "", registered_taxpayer_name: "", tin: "", branch_code: "00000",
+    business_license: "", document_type: "", pos_min: "", pos_serial: "", ptu_or_accn_no: "",
   });
   const [vatEnabled, setVatEnabled] = useState(false);
   const [vatSaving, setVatSaving] = useState(false);
@@ -190,10 +190,12 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         proprietor:               initial.proprietor               ?? "",
         registered_taxpayer_name: initial.registered_taxpayer_name ?? "",
         tin:                      initial.tin                      ?? "",
+        branch_code:              initial.branch_code              ?? "00000",
         business_license:         initial.business_license         ?? "",
         document_type:            initial.document_type            ?? "SALES INVOICE",
         pos_min:                  initial.pos_min                  ?? "",
         pos_serial:               initial.pos_serial               ?? "",
+        ptu_or_accn_no:           initial.ptu_or_accn_no           ?? "",
       });
       setVatEnabled(initial.vat_enabled ?? false);
     }
@@ -243,13 +245,22 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
             placeholder="e.g. DELA CRUZ, JUAN SANTOS"
             onSave={handleSave}
           />
-          <EditableField
-            label="TIN (Tax Identification Number)"
-            fieldKey="tin"
-            savedValue={saved.tin}
-            placeholder="e.g. 766-490-574-00000"
-            onSave={handleSave}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <EditableField
+              label="TIN (9 Digits)"
+              fieldKey="tin"
+              savedValue={saved.tin}
+              placeholder="e.g. 766490574 or 766-490-574"
+              onSave={handleSave}
+            />
+            <EditableField
+              label="Branch Code (3–5 Digits)"
+              fieldKey="branch_code"
+              savedValue={saved.branch_code}
+              placeholder="e.g. 00000"
+              onSave={handleSave}
+            />
+          </div>
           <EditableField
             label="Document Type"
             fieldKey="document_type"
@@ -278,7 +289,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               disabled={vatSaving}
             />
             <span className="text-sm text-gray-600">
-              {vatEnabled ? "Yes — (VAT-Registered) printed on receipts" : "No — VAT label hidden on receipts"}
+              {vatEnabled ? "Yes — (VAT-Registered) printed on receipts" : "No — (Non-VAT Registered) printed on receipts"}
             </span>
           </div>
         </div>
@@ -298,8 +309,8 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         />
 
         <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">POS Machine Registration</p>
-          <div className="grid grid-cols-2 gap-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">POS Machine Registration & Accreditation</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <EditableField
               label="MIN (Machine Identification No.)"
               fieldKey="pos_min"
@@ -315,7 +326,16 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               onSave={handleSave}
             />
           </div>
-          <p className="mt-2 text-xs text-gray-400">These will be printed on every receipt.</p>
+          <div className="mt-4">
+            <EditableField
+              label="PTU / ACCN Number"
+              fieldKey="ptu_or_accn_no"
+              savedValue={saved.ptu_or_accn_no}
+              placeholder="e.g. PTU-2026-000123 or ACCN No."
+              onSave={handleSave}
+            />
+          </div>
+          <p className="mt-2 text-xs text-gray-400">These identifiers will be printed on every official receipt and Z-reading.</p>
         </div>
       </div>
     </Card>

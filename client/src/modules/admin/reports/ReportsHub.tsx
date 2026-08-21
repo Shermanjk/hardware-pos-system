@@ -27,10 +27,12 @@ import CashReconciliationReport from "./CashReconciliationReport";
 import AuthorizationHistoryReport from "./AuthorizationHistoryReport";
 import AuditLogReport from "./AuditLogReport";
 import CreditReceivablesReport from "./CreditReceivablesReport";
+import ZReadingReport from "./ZReadingReport";
 import { CreditCard } from "lucide-react";
 
 type ReportType = 
   | "hub"
+  | "z-reading"
   | "sales"
   | "credit-receivables"
   | "inventory"
@@ -54,6 +56,13 @@ interface ReportCard {
 }
 
 const reports: ReportCard[] = [
+  {
+    id: "z-reading",
+    title: "BIR Z-Reading & Tax Compliance",
+    description: "Non-resettable End-of-Day Z-Readings, tax breakdowns, audit counters, and eSales .CSV exports",
+    icon: <ShieldCheck className="h-6 w-6 text-blue-600" />,
+    category: "Operations",
+  },
   {
     id: "sales",
     title: "Sales Report",
@@ -159,6 +168,8 @@ export default function ReportsHub() {
 
   const renderReport = () => {
     switch (selectedReport) {
+      case "z-reading":
+        return <ZReadingReport />;
       case "sales":
         return <SalesReport />;
       case "credit-receivables":

@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 
 // 1. Bundle server with esbuild
-execSync("esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server-dist", {
+execSync("npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server-dist", {
   stdio: "inherit",
 });
 
