@@ -203,6 +203,28 @@ router.put("/settings", requireRole("Admin"), async (req: Request, res: Response
       values as any[]
     );
 
+    // Sync to config/backup.json
+    try {
+      const configCandidates = [
+        path.resolve(process.cwd(), "config/backup.json"),
+      ];
+      for (const cp of configCandidates) {
+        let currentCfg: any = {};
+        if (fs.existsSync(cp)) {
+          try { currentCfg = JSON.parse(fs.readFileSync(cp, "utf-8")); } catch {}
+        }
+        if (local_backup_directory !== undefined) {
+          currentCfg.localBackupDirectory = local_backup_directory;
+        }
+        if (google_drive_folder_id !== undefined) {
+          currentCfg.googleDriveFolderId = google_drive_folder_id;
+        }
+        fs.writeFileSync(cp, JSON.stringify(currentCfg, null, 2), "utf-8");
+      }
+    } catch (err) {
+      console.warn("[backup/settings] Could not update config/backup.json:", err);
+    }
+
     // Fetch updated settings
     const [rows] = await (await import("../db.js")).pool.execute<any[]>(
       "SELECT * FROM backup_settings WHERE id = 1 LIMIT 1"

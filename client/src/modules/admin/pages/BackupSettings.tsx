@@ -108,6 +108,9 @@ export default function BackupSettings({ onUnsavedChange }: BackupSettingsProps)
 
   const handleCreateBackup = async () => {
     try {
+      if (hasUnsavedChanges && settings) {
+        await handleSave();
+      }
       toast.loading("Creating backup...");
       const token = loadToken();
       const response = await axios.post("/api/backup/create", {}, {

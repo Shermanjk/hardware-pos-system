@@ -53,16 +53,39 @@ function readBackupConfig(): { localBackupDirectory?: string } {
   return { localBackupDirectory: "E:\\Database Backup" };
 }
 
+async function getEffectiveBackupDirectory(): Promise<string> {
+  let preferredDir: string | undefined;
+
+  try {
+    const [rows] = await pool.execute<any[]>(
+      "SELECT local_backup_directory FROM backup_settings WHERE id = 1 LIMIT 1"
+    );
+    if (rows && rows.length > 0 && rows[0].local_backup_directory) {
+      preferredDir = String(rows[0].local_backup_directory).trim();
+    }
+  } catch (err) {
+    console.warn("[backupService] Could not query backup_settings table:", err);
+  }
+
+  if (!preferredDir) {
+    const config = readBackupConfig();
+    preferredDir = config.localBackupDirectory;
+  }
+
+  return getValidBackupDirectory(preferredDir);
+}
+
 function getValidBackupDirectory(preferredDir?: string): string {
   // 1. Try preferred directory
-  if (preferredDir) {
+  if (preferredDir && preferredDir.trim().length > 0) {
+    const cleanDir = preferredDir.trim();
     try {
-      if (!fs.existsSync(preferredDir)) {
-        fs.mkdirSync(preferredDir, { recursive: true });
+      if (!fs.existsSync(cleanDir)) {
+        fs.mkdirSync(cleanDir, { recursive: true });
       }
-      return preferredDir;
+      return cleanDir;
     } catch (err) {
-      console.warn(`[backupService] Cannot use preferred backup directory '${preferredDir}':`, err);
+      console.warn(`[backupService] Cannot use preferred backup directory '${cleanDir}':`, err);
     }
   }
 
@@ -116,11 +139,9 @@ export async function createBackup(
   userId: number,
   backupType: "manual" | "pre_update" | "daily" = "manual"
 ): Promise<BackupResult> {
+  const backupDir = await getEffectiveBackupDirectory();
   return new Promise((resolve) => {
     try {
-      const config = readBackupConfig();
-      const backupDir = getValidBackupDirectory(config.localBackupDirectory);
-
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const filename = `hardware_pos_${timestamp}.sql`;
