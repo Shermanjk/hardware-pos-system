@@ -1,6 +1,7 @@
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { buildReturnReceiptEscpos } from "@/shared/services/escpos/escposBuilder";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
+import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
 
 export interface ReturnReceiptItem {
   product_name: string;
@@ -221,59 +222,6 @@ export function printReturnReceipt(data: ReturnReceiptData): void {
 </body>
 </html>`;
 
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText =
-    "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;visibility:hidden;pointer-events:none;";
-  iframe.setAttribute("aria-hidden", "true");
-  document.body.appendChild(iframe);
-
-  const cleanup = () => {
-    try {
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
-    } catch {
-      // Ignored
-    }
-  };
-
-  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-  if (!doc) {
-    cleanup();
-    return;
-  }
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  const win = iframe.contentWindow;
-  if (win) {
-    let printed = false;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const handlePrint = () => {
-      if (printed) return;
-      printed = true;
-      if (fallbackTimer) {
-        clearTimeout(fallbackTimer);
-        fallbackTimer = null;
-      }
-      try {
-        win.print();
-      } catch (e) {
-        console.error("Silent return receipt print error:", e);
-      }
-      setTimeout(cleanup, 2000);
-    };
-
-    if (doc.readyState === "complete") {
-      handlePrint();
-    } else {
-      win.addEventListener("load", handlePrint, { once: true });
-      fallbackTimer = setTimeout(handlePrint, 250);
-    }
-  } else {
-    setTimeout(cleanup, 2000);
-  }
+  printHtmlSilently(html);
 }
+
