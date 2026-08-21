@@ -1,8 +1,8 @@
 # ==============================================================================
-# Isra Hardware POS - Native Windows Hardware Print Agent (100% Zero-Dependency)
+# Isra Hardware POS - Native Windows Hardware Print Agent (TcpListener v2.1)
 # 
-# Runs natively on Windows 10/11 using built-in .NET HttpListener and Win32 Spooler.
-# NO Node.js, NO external software, NO installations required on the Cashier PC.
+# Runs on ANY Windows 10/11 system using user-space TcpListener sockets.
+# Zero administrator rights required, zero URL ACL reservations, zero dependencies.
 # ==============================================================================
 
 param(
@@ -147,7 +147,7 @@ function Build-TestReceipt {
     $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("Hardware POS System`n"))
     $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("------------------------------------------`n"))
     $bytes.AddRange([byte[]]@($ESC, 0x61, 0x00))        # Left
-    $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("PRINT AGENT:    NATIVE WINDOWS (0% FLASH)`n"))
+    $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("PRINT AGENT:    TCP SOCKET (0% FLASH)`n"))
     $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("DATE/TIME:      $((Get-Date).ToString())`n"))
     $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("PRINTER:        $(Get-DefaultPrinterName)`n"))
     $bytes.AddRange([System.Text.Encoding]::UTF8.GetBytes("SPOOLER:        Win32 Raw Spooler (C#)`n"))
@@ -165,81 +165,123 @@ function Build-CashDrawerKick {
     return [byte[]]@($ESC, 0x70, 0x00, 0x19, 0xFA)
 }
 
-# ─── Start HTTP Server ────────────────────────────────────────────────────────
-$listener = New-Object System.Net.HttpListener
-$prefix = "http://127.0.0.1:$Port/"
-$listener.Prefixes.Add($prefix)
+# ─── Start User-Space TCP Socket HTTP Server ──────────────────────────────────
+$ip = [System.Net.IPAddress]::Parse("127.0.0.1")
+$tcpListener = New-Object System.Net.Sockets.TcpListener($ip, $Port)
+$tcpListener.Server.SetSocketOption([System.Net.Sockets.SocketOptionLevel]::Socket, [System.Net.Sockets.SocketOptionName]::ReuseAddress, $true)
 
 try {
-    $listener.Start()
+    $tcpListener.Start()
 } catch {
-    Write-Host "[ERROR] Could not bind to $prefix. Port may already be in use." -ForegroundColor Red
+    Write-Host "[ERROR] Could not start TCP listener on 127.0.0.1:$Port ($($_.Exception.Message))" -ForegroundColor Red
     exit 1
 }
 
 $defPrinter = Get-DefaultPrinterName
 Write-Host "=================================================" -ForegroundColor Green
-Write-Host "  Isra Hardware POS - Native Print Agent v2.0    " -ForegroundColor Green
+Write-Host "  Isra Hardware POS - Native Print Agent v2.1    " -ForegroundColor Green
 Write-Host "=================================================" -ForegroundColor Green
-Write-Host "  Status:          ONLINE (Zero-Dependency)" -ForegroundColor Cyan
+Write-Host "  Status:          ONLINE (TcpListener Socket)" -ForegroundColor Cyan
 Write-Host "  Listening:       http://127.0.0.1:$Port" -ForegroundColor Cyan
 Write-Host "  Default Printer: $defPrinter" -ForegroundColor Cyan
 Write-Host "  100% Zero-Flash ESC/POS printing ready." -ForegroundColor Yellow
 Write-Host "=================================================" -ForegroundColor Green
 
-while ($listener.IsListening) {
+function Send-HttpResponse($stream, [int]$statusCode, [string]$statusText, [string]$jsonBody) {
+    $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+    $headers = "HTTP/1.1 $statusCode $statusText`r`n" +
+               "Content-Type: application/json; charset=utf-8`r`n" +
+               "Content-Length: $($bodyBytes.Length)`r`n" +
+               "Access-Control-Allow-Origin: *`r`n" +
+               "Access-Control-Allow-Methods: GET, POST, OPTIONS`r`n" +
+               "Access-Control-Allow-Headers: Content-Type, Authorization, Access-Control-Request-Private-Network`r`n" +
+               "Access-Control-Allow-Private-Network: true`r`n" +
+               "Connection: close`r`n`r`n"
+    $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($headers)
+    $stream.Write($headerBytes, 0, $headerBytes.Length)
+    if ($bodyBytes.Length -gt 0) {
+        $stream.Write($bodyBytes, 0, $bodyBytes.Length)
+    }
+    $stream.Flush()
+}
+
+while ($true) {
     try {
-        $context = $listener.GetContext()
-        $request = $context.Request
-        $response = $context.Response
+        $client = $tcpListener.AcceptTcpClient()
+        $stream = $client.GetStream()
+        $stream.ReadTimeout = 3000
 
-        # CORS & Chrome Private Network Access (PNA) Headers
-        $response.AddHeader("Access-Control-Allow-Origin", "*")
-        $response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        $response.AddHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Access-Control-Request-Private-Network")
-        $response.AddHeader("Access-Control-Allow-Private-Network", "true")
-
-        if ($request.HttpMethod -eq "OPTIONS") {
-            $response.StatusCode = 204
-            $response.Close()
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+        
+        # Read request line
+        $requestLine = $reader.ReadLine()
+        if ([string]::IsNullOrWhiteSpace($requestLine)) {
+            $client.Close()
             continue
         }
 
-        $path = $request.Url.AbsolutePath
+        $parts = $requestLine.Split(" ")
+        $method = $parts[0].ToUpper()
+        $rawUrl = if ($parts.Length -gt 1) { $parts[1] } else { "/" }
+        $path = $rawUrl.Split("?")[0]
 
-        if ($request.HttpMethod -eq "GET" -and ($path -eq "/health" -or $path -eq "/status")) {
+        # Read headers
+        $contentLength = 0
+        while ($true) {
+            $headerLine = $reader.ReadLine()
+            if ([string]::IsNullOrEmpty($headerLine)) { break }
+            if ($headerLine.ToLower().StartsWith("content-length:")) {
+                $contentLength = [int]($headerLine.Split(":")[1].Trim())
+            }
+        }
+
+        # Handle OPTIONS (CORS preflight)
+        if ($method -eq "OPTIONS") {
+            Send-HttpResponse $stream 204 "No Content" ""
+            $client.Close()
+            continue
+        }
+
+        # Read body if POST
+        $body = ""
+        if ($contentLength -gt 0) {
+            $charBuffer = New-Object char[] $contentLength
+            $readTotal = 0
+            while ($readTotal -lt $contentLength) {
+                $read = $reader.Read($charBuffer, $readTotal, $contentLength - $readTotal)
+                if ($read -le 0) { break }
+                $readTotal += $read
+            }
+            $body = New-Object string ($charBuffer, 0, $readTotal)
+        }
+
+        # Route: GET /health or /status
+        if ($method -eq "GET" -and ($path -eq "/health" -or $path -eq "/status")) {
             $def = Get-DefaultPrinterName
-            $json = @{
+            $resp = @{
                 status = "ok"
                 agent = "IsraPOS-NativePrintAgent"
-                version = "2.0.0"
+                version = "2.1.0"
                 defaultPrinter = $def
                 timestamp = (Get-Date).ToString("o")
             } | ConvertTo-Json
-            $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
-            $response.ContentType = "application/json"
-            $response.ContentLength64 = $buffer.Length
-            $response.OutputStream.Write($buffer, 0, $buffer.Length)
-            $response.Close()
+            Send-HttpResponse $stream 200 "OK" $resp
+            $client.Close()
             continue
         }
 
-        if ($request.HttpMethod -eq "GET" -and $path -eq "/printers") {
+        # Route: GET /printers
+        if ($method -eq "GET" -and $path -eq "/printers") {
             $printers = Get-CimInstance Win32_Printer | Select-Object Name, Default, PortName
-            $json = $printers | ConvertTo-Json
-            $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
-            $response.ContentType = "application/json"
-            $response.ContentLength64 = $buffer.Length
-            $response.OutputStream.Write($buffer, 0, $buffer.Length)
-            $response.Close()
+            $resp = $printers | ConvertTo-Json
+            Send-HttpResponse $stream 200 "OK" $resp
+            $client.Close()
             continue
         }
 
-        if ($request.HttpMethod -eq "POST" -and $path -eq "/print") {
-            $reader = New-Object System.IO.StreamReader($request.InputStream, [System.Text.Encoding]::UTF8)
-            $body = $reader.ReadToEnd()
+        # Route: POST /print
+        if ($method -eq "POST" -and $path -eq "/print") {
             $payload = $body | ConvertFrom-Json
-            
             $printBytes = $null
             if ($payload.rawBase64) {
                 $printBytes = [System.Convert]::FromBase64String($payload.rawBase64)
@@ -248,81 +290,53 @@ while ($listener.IsListening) {
             }
 
             if (-not $printBytes) {
-                $response.StatusCode = 400
-                $errJson = @{ error = "Missing rawBase64 or text" } | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($errJson)
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+                Send-HttpResponse $stream 400 "Bad Request" (@{ error = "Missing rawBase64 or text" } | ConvertTo-Json)
+                $client.Close()
                 continue
             }
 
             try {
                 $res = Send-RawPrintJob $payload.printerName $printBytes
-                $json = $res | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 200 "OK" ($res | ConvertTo-Json)
             } catch {
-                $response.StatusCode = 500
-                $errJson = @{ error = $_.Exception.Message } | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($errJson)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 500 "Internal Server Error" (@{ error = $_.Exception.Message } | ConvertTo-Json)
             }
-            $response.Close()
+            $client.Close()
             continue
         }
 
-        if ($request.HttpMethod -eq "POST" -and $path -eq "/test-print") {
-            $reader = New-Object System.IO.StreamReader($request.InputStream, [System.Text.Encoding]::UTF8)
-            $body = $reader.ReadToEnd()
+        # Route: POST /test-print
+        if ($method -eq "POST" -and $path -eq "/test-print") {
             $payload = if ($body) { $body | ConvertFrom-Json } else { @{} }
-            
             try {
                 $testBytes = Build-TestReceipt
                 $res = Send-RawPrintJob $payload.printerName $testBytes
-                $json = $res | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 200 "OK" ($res | ConvertTo-Json)
             } catch {
-                $response.StatusCode = 500
-                $errJson = @{ error = $_.Exception.Message } | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($errJson)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 500 "Internal Server Error" (@{ error = $_.Exception.Message } | ConvertTo-Json)
             }
-            $response.Close()
+            $client.Close()
             continue
         }
 
-        if ($request.HttpMethod -eq "POST" -and $path -eq "/open-drawer") {
-            $reader = New-Object System.IO.StreamReader($request.InputStream, [System.Text.Encoding]::UTF8)
-            $body = $reader.ReadToEnd()
+        # Route: POST /open-drawer
+        if ($method -eq "POST" -and $path -eq "/open-drawer") {
             $payload = if ($body) { $body | ConvertFrom-Json } else { @{} }
-            
             try {
                 $drawerBytes = Build-CashDrawerKick
                 $res = Send-RawPrintJob $payload.printerName $drawerBytes
-                $json = $res | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 200 "OK" ($res | ConvertTo-Json)
             } catch {
-                $response.StatusCode = 500
-                $errJson = @{ error = $_.Exception.Message } | ConvertTo-Json
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($errJson)
-                $response.ContentType = "application/json"
-                $response.OutputStream.Write($buf, 0, $buf.Length)
+                Send-HttpResponse $stream 500 "Internal Server Error" (@{ error = $_.Exception.Message } | ConvertTo-Json)
             }
-            $response.Close()
+            $client.Close()
             continue
         }
 
-        # 404
-        $response.StatusCode = 404
-        $response.Close()
+        # 404 Not Found
+        Send-HttpResponse $stream 404 "Not Found" (@{ error = "Endpoint not found" } | ConvertTo-Json)
+        $client.Close()
     } catch {
-        Write-Host "[PrintAgent] Request error: $_" -ForegroundColor Red
+        # Catch connection disconnects gracefully
     }
 }
