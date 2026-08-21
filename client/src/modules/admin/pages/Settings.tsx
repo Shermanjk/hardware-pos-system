@@ -184,7 +184,36 @@ function DirectThermalPrinterSettingsCard({ storeName = "ISRA HARDWARE POS" }: {
   }, []);
 
   if (!state.isSupported) {
-    return null;
+    return (
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <Zap className="h-5 w-5 text-slate-400" />
+          <h2 className="text-lg font-display font-bold text-gray-900">
+            Direct USB Thermal Receipt Printer (0% Flash ESC/POS)
+          </h2>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Web Serial API Not Available</p>
+              <p className="text-xs text-amber-700 mt-1">
+                Direct USB thermal printing requires the <strong>Web Serial API</strong>, which is only available on:
+              </p>
+              <ul className="text-xs text-amber-700 mt-1 list-disc list-inside space-y-0.5">
+                <li><code className="bg-amber-100 px-1 rounded">https://</code> (secure connections)</li>
+                <li><code className="bg-amber-100 px-1 rounded">http://localhost</code> or <code className="bg-amber-100 px-1 rounded">http://127.0.0.1</code></li>
+              </ul>
+              <p className="text-xs text-amber-700 mt-2">
+                <strong>Kiosk terminals</strong> connecting via <code className="bg-amber-100 px-1 rounded">http://isra-pos-server:3001</code> will 
+                use the system's <strong>default Windows printer</strong> with <code className="bg-amber-100 px-1 rounded">--kiosk-printing</code> for 
+                silent zero-dialog receipt printing instead.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
   }
 
   return (
