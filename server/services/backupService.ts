@@ -214,6 +214,13 @@ export async function createBackup(
               },
             });
 
+            // Automatically purge old backups beyond the configured retention limit
+            try {
+              await cleanupOldBackups();
+            } catch (cleanupErr) {
+              console.warn("[backupService] Cleanup warning:", cleanupErr);
+            }
+
             resolve({
               success: true,
               filename,
@@ -377,6 +384,83 @@ export async function getTodayBackupStatus(): Promise<{
 }
 
 /**
+ * Automatically remove old backups beyond the configured maximum retention limit
+ */
+export async function cleanupOldBackups(): Promise<{ deletedCount: number; deletedFiles: string[] }> {
+  try {
+    const [settingsRows] = await pool.execute<any[]>(
+      "SELECT max_local_backups, automatic_cleanup_enabled, local_backup_directory FROM backup_settings WHERE id = 1 LIMIT 1"
+    );
+
+    const settings = settingsRows[0];
+    if (!settings || !settings.automatic_cleanup_enabled) {
+      return { deletedCount: 0, deletedFiles: [] };
+    }
+
+    const maxBackups = Number(settings.max_local_backups) || 30;
+    if (maxBackups <= 0) return { deletedCount: 0, deletedFiles: [] };
+
+    // Fetch all successful local backups ordered from newest to oldest
+    const [backups] = await pool.execute<any[]>(
+      `SELECT id, filename, file_path, created_at 
+       FROM backup_metadata 
+       WHERE local_status = 'success' 
+       ORDER BY created_at DESC, id DESC`
+    );
+
+    if (backups.length <= maxBackups) {
+      return { deletedCount: 0, deletedFiles: [] };
+    }
+
+    // Identify backups that exceed the retention limit (the oldest ones)
+    const backupsToDelete = backups.slice(maxBackups);
+    const deletedFiles: string[] = [];
+
+    for (const b of backupsToDelete) {
+      try {
+        // Remove physical file from disk if present
+        if (b.file_path && fs.existsSync(b.file_path)) {
+          fs.unlinkSync(b.file_path);
+          deletedFiles.push(b.filename);
+        } else if (settings.local_backup_directory) {
+          const fallbackPath = path.join(settings.local_backup_directory, b.filename);
+          if (fs.existsSync(fallbackPath)) {
+            fs.unlinkSync(fallbackPath);
+            deletedFiles.push(b.filename);
+          }
+        }
+
+        // Delete metadata record from database
+        await pool.execute("DELETE FROM backup_metadata WHERE id = ?", [b.id]);
+        console.log(`[backupService] Auto-purged old backup #${b.id} (${b.filename})`);
+      } catch (fileErr) {
+        console.error(`[backupService] Failed to delete backup #${b.id} file:`, fileErr);
+      }
+    }
+
+    if (deletedFiles.length > 0) {
+      await logAuditEvent({
+        action: "SYSTEM_SETTINGS_UPDATED",
+        performedById: 1,
+        performedByUsername: "system_auto_cleanup",
+        entityType: "backup",
+        metadata: {
+          action: "AUTO_PURGE_OLD_BACKUPS",
+          maxAllowed: maxBackups,
+          purgedCount: deletedFiles.length,
+          purgedFiles: deletedFiles,
+        },
+      });
+    }
+
+    return { deletedCount: deletedFiles.length, deletedFiles };
+  } catch (error) {
+    console.error("[backupService] Error during automated backup cleanup:", error);
+    return { deletedCount: 0, deletedFiles: [] };
+  }
+}
+
+/**
  * Update Google Drive upload status
  */
 export async function updateGoogleDriveStatus(
@@ -404,3 +488,5 @@ export async function updateGoogleDriveStatus(
     console.error("[backupService] Failed to update Google Drive status:", error);
   }
 }
+
+

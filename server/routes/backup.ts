@@ -242,6 +242,14 @@ router.put("/settings", requireRole("Admin"), async (req: Request, res: Response
       newValues: req.body,
     });
 
+    // Run cleanup immediately if retention limit or auto-cleanup was updated
+    try {
+      const { cleanupOldBackups } = await import("../services/backupService.js");
+      await cleanupOldBackups();
+    } catch (cleanupErr) {
+      console.warn("[backup/settings] Immediate cleanup warning:", cleanupErr);
+    }
+
     res.status(200).json(row);
   } catch (error) {
     console.error("[backup/settings PUT] Error:", error);
