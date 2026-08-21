@@ -16,23 +16,24 @@ $typeDef = @'
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.ComponentModel;
 
 public class RawPrinterHelper {
-    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
-    public class DOCINFOA {
-        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
-        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
-        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+    public class DOCINFOW {
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
     }
 
-    [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
-    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+    [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPWStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
 
     [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
     public static extern bool ClosePrinter(IntPtr hPrinter);
 
-    [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
-    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+    [DllImport("winspool.Drv", EntryPoint="StartDocPrinterW", SetLastError=true, CharSet=CharSet.Unicode, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOW di);
 
     [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
     public static extern bool EndDocPrinter(IntPtr hPrinter);
@@ -46,28 +47,51 @@ public class RawPrinterHelper {
     [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true, ExactSpelling=true, CallingConvention=CallingConvention.StdCall)]
     public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
 
-    public static bool SendBytesToPrinter(string szPrinterName, byte[] pBytes) {
-        IntPtr hPrinter = new IntPtr(0);
-        DOCINFOA di = new DOCINFOA();
-        bool bSuccess = false;
+    public static string SendBytesToPrinter(string szPrinterName, byte[] pBytes) {
+        IntPtr hPrinter = IntPtr.Zero;
+        DOCINFOW di = new DOCINFOW();
         di.pDocName = "ISRA POS Receipt";
         di.pDataType = "RAW";
 
-        if (OpenPrinter(szPrinterName.Normalize(), out hPrinter, IntPtr.Zero)) {
-            if (StartDocPrinter(hPrinter, 1, di)) {
-                if (StartPagePrinter(hPrinter)) {
+        if (!OpenPrinter(szPrinterName.Trim(), out hPrinter, IntPtr.Zero)) {
+            int err = Marshal.GetLastWin32Error();
+            return "OpenPrinter failed: Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+        }
+
+        try {
+            if (!StartDocPrinter(hPrinter, 1, di)) {
+                int err = Marshal.GetLastWin32Error();
+                return "StartDocPrinter failed: Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+            }
+
+            try {
+                if (!StartPagePrinter(hPrinter)) {
+                    int err = Marshal.GetLastWin32Error();
+                    return "StartPagePrinter failed: Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+                }
+
+                try {
                     IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(pBytes.Length);
                     Marshal.Copy(pBytes, 0, pUnmanagedBytes, pBytes.Length);
                     int dwWritten = 0;
-                    bSuccess = WritePrinter(hPrinter, pUnmanagedBytes, pBytes.Length, out dwWritten);
+                    bool bSuccess = WritePrinter(hPrinter, pUnmanagedBytes, pBytes.Length, out dwWritten);
                     Marshal.FreeCoTaskMem(pUnmanagedBytes);
+
+                    if (!bSuccess || dwWritten != pBytes.Length) {
+                        int err = Marshal.GetLastWin32Error();
+                        return "WritePrinter failed: Win32 Error " + err + " (written " + dwWritten + "/" + pBytes.Length + ")";
+                    }
+                } finally {
                     EndPagePrinter(hPrinter);
                 }
+            } finally {
                 EndDocPrinter(hPrinter);
             }
+        } finally {
             ClosePrinter(hPrinter);
         }
-        return bSuccess;
+
+        return "OK";
     }
 }
 '@
@@ -79,17 +103,17 @@ if (-not ([System.Management.Automation.PSTypeName]'RawPrinterHelper').Type) {
 function Get-DefaultPrinterName {
     try {
         $p = (Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true }).Name
-        if ($p) { return $p }
+        if ($p) { return $p.Trim() }
     } catch {}
     try {
         $p2 = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default = TRUE").Name
-        if ($p2) { return $p2 }
+        if ($p2) { return $p2.Trim() }
     } catch {}
     return "Default"
 }
 
 function Send-RawPrintJob($printerName, [byte[]]$bytes) {
-    $target = $printerName
+    $target = if ($printerName) { $printerName.Trim() } else { $null }
     if ([string]::IsNullOrWhiteSpace($target) -or $target -eq "Default") {
         $target = Get-DefaultPrinterName
     }
@@ -100,13 +124,13 @@ function Send-RawPrintJob($printerName, [byte[]]$bytes) {
     }
 
     Write-Host "[PrintAgent] Sending $($bytes.Length) bytes to '$target'..." -ForegroundColor Cyan
-    $success = [RawPrinterHelper]::SendBytesToPrinter($target, $bytes)
-    if ($success) {
+    $resultMsg = [RawPrinterHelper]::SendBytesToPrinter($target, $bytes)
+    if ($resultMsg -eq "OK") {
         Write-Host "[PrintAgent] Print successful to '$target'" -ForegroundColor Green
         return @{ success = $true; printer = $target; bytes = $bytes.Length }
     } else {
-        Write-Host "[PrintAgent] Failed to send print job to '$target'" -ForegroundColor Red
-        throw "Failed to send bytes to printer: $target"
+        Write-Host "[PrintAgent] Error printing to '$target': $resultMsg" -ForegroundColor Red
+        throw $resultMsg
     }
 }
 
