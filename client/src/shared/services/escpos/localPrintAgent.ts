@@ -19,6 +19,12 @@ export interface AgentStatus {
   version?: string;
 }
 
+export interface WindowsPrinterInfo {
+  Name: string;
+  Default?: boolean;
+  PortName?: string;
+}
+
 /**
  * Fast helper to convert Uint8Array to base64 string without stack overflow
  */
@@ -87,12 +93,39 @@ class LocalPrintAgentService {
   }
 
   /**
-   * Send raw ESC/POS bytes directly to Windows default thermal printer
-   * Returns true on success, false if agent offline / error
+   * Fetch list of all installed Windows printers from agent
+   */
+  async getPrinters(): Promise<WindowsPrinterInfo[]> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+
+    try {
+      const res = await fetch(`${AGENT_BASE_URL}/printers`, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data ? [data] : []);
+      }
+    } catch {
+      // Ignore
+    } finally {
+      clearTimeout(timer);
+    }
+    return [];
+  }
+
+  /**
+   * Send raw ESC/POS bytes directly to Windows thermal printer
+   * Uses selected printer in localStorage or defaults to Windows Default Printer
    */
   async printRaw(bytes: Uint8Array, printerName?: string): Promise<boolean> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), 6000);
+
+    const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
       const base64 = uint8ArrayToBase64(bytes);
@@ -103,7 +136,7 @@ class LocalPrintAgentService {
         },
         body: JSON.stringify({
           rawBase64: base64,
-          printerName,
+          printerName: targetPrinter,
         }),
         signal: controller.signal,
       });
@@ -126,14 +159,17 @@ class LocalPrintAgentService {
   /**
    * Send test print command to agent
    */
-  async sendTestPrint(): Promise<boolean> {
+  async sendTestPrint(printerName?: string): Promise<boolean> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), 6000);
+
+    const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
       const res = await fetch(`${AGENT_BASE_URL}/test-print`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ printerName: targetPrinter }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -149,14 +185,17 @@ class LocalPrintAgentService {
   /**
    * Trigger cash drawer kick pulse
    */
-  async openCashDrawer(): Promise<boolean> {
+  async openCashDrawer(printerName?: string): Promise<boolean> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 4000);
+
+    const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
       const res = await fetch(`${AGENT_BASE_URL}/open-drawer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ printerName: targetPrinter }),
         signal: controller.signal,
       });
       clearTimeout(timer);

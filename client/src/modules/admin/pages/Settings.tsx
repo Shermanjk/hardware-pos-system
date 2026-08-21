@@ -175,11 +175,15 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
   );
 }
 
-import { localPrintAgent, type AgentStatus } from "@/shared/services/escpos/localPrintAgent";
+import { localPrintAgent, type AgentStatus, type WindowsPrinterInfo } from "@/shared/services/escpos/localPrintAgent";
 import { toast } from "sonner";
 
 function LocalPrintAgentCard() {
   const [status, setStatus] = useState<AgentStatus>({ online: false });
+  const [printers, setPrinters] = useState<WindowsPrinterInfo[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(
+    localStorage.getItem("pos_selected_printer") || ""
+  );
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -188,6 +192,10 @@ function LocalPrintAgentCard() {
     try {
       const res = await localPrintAgent.checkHealth();
       setStatus(res);
+      if (res.online) {
+        const list = await localPrintAgent.getPrinters();
+        setPrinters(list);
+      }
     } finally {
       setLoading(false);
     }
@@ -199,10 +207,21 @@ function LocalPrintAgentCard() {
     return () => clearInterval(interval);
   }, [refreshStatus]);
 
+  const handlePrinterChange = (printerName: string) => {
+    setSelectedPrinter(printerName);
+    if (printerName) {
+      localStorage.setItem("pos_selected_printer", printerName);
+      toast.success(`Target thermal printer set to: ${printerName}`);
+    } else {
+      localStorage.removeItem("pos_selected_printer");
+      toast.success("Target set to Windows Default Printer");
+    }
+  };
+
   const handleTestPrint = async () => {
     setActionLoading("test-print");
     try {
-      const ok = await localPrintAgent.sendTestPrint();
+      const ok = await localPrintAgent.sendTestPrint(selectedPrinter || undefined);
       if (ok) {
         toast.success("Test receipt sent directly to Windows thermal printer!");
       } else {
@@ -216,7 +235,7 @@ function LocalPrintAgentCard() {
   const handleOpenDrawer = async () => {
     setActionLoading("open-drawer");
     try {
-      const ok = await localPrintAgent.openCashDrawer();
+      const ok = await localPrintAgent.openCashDrawer(selectedPrinter || undefined);
       if (ok) {
         toast.success("Cash drawer kick command sent!");
       } else {
@@ -236,7 +255,7 @@ function LocalPrintAgentCard() {
             Local Hardware Print Agent (100% Zero-Flash Printing)
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Streams raw ESC/POS binary directly to your Windows Default Thermal Printer with 0% browser flash or dialogs.
+            Streams raw ESC/POS binary directly to your Windows Thermal Printer with 0% browser flash or dialogs.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -258,24 +277,36 @@ function LocalPrintAgentCard() {
 
       {status.online ? (
         <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold text-emerald-900">
-                Connected: <span className="font-mono">127.0.0.1:18181</span>
-              </p>
-              <p className="text-xs text-emerald-700 mt-0.5">
-                Default Windows Printer: <strong className="text-emerald-950 font-mono">{status.defaultPrinter || "Default Spooler"}</strong>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs font-semibold text-emerald-950 block mb-1">Select Windows Thermal Printer</Label>
+                <select
+                  value={selectedPrinter}
+                  onChange={(e) => handlePrinterChange(e.target.value)}
+                  className="h-9 px-3 text-xs border border-emerald-300 rounded-md bg-white font-mono min-w-[280px]"
+                >
+                  <option value="">(Auto: Windows Default — {status.defaultPrinter || "None"})</option>
+                  {printers.map((p) => (
+                    <option key={p.Name} value={p.Name}>
+                      {p.Name} {p.Default ? "(Default)" : ""} {p.PortName ? `[${p.PortName}]` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[11px] text-emerald-700 font-mono">
+                Agent URL: http://127.0.0.1:18181 (Connected)
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleTestPrint}
                 disabled={actionLoading !== null}
-                className="text-xs h-8 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
+                className="text-xs h-9 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
               >
                 <Printer className="h-3.5 w-3.5" />
                 {actionLoading === "test-print" ? "Printing..." : "Send Test Receipt"}
@@ -287,7 +318,7 @@ function LocalPrintAgentCard() {
                 size="sm"
                 onClick={handleOpenDrawer}
                 disabled={actionLoading !== null}
-                className="text-xs h-8 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
+                className="text-xs h-9 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
               >
                 <DollarSign className="h-3.5 w-3.5" />
                 {actionLoading === "open-drawer" ? "Opening..." : "Test Cash Drawer"}
@@ -299,7 +330,7 @@ function LocalPrintAgentCard() {
                 size="sm"
                 onClick={refreshStatus}
                 disabled={loading}
-                className="text-xs h-8 px-2 text-emerald-700 hover:text-emerald-900"
+                className="text-xs h-9 px-2 text-emerald-700 hover:text-emerald-900"
                 title="Refresh Status"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />

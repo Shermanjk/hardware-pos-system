@@ -25,7 +25,12 @@ const HOST = "127.0.0.1";
 // Uses Microsoft's official RawPrinterHelper (winspool.drv) to send raw ESC/POS bytes
 // directly to the printer queue without GDI/graphical rendering.
 const PS_RAW_PRINTER_SCRIPT = `
-Add-Type -TypeDefinition @"
+param (
+    [string]$PrinterName,
+    [string]$FilePath
+)
+
+$typeDef = @'
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -83,12 +88,11 @@ public class RawPrinterHelper {
         return bSuccess;
     }
 }
-"@
+'@
 
-param (
-    [string]$PrinterName,
-    [string]$FilePath
-)
+if (-not ([System.Management.Automation.PSTypeName]'RawPrinterHelper').Type) {
+    Add-Type -TypeDefinition $typeDef
+}
 
 if (-not (Test-Path $FilePath)) {
     Write-Error "File not found: $FilePath"

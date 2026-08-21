@@ -1,0 +1,7 @@
+{
+  "name": "isra-pos-print-agent",
+  "version": "1.0.0",
+  "description": "Isra POS Hardware Print Agent",
+  "main": "agent.js",
+  "type": "commonjs"
+}
