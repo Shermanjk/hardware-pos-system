@@ -226,7 +226,9 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(
-      JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "package.json"), "utf-8")).version
+      fs.existsSync(path.resolve(import.meta.dirname, "config/version.json"))
+        ? JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "config/version.json"), "utf-8")).applicationVersion
+        : JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "package.json"), "utf-8")).version
     ),
   },
   build: {

@@ -203,6 +203,7 @@ class RealtimeSyncHub {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
+        const wasMaintenance = this.state.isMaintenance;
         this.isConnecting = false;
         this.retryDelay = 1000;
         this.stopFastHealthProbe();
@@ -211,7 +212,17 @@ class RealtimeSyncHub {
           isOffline: false,
           lastConnectedAt: new Date(),
           retryCount: 0,
+          isMaintenance: false,
+          maintenanceMessage: "",
         });
+
+        // If the server just came back online after an update / maintenance restart,
+        // automatically reload the kiosk client so the fresh bundle is loaded immediately.
+        if (wasMaintenance) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
@@ -221,10 +232,16 @@ class RealtimeSyncHub {
             this.notifyListeners(data as EntityUpdateEvent);
           } else if (data && data.type === "server_maintenance") {
             const isMaint = data.status === "started";
+            const wasMaint = this.state.isMaintenance;
             this.updateState({
               isMaintenance: isMaint,
               maintenanceMessage: data.message || (isMaint ? "System maintenance in progress." : ""),
             });
+            if (wasMaint && !isMaint) {
+              setTimeout(() => {
+                window.location.reload();
+              }, 1200);
+            }
           }
         } catch {
           /* ignore non-json messages */

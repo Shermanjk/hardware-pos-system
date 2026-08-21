@@ -94,9 +94,27 @@ async function startServer() {
   const staticPath = fs.existsSync(path.resolve(__dirname, "../dist/public"))
     ? path.resolve(__dirname, "../dist/public")
     : path.resolve(__dirname, "public");
+
+  const setNoCacheHeaders = (res: any) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+  };
+
   if (fs.existsSync(staticPath)) {
-    app.use(express.static(staticPath));
+    app.use(
+      express.static(staticPath, {
+        setHeaders: (res, filePath) => {
+          // Never cache HTML entry point files in browser/kiosk profiles
+          if (filePath.endsWith(".html") || filePath.endsWith("sw.js")) {
+            setNoCacheHeaders(res);
+          }
+        },
+      })
+    );
     app.get("*", (_req, res) => {
+      setNoCacheHeaders(res);
       res.sendFile(path.join(staticPath, "index.html"));
     });
   }
