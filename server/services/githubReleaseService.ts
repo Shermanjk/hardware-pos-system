@@ -72,12 +72,19 @@ export async function fetchLatestRelease(): Promise<GitHubReleaseInfo | null> {
     const tagName = data.tag_name || "";
     const cleanVersion = tagName.replace(/^v/i, "");
 
-    // Find the release zip asset
+    // Find the release zip asset (pre-compiled bundle if attached by Actions)
     const zipAsset = Array.isArray(data.assets)
       ? data.assets.find((asset: any) =>
           asset.name.endsWith(".zip") || asset.content_type === "application/zip"
         )
       : null;
+
+    // Fallback directly to GitHub tag archive zip (always available immediately)
+    const fallbackZipUrl = tagName
+      ? `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/tags/${tagName}.zip`
+      : data.zipball_url || null;
+
+    const zipAssetUrl = zipAsset?.browser_download_url || fallbackZipUrl;
 
     return {
       tagName,
@@ -85,8 +92,8 @@ export async function fetchLatestRelease(): Promise<GitHubReleaseInfo | null> {
       name: data.name || tagName,
       body: data.body || "",
       publishedAt: data.published_at || "",
-      zipAssetUrl: zipAsset?.browser_download_url || null,
-      zipAssetName: zipAsset?.name || null,
+      zipAssetUrl,
+      zipAssetName: zipAsset?.name || `${tagName}.zip`,
       zipSize: zipAsset?.size || 0,
     };
   } catch (error: any) {
@@ -217,34 +224,52 @@ function copyDirSync(src: string, dest: string): void {
 export async function applyStagedUpdate(stagingDir: string): Promise<void> {
   const root = getAppRoot();
 
+  // If the archive unpacked into a single wrapper folder (e.g. GitHub archive zipballs), unnest it
+  let effectiveDir = stagingDir;
+  if (fs.existsSync(stagingDir)) {
+    const entries = fs.readdirSync(stagingDir);
+    if (entries.length === 1) {
+      const singlePath = path.join(stagingDir, entries[0]);
+      if (fs.statSync(singlePath).isDirectory()) {
+        effectiveDir = singlePath;
+      }
+    }
+  }
+
   // 1. Copy new migrations to root/migrations
-  const stagedMigrations = path.join(stagingDir, "migrations");
+  const stagedMigrations = path.join(effectiveDir, "migrations");
   const targetMigrations = path.join(root, "migrations");
   if (fs.existsSync(stagedMigrations)) {
     copyDirSync(stagedMigrations, targetMigrations);
   }
 
   // 2. Copy new frontend dist to root/dist
-  const stagedDist = path.join(stagingDir, "dist");
+  const stagedDist = path.join(effectiveDir, "dist");
   const targetDist = path.join(root, "dist");
   if (fs.existsSync(stagedDist)) {
     copyDirSync(stagedDist, targetDist);
   }
 
   // 3. Copy new config to root/config
-  const stagedConfig = path.join(stagingDir, "config");
+  const stagedConfig = path.join(effectiveDir, "config");
   const targetConfig = path.join(root, "config");
   if (fs.existsSync(stagedConfig)) {
     copyDirSync(stagedConfig, targetConfig);
   }
 
   // 4. Update server-dist:
-  // On Windows, the executing server-dist/index.js cannot be deleted directly while running,
-  // but individual files can be updated or copied over to server-dist
-  const stagedServerDist = path.join(stagingDir, "server-dist");
+  const stagedServerDist = path.join(effectiveDir, "server-dist");
   const targetServerDist = path.join(root, "server-dist");
   if (fs.existsSync(stagedServerDist)) {
     copyDirSync(stagedServerDist, targetServerDist);
+  }
+
+  // 5. Update package.json
+  const stagedPkg = path.join(effectiveDir, "package.json");
+  if (fs.existsSync(stagedPkg)) {
+    try {
+      fs.copyFileSync(stagedPkg, path.join(root, "package.json"));
+    } catch {}
   }
 
   console.log("[githubReleaseService] Staged release files applied successfully.");

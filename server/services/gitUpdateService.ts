@@ -90,9 +90,17 @@ export async function pullApplicationUpdate(): Promise<{ changed: boolean; outpu
     throw new Error(`Update repository is unavailable at ${repositoryPath}`);
   }
 
-  const result = await runGit(["pull", "--ff-only"], repositoryPath);
-  const output = `${result.stdout}\n${result.stderr}`.trim();
-  return { changed: !/already up to date/i.test(output), output };
+  try {
+    const result = await runGit(["pull", "--ff-only"], repositoryPath);
+    const output = `${result.stdout}\n${result.stderr}`.trim();
+    return { changed: !/already up to date/i.test(output), output };
+  } catch (err: any) {
+    console.warn("[gitUpdateService] Fast-forward pull failed, trying fetch and reset:", err.message);
+    await runGit(["fetch", "origin", "main"], repositoryPath);
+    const resetResult = await runGit(["reset", "--hard", "origin/main"], repositoryPath);
+    const output = `${resetResult.stdout}\n${resetResult.stderr}`.trim();
+    return { changed: true, output };
+  }
 }
 
 /**

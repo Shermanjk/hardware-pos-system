@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import {
   Download,
@@ -136,12 +137,12 @@ export function UpdateProgressModal({
     };
   }, [activeStep, isServerReady]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === activeStep);
 
-  return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-300">
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-300">
       <div className="bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl shadow-2xl max-w-lg w-full p-6 sm:p-8 overflow-hidden relative">
         {/* Subtle Ambient Glow */}
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -301,6 +302,7 @@ export function UpdateProgressModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
