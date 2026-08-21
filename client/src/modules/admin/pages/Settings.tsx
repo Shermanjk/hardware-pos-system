@@ -270,7 +270,7 @@ function LocalPrintAgentCard() {
             )}
           </span>
           <span className={`text-xs font-bold uppercase ${status.online ? "text-emerald-700" : "text-slate-500"}`}>
-            {loading ? "Checking..." : status.online ? "Agent Active (0% Flash)" : "Agent Offline"}
+            {loading ? "Checking..." : status.online ? `Agent Active :${status.port || 18181} (0% Flash)` : "Agent Offline"}
           </span>
         </div>
       </div>
@@ -295,7 +295,7 @@ function LocalPrintAgentCard() {
                 </select>
               </div>
               <p className="text-[11px] text-emerald-700 font-mono">
-                Agent URL: http://127.0.0.1:18181 (Connected)
+                Agent URL: http://127.0.0.1:{status.port || 18181} (Connected)
               </p>
             </div>
 
