@@ -1,8 +1,8 @@
 /**
  * Local Print Agent Connector Service
  * 
- * Communicates with the local background print agent on `http://127.0.0.1:18181`
- * to dispatch raw ESC/POS binary data directly to the Windows default thermal printer.
+ * Communicates with the local background print agent on `127.0.0.1` (candidate ports 18181-18184)
+ * to dispatch raw ESC/POS binary data directly to the Windows thermal printer.
  * 
  * Provides:
  * - 0.00% browser flash
@@ -10,13 +10,14 @@
  * - Automatic paper cut & cash drawer kick
  */
 
-const AGENT_BASE_URL = "http://127.0.0.1:18181";
+const CANDIDATE_PORTS = [18181, 18182, 18183, 18184];
 const REQUEST_TIMEOUT_MS = 2500;
 
 export interface AgentStatus {
   online: boolean;
   defaultPrinter?: string;
   version?: string;
+  port?: number;
 }
 
 export interface WindowsPrinterInfo {
@@ -39,11 +40,16 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 
 class LocalPrintAgentService {
   private isAgentOnline = false;
+  private activePort = 18181;
   private lastHealthCheck = 0;
   private cachedStatus: AgentStatus = { online: false };
 
+  private getBaseUrl(): string {
+    return `http://127.0.0.1:${this.activePort}`;
+  }
+
   /**
-   * Check if local print agent is online and reachable
+   * Check if local print agent is online and reachable on any candidate port
    */
   async checkHealth(): Promise<AgentStatus> {
     const now = Date.now();
@@ -52,31 +58,36 @@ class LocalPrintAgentService {
       return this.cachedStatus;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    // Try currently active port first
+    const portsToTry = [this.activePort, ...CANDIDATE_PORTS.filter(p => p !== this.activePort)];
 
-    try {
-      const res = await fetch(`${AGENT_BASE_URL}/health`, {
-        method: "GET",
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
+    for (const port of portsToTry) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1200);
 
-      if (res.ok) {
-        const data = await res.json();
-        this.isAgentOnline = true;
-        this.lastHealthCheck = now;
-        this.cachedStatus = {
-          online: true,
-          defaultPrinter: data.defaultPrinter,
-          version: data.version,
-        };
-        return this.cachedStatus;
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/health`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (res.ok) {
+          const data = await res.json();
+          this.activePort = port;
+          this.isAgentOnline = true;
+          this.lastHealthCheck = now;
+          this.cachedStatus = {
+            online: true,
+            defaultPrinter: data.defaultPrinter,
+            version: data.version,
+            port: port,
+          };
+          return this.cachedStatus;
+        }
+      } catch {
+        clearTimeout(timer);
       }
-    } catch {
-      // Agent offline or unreachable
-    } finally {
-      clearTimeout(timer);
     }
 
     this.isAgentOnline = false;
@@ -100,7 +111,7 @@ class LocalPrintAgentService {
     const timer = setTimeout(() => controller.abort(), 4000);
 
     try {
-      const res = await fetch(`${AGENT_BASE_URL}/printers`, {
+      const res = await fetch(`${this.getBaseUrl()}/printers`, {
         method: "GET",
         signal: controller.signal,
       });
@@ -129,7 +140,7 @@ class LocalPrintAgentService {
 
     try {
       const base64 = uint8ArrayToBase64(bytes);
-      const res = await fetch(`${AGENT_BASE_URL}/print`, {
+      const res = await fetch(`${this.getBaseUrl()}/print`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -166,7 +177,7 @@ class LocalPrintAgentService {
     const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
-      const res = await fetch(`${AGENT_BASE_URL}/test-print`, {
+      const res = await fetch(`${this.getBaseUrl()}/test-print`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ printerName: targetPrinter }),
@@ -192,7 +203,7 @@ class LocalPrintAgentService {
     const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
-      const res = await fetch(`${AGENT_BASE_URL}/open-drawer`, {
+      const res = await fetch(`${this.getBaseUrl()}/open-drawer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ printerName: targetPrinter }),

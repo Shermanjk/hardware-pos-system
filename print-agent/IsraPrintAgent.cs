@@ -7,6 +7,7 @@ using System.Drawing.Printing;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Threading;
+using System.Diagnostics;
 
 namespace IsraPOS.PrintAgent
 {
@@ -105,7 +106,8 @@ namespace IsraPOS.PrintAgent
 
     public class Program
     {
-        private const int Port = 18181;
+        private static readonly int[] CandidatePorts = new int[] { 18181, 18182, 18183, 18184 };
+        private static int ActivePort = 18181;
         private static TcpListener listener;
 
         public static string GetDefaultPrinterName()
@@ -155,7 +157,7 @@ namespace IsraPOS.PrintAgent
             foreach (string p in printers)
             {
                 string lower = p.ToLower();
-                if (lower.Contains("pos") || lower.Contains("thermal") || lower.Contains("receipt") || lower.Contains("xprinter") || lower.Contains("epson"))
+                if (lower.Contains("pos") || lower.Contains("thermal") || lower.Contains("receipt") || lower.Contains("xprinter") || lower.Contains("epson") || lower.Contains("365"))
                 {
                     return p;
                 }
@@ -164,7 +166,7 @@ namespace IsraPOS.PrintAgent
             return printers.Length > 0 ? printers[0] : "Default";
         }
 
-        public static byte[] BuildTestReceipt()
+        public static byte[] BuildTestReceipt(string targetPrinter)
         {
             using (MemoryStream ms = new MemoryStream())
             {
@@ -188,7 +190,8 @@ namespace IsraPOS.PrintAgent
                 byte[] info = Encoding.UTF8.GetBytes(
                     "PRINT AGENT:    STANDALONE EXE (0% FLASH)\n" +
                     "DATE/TIME:      " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n" +
-                    "PRINTER:        " + GetDefaultPrinterName() + "\n" +
+                    "PRINTER:        " + targetPrinter + "\n" +
+                    "PORT:           " + ActivePort + "\n" +
                     "SPOOLER:        Direct Win32 Raw Spooler\n" +
                     "------------------------------------------\n"
                 );
@@ -213,14 +216,12 @@ namespace IsraPOS.PrintAgent
 
         public static void Main(string[] args)
         {
-            Console.Title = "Isra POS Hardware Print Agent (Standalone)";
+            Console.Title = "Isra POS Hardware Print Agent";
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("=================================================");
             Console.WriteLine("  Isra Hardware POS - Standalone Print Agent     ");
             Console.WriteLine("=================================================");
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("  Status:          ONLINE (High-Speed TCP Socket)");
-            Console.WriteLine("  Listening:       http://127.0.0.1:" + Port);
             Console.WriteLine("  Default Printer: " + GetDefaultPrinterName());
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("  100% Zero-Flash ESC/POS printing ready.");
@@ -229,20 +230,43 @@ namespace IsraPOS.PrintAgent
             Console.ResetColor();
 
             IPAddress ip = IPAddress.Parse("127.0.0.1");
-            listener = new TcpListener(ip, Port);
-            listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            bool started = false;
 
-            try
+            // Try primary port and fallback candidate ports
+            foreach (int port in CandidatePorts)
             {
-                listener.Start();
+                try
+                {
+                    listener = new TcpListener(ip, port);
+                    listener.ExclusiveAddressUse = false;
+                    listener.Start();
+                    ActivePort = port;
+                    started = true;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("  [SUCCESS] Print Agent listening on http://127.0.0.1:" + ActivePort);
+                    Console.ResetColor();
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine("  Port " + port + " busy (" + ex.Message + "), trying next...");
+                    Console.ResetColor();
+                }
             }
-            catch (Exception ex)
+
+            if (!started)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("[ERROR] Could not start listener on port " + Port + ": " + ex.Message);
+                Console.WriteLine("[FATAL ERROR] Could not bind to any candidate port (18181-18184).");
                 Console.ResetColor();
+                Console.ReadLine();
                 return;
             }
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("  Agent is ONLINE and waiting for print jobs...\n");
+            Console.ResetColor();
 
             while (true)
             {
@@ -309,7 +333,7 @@ namespace IsraPOS.PrintAgent
                     if (method == "GET" && (path == "/health" || path == "/status"))
                     {
                         string def = GetDefaultPrinterName();
-                        string json = "{\"status\":\"ok\",\"agent\":\"IsraPOS-StandaloneExe\",\"version\":\"3.0.0\",\"defaultPrinter\":\"" + EscapeJson(def) + "\",\"timestamp\":\"" + DateTime.UtcNow.ToString("o") + "\"}";
+                        string json = "{\"status\":\"ok\",\"agent\":\"IsraPOS-StandaloneExe\",\"version\":\"3.1.0\",\"defaultPrinter\":\"" + EscapeJson(def) + "\",\"port\":" + ActivePort + ",\"timestamp\":\"" + DateTime.UtcNow.ToString("o") + "\"}";
                         SendResponse(stream, 200, "OK", json);
                         return;
                     }
@@ -379,7 +403,7 @@ namespace IsraPOS.PrintAgent
                     {
                         string printerName = ExtractJsonString(body, "printerName");
                         string target = ResolveTargetPrinter(printerName);
-                        byte[] testBytes = BuildTestReceipt();
+                        byte[] testBytes = BuildTestReceipt(target);
 
                         Console.ForegroundColor = ConsoleColor.Cyan;
                         Console.WriteLine("[PrintAgent] Test print -> '" + target + "'");
