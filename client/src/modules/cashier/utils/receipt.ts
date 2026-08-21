@@ -2,6 +2,7 @@ import type { TaxType } from "@/shared/api/productsApi";
 import type { SaleItemSnapshot } from "@/shared/api/salesApi";
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { buildCreditPaymentReceiptEscpos, buildSaleReceiptEscpos } from "@/shared/services/escpos/escposBuilder";
+import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
 import { toCentavos } from "./money";
@@ -337,28 +338,50 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
 
 
-export function printSaleReceipt(params: SaleReceiptParams): void {
+export async function printSaleReceipt(params: SaleReceiptParams): Promise<void> {
+  const bytes = buildSaleReceiptEscpos(params);
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS)
+  try {
+    const success = await localPrintAgent.printRaw(bytes);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
   if (webSerialPrinter.isConnected()) {
     try {
-      const bytes = buildSaleReceiptEscpos(params);
       webSerialPrinter.printRaw(bytes);
       return;
     } catch (err) {
-      console.error("[WebSerial] Direct print failed, falling back to HTML iframe print:", err);
+      console.error("[WebSerial] Direct print failed:", err);
     }
   }
+
+  // 3. Fallback: Browser silent print
   const html = buildReceiptHTML(params);
   printHtmlSilently(html);
 }
 
-export function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): void {
+export async function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): Promise<void> {
+  const bytes = buildCreditPaymentReceiptEscpos(params);
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS)
+  try {
+    const success = await localPrintAgent.printRaw(bytes);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Credit print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
   if (webSerialPrinter.isConnected()) {
     try {
-      const bytes = buildCreditPaymentReceiptEscpos(params);
       webSerialPrinter.printRaw(bytes);
       return;
     } catch (err) {
-      console.error("[WebSerial] Direct credit print failed, falling back to HTML iframe print:", err);
+      console.error("[WebSerial] Direct credit print failed:", err);
     }
   }
 

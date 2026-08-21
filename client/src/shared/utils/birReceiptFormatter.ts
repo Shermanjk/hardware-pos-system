@@ -10,6 +10,7 @@
 
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { buildPlainTextEscpos } from "@/shared/services/escpos/escposBuilder";
+import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
 
@@ -485,10 +486,20 @@ export function formatZReadingText(params: ZReadingParams): string {
 
 // ─── Browser Thermal Print Execution ───────────────────────────────────────────
 
-export function printThermalMonospace(text: string): void {
+export async function printThermalMonospace(text: string): Promise<void> {
+  const bytes = buildPlainTextEscpos(text);
+
+  // 1. Try Local Print Agent (100% Zero-Flash)
+  try {
+    const success = await localPrintAgent.printRaw(bytes);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Report print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
   if (webSerialPrinter.isConnected()) {
     try {
-      const bytes = buildPlainTextEscpos(text);
       webSerialPrinter.printRaw(bytes);
       return;
     } catch (err) {

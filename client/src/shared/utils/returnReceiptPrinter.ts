@@ -1,5 +1,6 @@
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import { buildReturnReceiptEscpos } from "@/shared/services/escpos/escposBuilder";
+import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
 
@@ -29,10 +30,20 @@ export interface ReturnReceiptData {
   refund_difference?: number;
 }
 
-export function printReturnReceipt(data: ReturnReceiptData): void {
+export async function printReturnReceipt(data: ReturnReceiptData): Promise<void> {
+  const bytes = buildReturnReceiptEscpos(data);
+
+  // 1. Try Local Print Agent (100% Zero-Flash)
+  try {
+    const success = await localPrintAgent.printRaw(bytes);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Return print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
   if (webSerialPrinter.isConnected()) {
     try {
-      const bytes = buildReturnReceiptEscpos(data);
       webSerialPrinter.printRaw(bytes);
       return;
     } catch (err) {

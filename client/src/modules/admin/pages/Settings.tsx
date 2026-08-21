@@ -175,6 +175,175 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
   );
 }
 
+import { localPrintAgent, type AgentStatus } from "@/shared/services/escpos/localPrintAgent";
+import { toast } from "sonner";
+
+function LocalPrintAgentCard() {
+  const [status, setStatus] = useState<AgentStatus>({ online: false });
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const refreshStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await localPrintAgent.checkHealth();
+      setStatus(res);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshStatus();
+    const interval = setInterval(refreshStatus, 6000);
+    return () => clearInterval(interval);
+  }, [refreshStatus]);
+
+  const handleTestPrint = async () => {
+    setActionLoading("test-print");
+    try {
+      const ok = await localPrintAgent.sendTestPrint();
+      if (ok) {
+        toast.success("Test receipt sent directly to Windows thermal printer!");
+      } else {
+        toast.error("Failed to send test print. Ensure Print Agent is running.");
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleOpenDrawer = async () => {
+    setActionLoading("open-drawer");
+    try {
+      const ok = await localPrintAgent.openCashDrawer();
+      if (ok) {
+        toast.success("Cash drawer kick command sent!");
+      } else {
+        toast.error("Failed to trigger cash drawer. Check printer connection.");
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
+            <Printer className="h-5 w-5 text-blue-600" />
+            Local Hardware Print Agent (100% Zero-Flash Printing)
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Streams raw ESC/POS binary directly to your Windows Default Thermal Printer with 0% browser flash or dialogs.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            {status.online ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </>
+            ) : (
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-300"></span>
+            )}
+          </span>
+          <span className={`text-xs font-bold uppercase ${status.online ? "text-emerald-700" : "text-slate-500"}`}>
+            {loading ? "Checking..." : status.online ? "Agent Active (0% Flash)" : "Agent Offline"}
+          </span>
+        </div>
+      </div>
+
+      {status.online ? (
+        <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-emerald-900">
+                Connected: <span className="font-mono">127.0.0.1:18181</span>
+              </p>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                Default Windows Printer: <strong className="text-emerald-950 font-mono">{status.defaultPrinter || "Default Spooler"}</strong>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestPrint}
+                disabled={actionLoading !== null}
+                className="text-xs h-8 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                {actionLoading === "test-print" ? "Printing..." : "Send Test Receipt"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleOpenDrawer}
+                disabled={actionLoading !== null}
+                className="text-xs h-8 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
+              >
+                <DollarSign className="h-3.5 w-3.5" />
+                {actionLoading === "open-drawer" ? "Opening..." : "Test Cash Drawer"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={refreshStatus}
+                disabled={loading}
+                className="text-xs h-8 px-2 text-emerald-700 hover:text-emerald-900"
+                title="Refresh Status"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-800">
+                Print Agent Not Detected on this PC (Using Standard Browser Printing)
+              </p>
+              <p className="text-xs text-slate-600">
+                To enable <strong>100% Zero-Flash hardware printing</strong> on this Cashier terminal:
+              </p>
+              <ol className="text-xs text-slate-600 list-decimal list-inside space-y-0.5">
+                <li>Copy the <code className="bg-slate-200 px-1 rounded">print-agent</code> folder to this PC.</li>
+                <li>Double-click <code className="bg-slate-200 px-1 rounded">Install_Startup.bat</code> once to start it automatically on Windows boot.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={refreshStatus}
+              disabled={loading}
+              className="text-xs h-8 gap-1.5 font-semibold"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Check Connection Again
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function DirectThermalPrinterSettingsCard({ storeName = "ISRA HARDWARE POS" }: { storeName?: string }) {
   const [state, setState] = useState<SerialPrinterState>(webSerialPrinter.getState());
 
@@ -189,28 +358,13 @@ function DirectThermalPrinterSettingsCard({ storeName = "ISRA HARDWARE POS" }: {
         <div className="flex items-center gap-3 mb-3">
           <Zap className="h-5 w-5 text-slate-400" />
           <h2 className="text-lg font-display font-bold text-gray-900">
-            Direct USB Thermal Receipt Printer (0% Flash ESC/POS)
+            Direct USB Serial Port (COM / Web Serial)
           </h2>
         </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Web Serial API Not Available</p>
-              <p className="text-xs text-amber-700 mt-1">
-                Direct USB thermal printing requires the <strong>Web Serial API</strong>, which is only available on:
-              </p>
-              <ul className="text-xs text-amber-700 mt-1 list-disc list-inside space-y-0.5">
-                <li><code className="bg-amber-100 px-1 rounded">https://</code> (secure connections)</li>
-                <li><code className="bg-amber-100 px-1 rounded">http://localhost</code> or <code className="bg-amber-100 px-1 rounded">http://127.0.0.1</code></li>
-              </ul>
-              <p className="text-xs text-amber-700 mt-2">
-                <strong>Kiosk terminals</strong> connecting via <code className="bg-amber-100 px-1 rounded">http://isra-pos-server:3001</code> will 
-                use the system's <strong>default Windows printer</strong> with <code className="bg-amber-100 px-1 rounded">--kiosk-printing</code> for 
-                silent zero-dialog receipt printing instead.
-              </p>
-            </div>
-          </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <p className="text-xs text-slate-600">
+            Web Serial API is available on <code className="bg-slate-200 px-1 rounded">http://localhost</code> or via the Local Print Agent above for LAN connections.
+          </p>
         </div>
       </Card>
     );
@@ -690,9 +844,10 @@ export default function Settings() {
           </TabsList>
 
           <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
-          <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
-          <TabsContent value="printers" className="space-y-6"><DirectThermalPrinterSettingsCard storeName={settings?.store_name} /></TabsContent>
-          <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
+          <TabsContent value="printers" className="space-y-6">
+            <LocalPrintAgentCard />
+            <DirectThermalPrinterSettingsCard storeName={settings?.store_name} />
+          </TabsContent>
           <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
           <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
         </Tabs>
