@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { UpdateProgressModal, type UpdatePhase } from "@/modules/admin/components/UpdateProgressModal";
 
 interface ReleaseInfo {
   latestVersion: string;
@@ -62,6 +63,11 @@ export default function SystemUpdate() {
   const [step, setStep] = useState<UpdateStep>("idle");
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
+
+  // Smooth update progress modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [updatePhase, setUpdatePhase] = useState<UpdatePhase>("downloading");
+  const [updateErrorMessage, setUpdateErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadVersionStatus();
@@ -126,22 +132,30 @@ export default function SystemUpdate() {
     if (!versionStatus?.updateAvailable && !versionStatus?.databaseUpdateRequired) return;
 
     setStep("installing");
+    setIsModalOpen(true);
+    setUpdatePhase("downloading");
+    setUpdateErrorMessage(null);
+
+    // Staged visual advancement while install request runs on server
+    const backupTimer = setTimeout(() => setUpdatePhase("backup"), 1200);
+    const migrateTimer = setTimeout(() => setUpdatePhase("migrating"), 3000);
+
     try {
       await axios.post("/api/system-update/install", {}, { headers: authHeaders() });
-      setStep("restarting");
-      toast.success("Update installed! Restarting server now…");
+      clearTimeout(backupTimer);
+      clearTimeout(migrateTimer);
 
       // Persist session token across restart
-      const token = sessionStorage.getItem("pos_token");
+      const token = sessionStorage.getItem("pos_token") || localStorage.getItem("pos_token");
       if (token) {
         localStorage.setItem("pos_token_persist_restart", token);
       }
 
-      // Reload window after restart delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 5000);
+      setStep("restarting");
+      setUpdatePhase("restarting");
     } catch (error: any) {
+      clearTimeout(backupTimer);
+      clearTimeout(migrateTimer);
       console.error("Failed to install update:", error);
       const status = error.response?.status;
       const errData = error.response?.data;
@@ -150,13 +164,14 @@ export default function SystemUpdate() {
         : errData?.message || error.message || "Failed to install update";
 
       if (status === 409) {
-        toast.error("System was stuck in maintenance mode. Resetting — please try again.");
+        setUpdateErrorMessage("System was in maintenance mode. Please try again.");
         try {
           await axios.post("/api/system-update/reset-maintenance", {}, { headers: authHeaders() });
         } catch { /* ignore */ }
       } else {
-        toast.error(message, { duration: 6000 });
+        setUpdateErrorMessage(message);
       }
+      setUpdatePhase("error");
       setStep("ready");
     }
   };
@@ -350,6 +365,17 @@ export default function SystemUpdate() {
           </ol>
         </CardContent>
       </Card>
+
+      {/* Smooth Full-Screen Update Progress & Restart Modal */}
+      <UpdateProgressModal
+        isOpen={isModalOpen}
+        targetVersion={versionStatus?.downloadedVersion}
+        targetDbVersion={versionStatus?.downloadedDatabaseVersion}
+        phase={updatePhase}
+        errorMessage={updateErrorMessage}
+        onRetry={handleInstallUpdate}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }
