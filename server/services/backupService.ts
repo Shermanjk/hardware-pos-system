@@ -155,7 +155,8 @@ export async function createBackup(
 
       const mysqldumpBin = findMysqldump();
       const passwordArg = dbPassword ? `--password="${dbPassword}"` : "";
-      const command = `"${mysqldumpBin}" --host=${dbHost} --port=${dbPort} --user=${dbUser} ${passwordArg} --single-transaction --routines --triggers --events --add-drop-database --databases ${dbName} --result-file="${filePath}"`;
+      const normalizedResultFile = filePath.replace(/\\/g, "/");
+      const command = `"${mysqldumpBin}" --host=${dbHost} --port=${dbPort} --user=${dbUser} ${passwordArg} --single-transaction --routines --triggers --events --add-drop-database --databases ${dbName} --result-file="${normalizedResultFile}"`;
 
       exec(command, { timeout: 180_000 }, async (error, stdout, stderr) => {
         if (error) {
