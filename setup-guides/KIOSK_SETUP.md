@@ -30,11 +30,9 @@ This guide provides step-by-step instructions for setting up a Windows cashier t
 
 Choose from the following options to set up the cashier kiosk shortcut:
 
-### Option 1: Clean & Short Shortcut (Recommended — 164 Characters)
-Using the `--incognito` flag achieves the exact same privacy (zero saved passwords, zero username history, zero autofill) in a much shorter command that fits easily into the Windows shortcut box:
-
+### Option 1: Clean & Short Shortcut (Recommended)
 ```text
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --incognito --app=http://isra-pos-server:3001
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --unsafely-treat-insecure-origin-as-secure="http://isra-pos-server:3001,http://noob:3001" --incognito --app=http://isra-pos-server:3001
 ```
 
 ---
@@ -46,7 +44,7 @@ A batch file has no character limits and opens with a single double-click:
 2. Paste the following:
    ```bat
    @echo off
-   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
+   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --unsafely-treat-insecure-origin-as-secure="http://isra-pos-server:3001,http://noob:3001" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
    exit
    ```
 3. Click **File** $\rightarrow$ **Save As...**
@@ -65,7 +63,7 @@ Windows only limits characters during the initial wizard creation. The Shortcut 
 3. Right-click the newly created shortcut on your desktop $\rightarrow$ select **Properties**.
 4. In the **Target** field, replace the text with the full command:
    ```text
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --kiosk-printing --user-data-dir="C:\ChromePOSProfile" --unsafely-treat-insecure-origin-as-secure="http://isra-pos-server:3001,http://noob:3001" --no-first-run --no-default-browser-check --disable-features=AutofillServerCommunication,PasswordManager --password-store=basic --app=http://isra-pos-server:3001
    ```
 5. Click **Apply** $\rightarrow$ **OK**.
 

@@ -1,80 +1,64 @@
 /**
- * Silent HTML Printer Utility for Kiosk POS Systems
+ * Silent HTML Printer Utility for POS Systems
  * 
- * Injects thermal receipt HTML into a hidden container in the top-level document,
- * applies an isolated @media print style isolating the receipt, and invokes
- * window.print() directly on the main window.
- * 
- * This ensures Chrome's `--kiosk-printing` flag completely suppresses the print
- * preview dialog and silently dispatches the receipt to the Windows default thermal printer.
+ * Renders thermal receipt HTML inside an isolated hidden iframe
+ * ensuring pixel-perfect 80mm formatting without inheriting main-page CSS resets.
  */
 
-const CONTAINER_ID = "__pos_receipt_print_container__";
-const STYLE_ID = "__pos_receipt_print_style__";
-
 export function printHtmlSilently(html: string): void {
-  // Remove any leftover previous receipt container and print style
-  document.getElementById(CONTAINER_ID)?.remove();
-  document.getElementById(STYLE_ID)?.remove();
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:80mm;height:0;border:none;visibility:hidden;pointer-events:none;";
+  iframe.setAttribute("aria-hidden", "true");
+  document.body.appendChild(iframe);
 
-  // Create isolated print stylesheet: hides app layout, displays only receipt container
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = `
-    @media print {
-      body > *:not(#${CONTAINER_ID}) {
-        display: none !important;
+  const cleanup = () => {
+    try {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
       }
-      #${CONTAINER_ID} {
-        display: block !important;
-        position: static !important;
-        width: 80mm !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      @page {
-        size: 80mm auto;
-        margin: 0;
-      }
+    } catch {
+      // Ignored
     }
-  `;
-  document.head.appendChild(style);
+  };
 
-  // Create receipt container (hidden from viewport during normal interaction)
-  const container = document.createElement("div");
-  container.id = CONTAINER_ID;
-  container.style.cssText =
-    "position:fixed;top:-9999px;left:-9999px;width:80mm;visibility:hidden;pointer-events:none;";
-  container.setAttribute("aria-hidden", "true");
-
-  // Extract <style> and <body> from provided HTML if present
-  const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-
-  if (styleMatch) {
-    const receiptStyle = document.createElement("style");
-    receiptStyle.textContent = styleMatch[1];
-    container.appendChild(receiptStyle);
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (!doc) {
+    cleanup();
+    return;
   }
 
-  const contentDiv = document.createElement("div");
-  contentDiv.innerHTML = bodyMatch ? bodyMatch[1] : html;
-  container.appendChild(contentDiv);
+  doc.open();
+  doc.write(html);
+  doc.close();
 
-  document.body.appendChild(container);
+  const win = iframe.contentWindow;
+  if (win) {
+    let printed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Trigger main window print — intercepted and handled silently by --kiosk-printing
-  requestAnimationFrame(() => {
-    try {
-      window.print();
-    } catch (err) {
-      console.error("[SilentPrinter] window.print() failed:", err);
+    const handlePrint = () => {
+      if (printed) return;
+      printed = true;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      try {
+        win.print();
+      } catch (e) {
+        console.error("[SilentPrinter] iframe print error:", e);
+      }
+      setTimeout(cleanup, 2000);
+    };
+
+    if (doc.readyState === "complete") {
+      handlePrint();
+    } else {
+      win.addEventListener("load", handlePrint, { once: true });
+      fallbackTimer = setTimeout(handlePrint, 250);
     }
-
-    // Clean up DOM after printing
-    setTimeout(() => {
-      document.getElementById(CONTAINER_ID)?.remove();
-      document.getElementById(STYLE_ID)?.remove();
-    }, 2000);
-  });
+  } else {
+    setTimeout(cleanup, 2000);
+  }
 }
