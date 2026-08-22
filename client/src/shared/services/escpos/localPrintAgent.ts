@@ -132,7 +132,12 @@ class LocalPrintAgentService {
    * Send raw ESC/POS bytes directly to Windows thermal printer
    * Uses selected printer in localStorage or defaults to Windows Default Printer
    */
-  async printRaw(bytes: Uint8Array, printerName?: string): Promise<boolean> {
+  async printRaw(bytes: Uint8Array, printerName?: string, text?: string): Promise<boolean> {
+    // Probe health first if agent state is stale or offline
+    if (!this.isAgentOnline || Date.now() - this.lastHealthCheck > 15000) {
+      await this.checkHealth();
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
 
@@ -147,6 +152,7 @@ class LocalPrintAgentService {
         },
         body: JSON.stringify({
           rawBase64: base64,
+          text: text || undefined,
           printerName: targetPrinter,
         }),
         signal: controller.signal,

@@ -491,7 +491,7 @@ export async function printThermalMonospace(text: string): Promise<void> {
 
   // 1. Try Local Print Agent (100% Zero-Flash)
   try {
-    const success = await localPrintAgent.printRaw(bytes);
+    const success = await localPrintAgent.printRaw(bytes, undefined, text);
     if (success) return;
   } catch (err) {
     console.warn("[LocalPrintAgent] Report print failed:", err);

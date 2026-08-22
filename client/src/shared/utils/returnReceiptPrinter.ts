@@ -30,12 +30,64 @@ export interface ReturnReceiptData {
   refund_difference?: number;
 }
 
+export function buildReturnReceiptText(data: ReturnReceiptData): string {
+  const storeName              = data.store_settings?.store_name              || "ISRA HARDWARE POS";
+  const registeredTaxpayerName = data.store_settings?.registered_taxpayer_name || "";
+  const storeAddress           = data.store_settings?.address                || "";
+  const cleanTin = (data.store_settings?.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : cleanTin;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-PH");
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const fmt = (val: number) => val.toFixed(2);
+
+  const lines: string[] = [];
+  lines.push("----------------------------------------");
+  lines.push(`          ${storeName.toUpperCase()}`);
+  if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
+  if (storeAddress) lines.push(storeAddress);
+  lines.push(`TIN: ${tinFormatted}`);
+  lines.push("----------------------------------------");
+  lines.push("        SALES RETURN RECEIPT");
+  lines.push("----------------------------------------");
+  lines.push(`Return No: ${data.return_number}`);
+  lines.push(`Original Invoice: ${data.invoice_number}`);
+  lines.push(`Date: ${dateStr} ${timeStr}`);
+  lines.push(`Processed By: ${data.processed_by_name}`);
+  lines.push(`Customer: ${data.customer_name}`);
+  lines.push("----------------------------------------");
+  lines.push("QTY  ITEM DESCRIPTION         PRICE    TOTAL");
+  lines.push("----------------------------------------");
+
+  for (const item of data.items) {
+    const qtyStr = item.quantity.toString().padEnd(4);
+    const nameStr = item.product_name.slice(0, 18).padEnd(18);
+    const priceStr = fmt(item.unit_price).padStart(7);
+    const totalStr = fmt(item.subtotal).padStart(8);
+    lines.push(`${qtyStr} ${nameStr} ${priceStr} ${totalStr}`);
+  }
+
+  lines.push("----------------------------------------");
+  lines.push(`TOTAL REFUND AMOUNT:           P${fmt(data.refund_amount ?? 0)}`);
+  lines.push(`RESOLUTION:                    ${data.resolution.toUpperCase()}`);
+  lines.push(`CONDITION:                     ${data.item_condition.toUpperCase()}`);
+  lines.push("----------------------------------------");
+  lines.push("  THANK YOU - SALES RETURN COMPLETED");
+  lines.push("----------------------------------------\n\n\n");
+
+  return lines.join("\n");
+}
+
 export async function printReturnReceipt(data: ReturnReceiptData): Promise<void> {
   const bytes = buildReturnReceiptEscpos(data);
+  const text = buildReturnReceiptText(data);
 
-  // 1. Try Local Print Agent (100% Zero-Flash)
+  // 1. Try Local Print Agent (100% Zero-Flash, ESC/POS + GDI Fallback)
   try {
-    const success = await localPrintAgent.printRaw(bytes);
+    const success = await localPrintAgent.printRaw(bytes, undefined, text);
     if (success) return;
   } catch (err) {
     console.warn("[LocalPrintAgent] Return print failed:", err);

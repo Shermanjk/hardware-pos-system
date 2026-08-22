@@ -461,26 +461,38 @@ namespace IsraPOS.PrintAgent
 
                         bool printed = false;
 
-                        // 1. If plain text receipt was provided, print with universal GDI PrintDocument
+                        // 1. Try RAW ESC/POS binary printing first
+                        if (!string.IsNullOrEmpty(base64))
+                        {
+                            try
+                            {
+                                byte[] bytes = Convert.FromBase64String(base64);
+                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw bytes to spooler...");
+                                string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
+                                if (res == "OK") printed = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine("[RAW Spooler Warning] " + ex.Message);
+                            }
+                        }
+
+                        // 2. Dual / Universal Driver GDI Printing (ensures 100% paper output for Windows Printer Drivers like Xprinter / POS-80)
                         if (!string.IsNullOrEmpty(text))
                         {
                             Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Driver GDI engine...");
-                            printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                            bool gdiOk = GdiReceiptPrinter.PrintReceiptText(target, text);
+                            if (gdiOk) printed = true;
                         }
-
-                        // 2. If raw bytes were provided (or if GDI wasn't used)
-                        if (!printed && !string.IsNullOrEmpty(base64))
+                        else if (!printed && !string.IsNullOrEmpty(base64))
                         {
-                            byte[] bytes = Convert.FromBase64String(base64);
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw bytes to spooler...");
-                            string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
-                            if (res == "OK") printed = true;
-                            else
+                            try
                             {
-                                // If raw failed, try text fallback
+                                byte[] bytes = Convert.FromBase64String(base64);
                                 string decodedText = Encoding.UTF8.GetString(bytes);
                                 printed = GdiReceiptPrinter.PrintReceiptText(target, decodedText);
                             }
+                            catch { }
                         }
 
                         if (printed)

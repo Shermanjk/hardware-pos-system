@@ -338,12 +338,155 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
 
 
+export function buildSaleReceiptText(params: SaleReceiptParams): string {
+  const {
+    invoiceNumber, cartItems, customerInfo,
+    subtotalCents, taxCents, totalCents,
+    cashCents, changeCents, cashierName, settings,
+    discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
+    vatExemptCents = 0, scPwdType = "NONE", scPwdId,
+    paymentType = "CASH", creditBalance, downPaymentCents = 0
+  } = params;
+
+  const isScPwd = scPwdType !== "NONE";
+  const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
+  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
+
+  const storeName              = settings.store_name              || "ISRA HARDWARE POS";
+  const storeAddress           = settings.address                || "";
+  const storePhone             = settings.contact_number          || "";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : cleanTin;
+  const branchCode = settings.branch_code || "000";
+  const ptuNo = settings.ptu_or_accn_no || "";
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-PH");
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const fmt = (cents: number) => (cents / 100).toFixed(2);
+
+  const lines: string[] = [];
+  lines.push("----------------------------------------");
+  lines.push(`          ${storeName.toUpperCase()}`);
+  if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
+  if (storeAddress) lines.push(storeAddress);
+  if (storePhone) lines.push(`Tel: ${storePhone}`);
+  lines.push(`TIN: ${tinFormatted}-${branchCode}`);
+  if (ptuNo) lines.push(`PTU: ${ptuNo}`);
+  lines.push("----------------------------------------");
+  lines.push(`OFFICIAL RECEIPT #: ${invoiceNumber}`);
+  lines.push(`Date: ${dateStr} ${timeStr}`);
+  lines.push(`Cashier: ${cashierName}`);
+  if (customerInfo.name) lines.push(`Customer: ${customerInfo.name}`);
+  if (customerInfo.tin) lines.push(`Cust TIN: ${customerInfo.tin}`);
+  lines.push("----------------------------------------");
+  lines.push("QTY  ITEM DESCRIPTION         PRICE    TOTAL");
+  lines.push("----------------------------------------");
+
+  for (const item of cartItems) {
+    const qtyStr = item.quantity.toString().padEnd(4);
+    const nameStr = item.name.slice(0, 18).padEnd(18);
+    const priceStr = fmt(toCentavos(item.unitPrice)).padStart(7);
+    const totalStr = fmt(toCentavos(item.subtotal)).padStart(8);
+    lines.push(`${qtyStr} ${nameStr} ${priceStr} ${totalStr}`);
+  }
+
+  lines.push("----------------------------------------");
+  lines.push(`SUBTOTAL:                      P${fmt(subtotalCents)}`);
+
+  if (discountCents > 0) {
+    const dLabel = discountName || (discountPercentage ? `${discountPercentage}%` : "DISCOUNT");
+    lines.push(`DISCOUNT (${dLabel}):        -P${fmt(discountCents)}`);
+  }
+
+  lines.push(`TOTAL AMOUNT DUE:              P${fmt(finalTotalCents)}`);
+  lines.push("----------------------------------------");
+
+  if (paymentType === "CREDIT") {
+    lines.push(`PAYMENT TYPE:                    CHARGE/CREDIT`);
+    if (downPaymentCents > 0) lines.push(`DOWN PAYMENT:                  P${fmt(downPaymentCents)}`);
+    if (creditBalance !== undefined && creditBalance !== null) {
+      lines.push(`OUTSTANDING BALANCE:           P${fmt(creditBalance)}`);
+    }
+  } else {
+    lines.push(`CASH TENDERED:                 P${fmt(cashCents)}`);
+    lines.push(`CHANGE:                        P${fmt(displayChangeCents)}`);
+  }
+
+  lines.push("----------------------------------------");
+  if (isScPwd) {
+    lines.push(`CLIENT TYPE: ${scPwdLabel}`);
+    if (scPwdId) lines.push(`ID NO: ${scPwdId}`);
+    lines.push(`VAT-EXEMPT SALES:              P${fmt(vatExemptCents)}`);
+  } else {
+    const vatableSales = finalTotalCents - taxCents;
+    lines.push(`VATable Sales:                 P${fmt(vatableSales)}`);
+    lines.push(`12% VAT Amount:                P${fmt(taxCents)}`);
+  }
+  lines.push("----------------------------------------");
+  lines.push("      THANK YOU FOR YOUR PURCHASE!");
+  lines.push("       THIS SERVES AS OFFICIAL RECEIPT");
+  lines.push("----------------------------------------\n\n\n");
+
+  return lines.join("\n");
+}
+
+export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams): string {
+  const {
+    receiptNumber, customerName, customerCode,
+    amountPaidCents, newBalanceCents, cashierName,
+    notes, settings,
+  } = params;
+
+  const storeName              = settings.store_name              || "ISRA HARDWARE POS";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const storeAddress           = settings.address                || "";
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : cleanTin;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-PH");
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const fmt = (cents: number) => (cents / 100).toFixed(2);
+
+  const lines: string[] = [];
+  lines.push("----------------------------------------");
+  lines.push(`          ${storeName.toUpperCase()}`);
+  if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
+  if (storeAddress) lines.push(storeAddress);
+  lines.push(`TIN: ${tinFormatted}`);
+  lines.push("----------------------------------------");
+  lines.push("        CREDIT PAYMENT RECEIPT");
+  lines.push("----------------------------------------");
+  lines.push(`RECEIPT NO: ${receiptNumber}`);
+  lines.push(`Date: ${dateStr} ${timeStr}`);
+  lines.push(`Cashier: ${cashierName}`);
+  lines.push(`Customer: ${customerName}`);
+  if (customerCode) lines.push(`Account Code: ${customerCode}`);
+  lines.push("----------------------------------------");
+  lines.push(`AMOUNT PAID:                  P${fmt(amountPaidCents)}`);
+  lines.push(`REMAINING BALANCE:            P${fmt(newBalanceCents)}`);
+  lines.push("----------------------------------------");
+  if (notes) lines.push(`Notes: ${notes}`);
+  lines.push("----------------------------------------");
+  lines.push("    THANK YOU FOR YOUR PAYMENT!");
+  lines.push("----------------------------------------\n\n\n");
+
+  return lines.join("\n");
+}
+
 export async function printSaleReceipt(params: SaleReceiptParams): Promise<void> {
   const bytes = buildSaleReceiptEscpos(params);
+  const text = buildSaleReceiptText(params);
 
-  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS)
+  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS + GDI Fallback)
   try {
-    const success = await localPrintAgent.printRaw(bytes);
+    const success = await localPrintAgent.printRaw(bytes, undefined, text);
     if (success) return;
   } catch (err) {
     console.warn("[LocalPrintAgent] Print failed:", err);
@@ -366,10 +509,11 @@ export async function printSaleReceipt(params: SaleReceiptParams): Promise<void>
 
 export async function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): Promise<void> {
   const bytes = buildCreditPaymentReceiptEscpos(params);
+  const text = buildCreditPaymentReceiptText(params);
 
-  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS)
+  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS + GDI Fallback)
   try {
-    const success = await localPrintAgent.printRaw(bytes);
+    const success = await localPrintAgent.printRaw(bytes, undefined, text);
     if (success) return;
   } catch (err) {
     console.warn("[LocalPrintAgent] Credit print failed:", err);
