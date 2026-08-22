@@ -875,10 +875,12 @@ export default function Settings() {
           </TabsList>
 
           <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
+          <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
           <TabsContent value="printers" className="space-y-6">
             <LocalPrintAgentCard />
             <DirectThermalPrinterSettingsCard storeName={settings?.store_name} />
           </TabsContent>
+          <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
           <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
           <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>
         </Tabs>

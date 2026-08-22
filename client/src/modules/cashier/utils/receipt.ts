@@ -85,12 +85,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
   const isScPwd = scPwdType !== "NONE";
   const grossCents = cartItems.reduce((acc, item) => acc + toCentavos(item.subtotal), 0);
-  // For SC/PWD, the displayed VAT amount is 0 (VAT-exempt). For regular: the customer's VAT.
   const displayTaxCents = isScPwd ? 0 : taxCents;
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
   const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
 
-  const storeName              = settings.store_name              || "";
+  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
   const proprietor             = settings.proprietor             || "";
   const storeFb                = settings.facebook                || "";
   const storePhone             = settings.contact_number          || "";
@@ -104,14 +103,22 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const storeTIN = `${tinFormatted}-${branchCode}`;
   const ptuNo = settings.ptu_or_accn_no || "";
   const documentType           = settings.document_type           || "SALES INVOICE";
-  const taxRate                = Number(settings.vat_rate) > 0 ? Number(settings.vat_rate) : 12;
-  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
+  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
   const posMin                 = settings.pos_min    || "";
   const posSerial              = settings.pos_serial || "";
 
-  const now      = new Date();
-  const dateStr  = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-  const timeStr  = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const yyyy = now.getFullYear();
+  const dateStr = `${mm}/${dd}/${yyyy}`;
+
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const timeStr = `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
   const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
 
   const fmtCents = (cents: number) => {
@@ -121,21 +128,24 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     return (cents / 100).toFixed(2);
   };
 
+  const tinVal = customerInfo.tin && customerInfo.tin !== "N/A" ? customerInfo.tin : "";
+  const addrVal = customerInfo.address && customerInfo.address !== "N/A" ? customerInfo.address : "";
+  const busVal = customerInfo.businessStyle && customerInfo.businessStyle !== "N/A" ? customerInfo.businessStyle : "";
+
   const itemsHTML = cartItems.map(item => {
     const qty = item.quantity;
-    const unit = item.unit || "";
+    const unit = item.unit || "pc";
     const desc = item.name;
     const up = fmtCents(toCentavos(item.unitPrice));
     const amt = fmtCents(toCentavos(item.subtotal));
     return `<tr class="item-name-row">
-      <td colspan="5" class="col-name">${desc}</td>
+      <td colspan="4" class="col-name">${desc}</td>
     </tr>
     <tr class="item-detail-row">
       <td class="col-qty">${qty}</td>
       <td class="col-unit">${unit}</td>
-      <td class="col-spacer"></td>
-      <td class="col-price">${currSym} ${up}</td>
-      <td class="col-amt">${currSym} ${amt}</td>
+      <td class="col-price">${up}</td>
+      <td class="col-amt">${amt}</td>
     </tr>`;
   }).join("");
 
@@ -179,7 +189,6 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
   const vatBreakdownHTML = `
   <div class="divider"></div>
-  <div class="center bold">TAX BREAKDOWN</div>
   <div class="row"><span>VATable Sales:</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
   <div class="row"><span>12% VAT Amount:</span><span>${currSym} ${fmtCents(vatAmountCents)}</span></div>
   <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCentsCalculated)}</span></div>
@@ -210,94 +219,105 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       width: 80mm;
       margin: 0;
       padding: 0;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      line-height: 1.4;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
       color: #000;
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    body { padding: 0; }
+    body { padding: 0; background: #fff; }
     .receipt {
-      width: 76mm;
-      max-width: 76mm;
+      width: 72mm;
+      max-width: 72mm;
       margin: 0 auto;
-      padding: 0;
+      padding: 0 2mm 0 2mm;
+      background: #fff;
     }
-    .center { text-align: center; margin: 1px 0; word-break: break-word; }
-    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
-    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
-    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
-    .section { margin: 1px 0; word-break: break-word; }
+    .center { text-align: center; margin: 2px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2.5px 0; word-break: break-word; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 6px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 4px; max-width: 60%; }
+    
+    .cust-row { display: flex; align-items: flex-end; margin: 3px 0; }
+    .cust-lbl { width: 75px; flex-shrink: 0; font-size: 11.5px; }
+    .cust-line { flex: 1 1 auto; border-bottom: 1px solid #000; min-height: 13px; font-size: 11.5px; padding-left: 2px; }
+    
+    .section { margin: 2.5px 0; word-break: break-word; }
     .bold { font-weight: bold; }
-    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
-    .divider { border-top: 1px dashed #000; margin: 3px 0; }
-    .items { width: 100%; border-collapse: collapse; margin: 3px 0; table-layout: fixed; }
-    .items th, .items td { padding: 0 1px; vertical-align: middle; }
-    .items th { font-size: 10px; font-weight: bold; }
-    .items .col-hdr-qty   { width: 12%; text-align: center; }
+    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 14.5px; font-weight: normal; letter-spacing: 0.5px; word-break: break-word; }
+    .header-info { font-size: 11px; line-height: 1.45; text-align: center; margin-bottom: 4px; }
+    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+    
+    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
+    .items th { font-size: 11.5px; font-weight: normal; border-bottom: 1px dashed #000; padding: 3px 0 4px 0; }
+    .items .col-hdr-qty   { width: 12%; text-align: left; }
     .items .col-hdr-unit  { width: 14%; text-align: left; }
-    .items .col-hdr-space { width: 4%; text-align: left; }
-    .items .col-hdr-price { width: 35%; text-align: right; }
-    .items .col-hdr-amt   { width: 35%; text-align: right; }
-    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 1px 0 1px; font-weight: bold; }
-    .item-detail-row td { padding: 0 1px 3px 1px; }
-    .item-detail-row .col-qty   { width: 12%; text-align: center; }
+    .items .col-hdr-desc  { width: 44%; text-align: left; }
+    .items .col-hdr-amt   { width: 30%; text-align: right; padding-right: 4px; }
+    
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 4px 4px 2px 0; font-size: 11.5px; font-weight: normal; line-height: 1.35; }
+    .item-detail-row td { padding: 1px 0 5px 0; font-size: 11.5px; font-weight: normal; }
+    .item-detail-row .col-qty   { width: 12%; text-align: left; }
     .item-detail-row .col-unit  { width: 14%; text-align: left; }
-    .item-detail-row .col-spacer { width: 4%; }
-    .item-detail-row .col-price { width: 35%; text-align: right; word-break: break-all; }
-    .item-detail-row .col-amt   { width: 35%; text-align: right; word-break: break-all; }
+    .item-detail-row .col-price { width: 44%; text-align: left; }
+    .item-detail-row .col-amt   { width: 30%; text-align: right; white-space: nowrap; padding-right: 4px; }
+    
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+      .receipt { width: 72mm; max-width: 72mm; margin: 0 auto; padding: 0 2mm 0 2mm; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
-    <div class="divider"></div>
     <div class="store-name">${storeName}</div>
-    ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
-    ${proprietor ? `<div class="center">PROPRIETOR: ${proprietor}</div>` : ''}
-    <div class="center">${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
-    ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
-    ${ptuNo ? `<div class="center">PTU / ACCN: ${ptuNo}</div>` : ''}
-    <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
-    <div class="divider"></div>
-    <div class="center bold">${documentType}</div>
-    <div class="row"><span>Invoice No:</span><span>${invoiceNumber}</span></div>
-    <div class="row"><span>Date:</span><span>${dateStr}</span></div>
-    <div class="row"><span>Time:</span><span>${timeStr}</span></div>
-    <div class="divider"></div>
-    <div class="section">SOLD TO: ${customerInfo.name}</div>
-    ${scPwdType !== "NONE" ? `<div class="section bold">${scPwdLabel}: ${scPwdId || "N/A"}</div>` : ''}
-    <div class="section">TIN: ${customerInfo.tin || "N/A"}</div>
-    <div class="section">ADDRESS: ${customerInfo.address || "N/A"}</div>
-    <div class="section">BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}</div>
+    <div class="header-info">
+      ${proprietor ? `<div class="center">Proprietor - ${proprietor}</div>` : ''}
+      ${registeredTaxpayerName && registeredTaxpayerName !== proprietor ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
+      ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
+      <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+      ${(posMin || posSerial) ? `<div class="center">${posMin ? `MIN: ${posMin}` : ''}${posMin && posSerial ? ' | ' : ''}${posSerial ? `S/N: ${posSerial}` : ''}</div>` : ''}
+      ${ptuNo ? `<div class="center">PTU No: ${ptuNo}</div>` : ''}
+      ${(storeFb || storePhone) ? `<div class="center">${storeFb ? `Fb: ${storeFb}` : ''}${storeFb && storePhone ? ' | ' : ''}${storePhone ? `Tel No: ${storePhone}` : ''}</div>` : ''}
+    </div>
+    
+    <div class="center bold" style="margin: 9px 0 7px 0; font-size: 14px; letter-spacing: 0.5px;">${documentType}</div>
+    
+    <div class="row"><span>SI No: ${invoiceNumber}</span></div>
+    <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
+    <div class="row"><span>SOLD TO: ${customerInfo.name || "Walk-In Customer"}</span></div>
+    ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
+    <div class="cust-row"><span class="cust-lbl">TIN:</span><span class="cust-line">${tinVal}</span></div>
+    <div class="cust-row"><span class="cust-lbl">ADDRESS:</span><span class="cust-line">${addrVal}</span></div>
+    <div class="cust-row"><span class="cust-lbl">BUS STYLE:</span><span class="cust-line">${busVal}</span></div>
+    
     <div class="divider"></div>
     <table class="items">
       <thead>
         <tr>
           <th class="col-hdr-qty">QTY</th>
           <th class="col-hdr-unit">UNIT</th>
-          <th class="col-hdr-space"></th>
-          <th class="col-hdr-price">PRICE</th>
-          <th class="col-hdr-amt">AMT</th>
+          <th class="col-hdr-desc">DESCRIPTION</th>
+          <th class="col-hdr-amt">AMOUNT</th>
         </tr>
       </thead>
       <tbody>
         ${itemsHTML}
       </tbody>
     </table>
-    <div class="divider"></div>
-    <div class="row"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL: ${currSym}&nbsp;${fmtCents(grossCents)}</span></div>
+    
+    <div class="row" style="margin-top: 5px;"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL:&nbsp;&nbsp;${currSym} ${fmtCents(grossCents)}</span></div>
     ${discountHTML}
     ${vatBreakdownHTML}
-    <div class="divider"></div>
+    
+    <div style="margin: 6px 0;"></div>
     ${params.paymentType === "CREDIT" ? `
     <div class="row bold"><span>TOTAL AMOUNT:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
-    <div class="row bold"><span>PAYMENT METHOD:</span><span>CREDIT / CHARGE</span></div>
+    <div class="row"><span>PAYMENT METHOD:</span><span>CREDIT / CHARGE</span></div>
     ${(params.downPaymentCents && params.downPaymentCents > 0) ? `
     <div class="row"><span>Down Payment (Cash):</span><span>${currSym} ${fmtCents(params.downPaymentCents)}</span></div>
     <div class="row bold"><span>Charged to Account:</span><span>${currSym} ${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
@@ -320,18 +340,16 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
-    <div class="center">${settings.receipt_footer || "POS Software: Antigravity POS v2.0"}</div>
-    <div class="center">Accreditation No: ${settings.ptu_or_accn_no || "000-000000000-000000"}</div>
-    <div class="divider"></div>
     ${posMin ? `
-    <div class="center bold">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
-    <div class="center">Thank you for your business!</div>
+    <div class="center">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
+    <div class="center" style="margin-top: 3px;">${settings.receipt_footer || "Thank you for your business!"}</div>
     ` : `
-    <div class="center bold">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
-    <div class="center bold">***      CLAIM OF INPUT TAX        ***</div>
-    <div class="center bold">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
+    <div class="center">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
+    <div class="center">***      CLAIM OF INPUT TAX        ***</div>
+    <div class="center">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
+    <div class="center" style="margin-top: 3px;">${settings.receipt_footer || "Thank you for shopping with us!"}</div>
     `}
-    <div class="divider"></div>
+    <div style="height: 8mm;"></div>
   </div>
 </body>
 </html>`;
@@ -342,7 +360,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const {
     invoiceNumber, cartItems, customerInfo,
-    subtotalCents, taxCents, totalCents,
+    taxCents, totalCents,
     cashCents, changeCents, cashierName, settings,
     discountCents = 0, discountName, discountPercentage, finalTotalCents = totalCents,
     vatExemptCents = 0, scPwdType = "NONE", scPwdId,
@@ -350,86 +368,162 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   } = params;
 
   const isScPwd = scPwdType !== "NONE";
+  const displayTaxCents = isScPwd ? 0 : taxCents;
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
   const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
 
-  const storeName              = settings.store_name              || "ISRA HARDWARE POS";
+  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
+  const proprietor             = settings.proprietor             || "";
   const storeAddress           = settings.address                || "";
   const storePhone             = settings.contact_number          || "";
+  const storeFb                = settings.facebook                || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
-    : cleanTin;
-  const branchCode = settings.branch_code || "000";
-  const ptuNo = settings.ptu_or_accn_no || "";
+    : (settings.tin || "000-000-000");
+  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
+  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const ptuNo                  = settings.ptu_or_accn_no          || "";
+  const posMin                 = settings.pos_min                 || "";
+  const posSerial              = settings.pos_serial              || "";
+  const documentType           = settings.document_type           || "SALES INVOICE";
+  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-PH");
-  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const fmt = (cents: number) => (cents / 100).toFixed(2);
+  const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
+  const grossCents = cartItems.reduce((acc, item) => acc + toCentavos(item.subtotal), 0);
+
+  const snaps = params.itemSnapshots || [];
+  let vatableNetCents = 0;
+  let vatAmountCents = 0;
+  let vatExemptCentsCalculated = 0;
+  let zeroRatedCents = 0;
+  let nonTaxableCents = 0;
+
+  if (settings.vat_enabled) {
+    if (isScPwd) {
+      vatAmountCents = 0;
+      vatExemptCentsCalculated = snaps
+        .filter((s) => s.tax_type === "VAT_EXEMPT")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0) + vatExemptCents;
+      zeroRatedCents = snaps
+        .filter((s) => s.tax_type === "ZERO_RATED")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      nonTaxableCents = snaps
+        .filter((s) => s.tax_type === "NON_TAXABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+    } else {
+      vatableNetCents = snaps
+        .filter((s) => s.tax_type === "VATABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.taxable_amount)), 0);
+      vatAmountCents = displayTaxCents;
+      vatExemptCentsCalculated = snaps
+        .filter((s) => s.tax_type === "VAT_EXEMPT")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      zeroRatedCents = snaps
+        .filter((s) => s.tax_type === "ZERO_RATED")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+      nonTaxableCents = snaps
+        .filter((s) => s.tax_type === "NON_TAXABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
+    }
+  } else {
+    nonTaxableCents = finalTotalCents;
+  }
 
   const lines: string[] = [];
   lines.push("----------------------------------------");
-  lines.push(`          ${storeName.toUpperCase()}`);
-  if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
-  if (storeAddress) lines.push(storeAddress);
-  if (storePhone) lines.push(`Tel: ${storePhone}`);
-  lines.push(`TIN: ${tinFormatted}-${branchCode}`);
-  if (ptuNo) lines.push(`PTU: ${ptuNo}`);
+  lines.push(storeName.toUpperCase());
+  if (registeredTaxpayerName) lines.push(registeredTaxpayerName);
+  if (proprietor) lines.push(`PROPRIETOR: ${proprietor}`);
+  lines.push(`${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${storeTIN}`);
+  if (posMin || posSerial) lines.push(`MIN: ${posMin} | S/N: ${posSerial}`);
+  if (ptuNo) lines.push(`PTU / ACCN: ${ptuNo}`);
+  if (storeFb || storePhone) lines.push(`Fb: ${storeFb} | Tel: ${storePhone}`);
   lines.push("----------------------------------------");
-  lines.push(`OFFICIAL RECEIPT #: ${invoiceNumber}`);
-  lines.push(`Date: ${dateStr} ${timeStr}`);
-  lines.push(`Cashier: ${cashierName}`);
-  if (customerInfo.name) lines.push(`Customer: ${customerInfo.name}`);
-  if (customerInfo.tin) lines.push(`Cust TIN: ${customerInfo.tin}`);
+  lines.push(`              ${documentType}`);
+  lines.push(`Invoice No:     ${invoiceNumber}`);
+  lines.push(`Date:           ${dateStr}`);
+  lines.push(`Time:           ${timeStr}`);
   lines.push("----------------------------------------");
-  lines.push("QTY  ITEM DESCRIPTION         PRICE    TOTAL");
+  lines.push(`SOLD TO: ${customerInfo.name || "Walk-in Customer"}`);
+  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${scPwdId || "N/A"}`);
+  lines.push(`TIN: ${customerInfo.tin || "N/A"}`);
+  lines.push(`ADDRESS: ${customerInfo.address || "N/A"}`);
+  lines.push(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
+  lines.push("----------------------------------------");
+  lines.push("QTY  UNIT  DESCRIPTION        PRICE    TOTAL");
   lines.push("----------------------------------------");
 
   for (const item of cartItems) {
+    lines.push(item.name);
     const qtyStr = item.quantity.toString().padEnd(4);
-    const nameStr = item.name.slice(0, 18).padEnd(18);
-    const priceStr = fmt(toCentavos(item.unitPrice)).padStart(7);
-    const totalStr = fmt(toCentavos(item.subtotal)).padStart(8);
-    lines.push(`${qtyStr} ${nameStr} ${priceStr} ${totalStr}`);
+    const unitStr = (item.unit || "").slice(0, 5).padEnd(5);
+    const priceStr = `${currSym} ${fmt(toCentavos(item.unitPrice))}`.padStart(12);
+    const totalStr = `${currSym} ${fmt(toCentavos(item.subtotal))}`.padStart(15);
+    lines.push(`${qtyStr} ${unitStr} ${priceStr} ${totalStr}`);
   }
 
   lines.push("----------------------------------------");
-  lines.push(`SUBTOTAL:                      P${fmt(subtotalCents)}`);
+  lines.push(`ITEMS: ${totalItems}              TOTAL: ${currSym} ${fmt(grossCents)}`);
 
   if (discountCents > 0) {
-    const dLabel = discountName || (discountPercentage ? `${discountPercentage}%` : "DISCOUNT");
-    lines.push(`DISCOUNT (${dLabel}):        -P${fmt(discountCents)}`);
+    const dLabel = discountName || (discountPercentage ? `${discountPercentage}%` : "Discount");
+    lines.push("----------------------------------------");
+    lines.push(`DISCOUNT (${dLabel}):         -${currSym} ${fmt(discountCents)}`);
+    lines.push(`GROSS TOTAL:                   ${currSym} ${fmt(grossCents)}`);
+    lines.push(`NET TOTAL:                     ${currSym} ${fmt(finalTotalCents)}`);
   }
 
-  lines.push(`TOTAL AMOUNT DUE:              P${fmt(finalTotalCents)}`);
   lines.push("----------------------------------------");
+  lines.push("             TAX BREAKDOWN");
+  lines.push(`VATable Sales:                 ${currSym} ${fmt(vatableNetCents)}`);
+  lines.push(`12% VAT Amount:                ${currSym} ${fmt(vatAmountCents)}`);
+  lines.push(`VAT-Exempt Sales:              ${currSym} ${fmt(vatExemptCentsCalculated)}`);
+  lines.push(`Zero-Rated Sales:              ${currSym} ${fmt(zeroRatedCents)}`);
+  if (nonTaxableCents > 0 && !settings.vat_enabled) {
+    lines.push(`Non-VAT Sales:                 ${currSym} ${fmt(nonTaxableCents)}`);
+  }
 
+  lines.push("----------------------------------------");
   if (paymentType === "CREDIT") {
-    lines.push(`PAYMENT TYPE:                    CHARGE/CREDIT`);
-    if (downPaymentCents > 0) lines.push(`DOWN PAYMENT:                  P${fmt(downPaymentCents)}`);
-    if (creditBalance !== undefined && creditBalance !== null) {
-      lines.push(`OUTSTANDING BALANCE:           P${fmt(creditBalance)}`);
+    lines.push(`TOTAL AMOUNT:                  ${currSym} ${fmt(finalTotalCents)}`);
+    lines.push(`PAYMENT METHOD:                CREDIT / CHARGE`);
+    if (downPaymentCents > 0) {
+      lines.push(`Down Payment (Cash):           ${currSym} ${fmt(downPaymentCents)}`);
+      lines.push(`Charged to Account:            ${currSym} ${fmt(finalTotalCents - downPaymentCents)}`);
+    } else {
+      lines.push(`Charged to Account:            ${currSym} ${fmt(finalTotalCents)}`);
     }
+    if (creditBalance !== undefined && creditBalance !== null) {
+      lines.push(`Total Account Balance:         ${currSym} ${fmt(creditBalance)}`);
+    }
+    lines.push("----------------------------------------");
+    lines.push("   CUSTOMER ACKNOWLEDGEMENT / SIGNATURE");
+    lines.push("\n   _____________________________________\n");
   } else {
-    lines.push(`CASH TENDERED:                 P${fmt(cashCents)}`);
-    lines.push(`CHANGE:                        P${fmt(displayChangeCents)}`);
+    lines.push(`TOTAL AMOUNT DUE:              ${currSym} ${fmt(finalTotalCents)}`);
+    lines.push(`Cash Tendered:                 ${currSym} ${fmt(cashCents)}`);
+    lines.push(`Change:                        ${currSym} ${fmt(displayChangeCents)}`);
   }
 
   lines.push("----------------------------------------");
-  if (isScPwd) {
-    lines.push(`CLIENT TYPE: ${scPwdLabel}`);
-    if (scPwdId) lines.push(`ID NO: ${scPwdId}`);
-    lines.push(`VAT-EXEMPT SALES:              P${fmt(vatExemptCents)}`);
-  } else {
-    const vatableSales = finalTotalCents - taxCents;
-    lines.push(`VATable Sales:                 P${fmt(vatableSales)}`);
-    lines.push(`12% VAT Amount:                P${fmt(taxCents)}`);
-  }
+  lines.push(`CASHIER: ${cashierName}`);
   lines.push("----------------------------------------");
-  lines.push("      THANK YOU FOR YOUR PURCHASE!");
-  lines.push("       THIS SERVES AS OFFICIAL RECEIPT");
+  if (posMin) {
+    lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
+    lines.push(`         ${settings.receipt_footer || "Thank you for your business!"}`);
+    lines.push(" Please keep this invoice for warranty claims.");
+  } else {
+    lines.push("    *** THIS DOCUMENT IS NOT VALID FOR ***");
+    lines.push("    ***      CLAIM OF INPUT TAX        ***");
+    lines.push("    *** THIS IS NOT AN OFFICIAL INVOICE ***");
+    lines.push(`         ${settings.receipt_footer || "Thank you for shopping with us!"}`);
+  }
   lines.push("----------------------------------------\n\n\n");
 
   return lines.join("\n");
@@ -442,40 +536,39 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
     notes, settings,
   } = params;
 
-  const storeName              = settings.store_name              || "ISRA HARDWARE POS";
+  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const storeAddress           = settings.address                || "";
-  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
-  const tinFormatted = cleanTin.length === 9
-    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
-    : cleanTin;
+  const storeTIN               = settings.tin || settings.business_license || "";
+  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-PH");
-  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const fmt = (cents: number) => (cents / 100).toFixed(2);
 
   const lines: string[] = [];
   lines.push("----------------------------------------");
-  lines.push(`          ${storeName.toUpperCase()}`);
-  if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
+  lines.push(storeName.toUpperCase());
+  if (registeredTaxpayerName) lines.push(registeredTaxpayerName);
   if (storeAddress) lines.push(storeAddress);
-  lines.push(`TIN: ${tinFormatted}`);
+  lines.push(`TIN: ${storeTIN}`);
   lines.push("----------------------------------------");
-  lines.push("        CREDIT PAYMENT RECEIPT");
+  lines.push("  COLLECTION RECEIPT / PAYMENT ACKNOWLEDGEMENT");
+  lines.push(`Receipt No:     ${receiptNumber}`);
+  lines.push(`Date:           ${dateStr}`);
+  lines.push(`Time:           ${timeStr}`);
   lines.push("----------------------------------------");
-  lines.push(`RECEIPT NO: ${receiptNumber}`);
-  lines.push(`Date: ${dateStr} ${timeStr}`);
-  lines.push(`Cashier: ${cashierName}`);
-  lines.push(`Customer: ${customerName}`);
-  if (customerCode) lines.push(`Account Code: ${customerCode}`);
+  lines.push(`Received From:  ${customerName}`);
+  if (customerCode) lines.push(`Customer Code:  ${customerCode}`);
+  if (notes) lines.push(`Notes:          ${notes}`);
   lines.push("----------------------------------------");
-  lines.push(`AMOUNT PAID:                  P${fmt(amountPaidCents)}`);
-  lines.push(`REMAINING BALANCE:            P${fmt(newBalanceCents)}`);
+  lines.push(`AMOUNT PAID:                   ${currSym} ${fmt(amountPaidCents)}`);
+  lines.push(`REMAINING BALANCE:             ${currSym} ${fmt(newBalanceCents)}`);
   lines.push("----------------------------------------");
-  if (notes) lines.push(`Notes: ${notes}`);
+  lines.push(`Received By:    ${cashierName}`);
   lines.push("----------------------------------------");
-  lines.push("    THANK YOU FOR YOUR PAYMENT!");
+  lines.push("        Thank you for your payment!");
   lines.push("----------------------------------------\n\n\n");
 
   return lines.join("\n");
@@ -577,10 +670,20 @@ export async function printSaleReceipt(params: SaleReceiptParams): Promise<void>
 
   // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image)
   try {
+    // ALWAYS rasterize HTML offscreen so imageBase64 is guaranteed for the agent
     let imageBase64: string | undefined;
-    if (localPrintAgent.isAvailable()) {
+    try {
+      console.log("[Receipt] Starting offscreen HTML rasterization...");
       const raster = await rasterizeReceiptHtml(html);
       imageBase64 = raster?.imageBase64;
+      console.log(
+        imageBase64
+          ? `%c[Receipt] ✅ Rasterization SUCCESS: ${raster!.width}x${raster!.height}px, base64 length=${imageBase64.length}`
+          : "%c[Receipt] ❌ Rasterization returned null/undefined — agent will fallback to text",
+        imageBase64 ? "color:#10b981;font-weight:bold" : "color:#ef4444;font-weight:bold"
+      );
+    } catch (rasterErr) {
+      console.error("[Receipt] ❌ Offscreen rasterization exception:", rasterErr);
     }
 
     const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, isCash);
@@ -611,9 +714,11 @@ export async function printCreditPaymentReceipt(params: CreditPaymentReceiptPara
   // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image)
   try {
     let imageBase64: string | undefined;
-    if (localPrintAgent.isAvailable()) {
+    try {
       const raster = await rasterizeReceiptHtml(html);
       imageBase64 = raster?.imageBase64;
+    } catch (rasterErr) {
+      console.warn("[Receipt] Offscreen rasterization warning:", rasterErr);
     }
 
     const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, true);

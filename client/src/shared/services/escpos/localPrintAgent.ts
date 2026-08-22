@@ -147,7 +147,11 @@ class LocalPrintAgentService {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    // 45-second timeout: GDI pd.Print() on XP-365B blocks synchronously while the
+    // Windows spooler processes the full receipt image (560x1240px). This can take
+    // 8-20s. The previous 8s timeout caused the browser to fallback to Chrome print
+    // dialog while GDI was still working, producing a double-print scenario.
+    const timer = setTimeout(() => controller.abort(), 45000);
 
     const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 

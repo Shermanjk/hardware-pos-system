@@ -23,15 +23,16 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
   const t0 = performance.now();
 
   const iframe = document.createElement("iframe");
+  // 302px = 80mm @ 96 CSS DPI. Initial 10000px height prevents viewport truncation before measurement
   iframe.style.cssText =
-    "position:fixed;top:-9999px;left:-9999px;width:80mm;height:auto;border:none;visibility:hidden;pointer-events:none;z-index:-9999;";
+    "position:fixed;top:-9999px;left:-9999px;width:302px;height:10000px;border:none;visibility:hidden;pointer-events:none;z-index:-9999;overflow:hidden;";
   iframe.setAttribute("aria-hidden", "true");
   document.body.appendChild(iframe);
 
   try {
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
     if (!doc) {
-      console.warn("[ReceiptRasterizer] Failed to access iframe document");
+      console.error("[ReceiptRasterizer] FAILED: Cannot access iframe contentDocument");
       return null;
     }
 
@@ -39,27 +40,52 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
     doc.write(html);
     doc.close();
 
-    // Ensure fonts and styles are fully loaded and computed
+    // 1. Ensure all custom and monospace fonts are fully loaded
     if (iframe.contentWindow?.document?.fonts) {
       await iframe.contentWindow.document.fonts.ready;
     }
 
-    // Small microtask yield for layout calculation
-    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
+    // 2. Yield for layout & reflow calculation
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 20)));
 
+    // Explicitly target the inner .receipt container to exclude .preview-card / outer margins
     const receiptEl = (doc.querySelector(".receipt") || doc.body) as HTMLElement;
     if (!receiptEl) {
-      console.warn("[ReceiptRasterizer] .receipt container not found in HTML");
+      console.error("[ReceiptRasterizer] FAILED: .receipt container not found in HTML");
       return null;
     }
+    console.log("[ReceiptRasterizer] .receipt found:", receiptEl.offsetWidth, "x", receiptEl.offsetHeight, "px");
 
-    // Scale 2 captures at high resolution (192-203 DPI equivalent)
+    // Isolate container: remove any preview wrapper margins or shadows for 1:1 thermal capture
+    receiptEl.style.margin = "0";
+    receiptEl.style.boxShadow = "none";
+
+    // Measure exact element scroll dimensions (prevents viewport height clipping)
+    const elementWidth = receiptEl.offsetWidth || 280;
+    const elementHeight = Math.max(receiptEl.scrollHeight, receiptEl.offsetHeight);
+
+    // Adjust iframe to exact height to prevent DOM boundary clipping
+    iframe.style.height = `${elementHeight + 40}px`;
+
+    // 3. Rasterize with explicit bounding box and viewport height mapping
+    // CRITICAL: windowWidth MUST be the full iframe viewport (302px = 80mm @ 96dpi),
+    // NOT elementWidth (≈280px). Using elementWidth causes html2canvas to reflow the
+    // CSS layout at a narrower viewport, collapsing flex rows and table columns.
+    const iframeViewportWidth = 302;
     const canvas = await html2canvas(receiptEl, {
-      scale: 2,
+      scale: 2, // Produces ~560-576px wide canvas (matching native 203 DPI thermal printheads)
       backgroundColor: "#ffffff",
       logging: false,
       useCORS: true,
       allowTaint: true,
+      width: elementWidth,
+      height: elementHeight,
+      windowWidth: iframeViewportWidth,
+      windowHeight: elementHeight + 100,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
     });
 
     const dataUrl = canvas.toDataURL("image/png");
@@ -67,9 +93,14 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
     const renderTimeMs = Math.round(performance.now() - t0);
 
     console.log(
-      `%c[ReceiptRasterizer] Rendered receipt HTML in ${renderTimeMs}ms (${canvas.width}x${canvas.height}px)`,
+      `%c[ReceiptRasterizer] ✅ SUCCESS: Rendered ${canvas.width}x${canvas.height}px in ${renderTimeMs}ms | base64 length: ${imageBase64.length} chars`,
       "color: #10b981; font-weight: bold;"
     );
+
+    if (!imageBase64 || imageBase64.length < 100) {
+      console.error("[ReceiptRasterizer] FAILED: base64 output is empty or too short", imageBase64?.length);
+      return null;
+    }
 
     return {
       imageBase64,
@@ -78,7 +109,7 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
       renderTimeMs,
     };
   } catch (err) {
-    console.warn("[ReceiptRasterizer] html2canvas rasterization failed:", err);
+    console.error("[ReceiptRasterizer] ❌ EXCEPTION in html2canvas:", err);
     return null;
   } finally {
     if (document.body.contains(iframe)) {
