@@ -14,38 +14,30 @@ namespace IsraPOS.PrintAgent
 {
     public class GdiReceiptPrinter
     {
-        // 80mm thermal paper width in hundredths of an inch (80mm = ~315 hundredths)
-        private const int PaperWidthHundredths = 315;
-
         public static bool PrintReceiptText(string printerName, string text)
         {
             try
             {
                 string[] lines = text.Replace("\r\n", "\n").Split('\n');
 
-                // Fonts: Courier New 8pt for 80mm thermal paper (fits ~42 chars)
+                PrintDocument pd = new PrintDocument();
+                pd.PrinterSettings.PrinterName = printerName;
+
+                // KEY FIX: Inherit the paper size that the user already configured in
+                // Windows Printer Preferences (e.g. "80mm x Roll" set in Xprinter driver).
+                // Do NOT hardcode a custom size — that overrides the driver's paper config.
+                pd.DefaultPageSettings = pd.PrinterSettings.DefaultPageSettings;
+
+                // Minimal margins for thermal edge-to-edge printing
+                pd.DefaultPageSettings.Margins = new Margins(8, 8, 5, 5);
+
+                // Suppress print dialog (no popup, 0% flash)
+                pd.PrintController = new StandardPrintController();
+
+                // Fonts sized for 80mm thermal paper (~42-char line width at 8pt Courier New)
                 Font bodyFont   = new Font("Courier New", 8f, FontStyle.Regular);
                 Font headerFont = new Font("Courier New", 9f, FontStyle.Bold);
                 Font boldFont   = new Font("Courier New", 8f, FontStyle.Bold);
-
-                // Measure total height needed using a dummy Graphics object
-                float lineH = bodyFont.GetHeight() + 2f;
-                float totalHeight = 0;
-                foreach (string line in lines)
-                    totalHeight += lineH;
-                totalHeight += 30; // bottom padding
-
-                // Convert points to hundredths of an inch (1 inch = 100 hundredths, 1pt ~= 1.39 hundredths)
-                int pageHeightHundredths = (int)(totalHeight * 100f / 96f) + 100;
-
-                PrintDocument pd = new PrintDocument();
-                pd.PrinterSettings.PrinterName = printerName;
-                pd.PrintController = new StandardPrintController(); // No popup dialog
-
-                // Set custom paper size to match 80mm thermal roll
-                PaperSize thermalSize = new PaperSize("Thermal80", PaperWidthHundredths, pageHeightHundredths);
-                pd.DefaultPageSettings.PaperSize = thermalSize;
-                pd.DefaultPageSettings.Margins = new Margins(10, 10, 5, 5);
 
                 pd.PrintPage += (sender, e) =>
                 {
@@ -53,6 +45,7 @@ namespace IsraPOS.PrintAgent
                     Brush brush = Brushes.Black;
                     float y = e.MarginBounds.Top;
                     float leftMargin = e.MarginBounds.Left;
+                    float lineH = bodyFont.GetHeight(g) + 2f;
 
                     foreach (string line in lines)
                     {
@@ -64,9 +57,12 @@ namespace IsraPOS.PrintAgent
 
                         Font currentFont = bodyFont;
                         string upper = line.ToUpper();
-                        if (upper.Contains("ISRA HARDWARE") || upper.Contains("OFFICIAL RECEIPT") || upper.Contains("SALES INVOICE") || upper.Contains("CREDIT PAYMENT"))
+                        if (upper.Contains("ISRA HARDWARE") || upper.Contains("OFFICIAL RECEIPT") ||
+                            upper.Contains("SALES INVOICE") || upper.Contains("CREDIT PAYMENT") ||
+                            upper.Contains("SALES RETURN"))
                             currentFont = headerFont;
-                        else if (upper.Contains("TOTAL") || upper.Contains("CASH") || upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
+                        else if (upper.Contains("TOTAL") || upper.Contains("CASH") ||
+                                 upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
                             currentFont = boldFont;
 
                         g.DrawString(line, currentFont, brush, leftMargin, y);
@@ -93,6 +89,7 @@ namespace IsraPOS.PrintAgent
             }
         }
     }
+
 
     public class RawPrinterHelper
     {
@@ -566,25 +563,23 @@ namespace IsraPOS.PrintAgent
 
                         bool printed = false;
 
-                        // 1. PRIMARY: Windows TEXT datatype — printer driver renders text natively, handles paper length automatically.
-                        //    This is the most reliable approach for all Windows thermal printer drivers (Xprinter, Epson, Star, etc.)
-                        //    and eliminates blank paper feed caused by incorrect GDI paper size calculations.
+                        // 1. PRIMARY: GDI PrintDocument — inherits the paper size configured in Windows
+                        //    Printer Preferences (e.g. 80mm x Roll set in Xprinter driver settings).
+                        //    StandardPrintController suppresses the print dialog (0% flash).
                         if (!string.IsNullOrEmpty(text))
                         {
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Windows TEXT spooler (native driver rendering)...");
-                            string textRes = RawPrinterHelper.SendTextToPrinter(target, text);
-                            if (textRes == "OK")
+                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI engine (using printer's own paper settings)...");
+                            printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                            if (!printed)
                             {
-                                printed = true;
-                            }
-                            else
-                            {
-                                Console.WriteLine("[TEXT Spooler Warning] " + textRes + " — trying GDI fallback...");
-                                printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                                // Fallback 1A: try TEXT spooler datatype
+                                Console.WriteLine("[GDI Warning] GDI failed — trying TEXT spooler fallback...");
+                                string textRes = RawPrinterHelper.SendTextToPrinter(target, text);
+                                if (textRes == "OK") printed = true;
                             }
                         }
 
-                        // 2. FALLBACK: RAW ESC/POS bytes — used only if no text was provided or TEXT/GDI both failed.
+                        // 2. FALLBACK: RAW ESC/POS bytes — used only when no text was provided or GDI/TEXT both failed.
                         if (!printed && !string.IsNullOrEmpty(base64))
                         {
                             try
@@ -593,13 +588,6 @@ namespace IsraPOS.PrintAgent
                                 Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes...");
                                 string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
                                 if (res == "OK") printed = true;
-                                else
-                                {
-                                    // Last resort: decode raw bytes as UTF-8 text and send as TEXT
-                                    string decodedText = Encoding.UTF8.GetString(bytes);
-                                    string textFallback = RawPrinterHelper.SendTextToPrinter(target, decodedText);
-                                    if (textFallback == "OK") printed = true;
-                                }
                             }
                             catch (Exception ex)
                             {
