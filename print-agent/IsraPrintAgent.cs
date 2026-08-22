@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.ComponentModel;
 using System.Threading;
 using System.Collections.Generic;
+using System.Web.Script.Serialization;
 
 namespace IsraPOS.PrintAgent
 {
@@ -18,7 +19,10 @@ namespace IsraPOS.PrintAgent
         {
             try
             {
+                if (string.IsNullOrEmpty(text)) return false;
+
                 string[] lines = text.Replace("\r\n", "\n").Split('\n');
+                if (lines.Length == 0) return false;
 
                 PrintDocument pd = new PrintDocument();
                 pd.PrinterSettings.PrinterName = printerName;
@@ -34,33 +38,39 @@ namespace IsraPOS.PrintAgent
                 {
                     float dpiX = e.Graphics.DpiX;
                     float dpiY = e.Graphics.DpiY;
+                    if (dpiX <= 0) dpiX = 203f;
+                    if (dpiY <= 0) dpiY = 203f;
 
-                    // Fonts rendered in PRINTER points (scaled by printer DPI)
-                    Font bodyFont   = new Font("Courier New", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
-                    Font headerFont = new Font("Courier New", 8.5f, FontStyle.Bold,    GraphicsUnit.Point);
-                    Font boldFont   = new Font("Courier New", 7.5f, FontStyle.Bold,    GraphicsUnit.Point);
+                    // 7.0pt Courier New fits 42 columns perfectly on standard 58mm/80mm thermal receipt rolls
+                    Font bodyFont   = new Font("Courier New", 7.0f, FontStyle.Regular, GraphicsUnit.Point);
+                    Font headerFont = new Font("Courier New", 8.0f, FontStyle.Bold,    GraphicsUnit.Point);
+                    Font boldFont   = new Font("Courier New", 7.0f, FontStyle.Bold,    GraphicsUnit.Point);
 
                     // Line height at printer DPI
-                    float lineH = bodyFont.GetHeight(dpiY) + 2f;
+                    float lineH = bodyFont.GetHeight(dpiY) + 1.5f;
 
-                    // Bitmap width: derive from printer's paper width (in hundredths of inch → inches → pixels)
+                    // Bitmap width: standard 576 dots (72mm printable width on 80mm roll @ 203 DPI) or driver paper width
                     float paperWidthIn = pd.DefaultPageSettings.PaperSize.Width / 100f;
                     int bmpW = (int)(paperWidthIn * dpiX);
-                    if (bmpW <= 20) bmpW = (int)(2.28f * dpiX); // 58mm fallback at printer DPI
+                    if (bmpW <= 20) bmpW = 576;
 
-                    // Bitmap height: exact content height (not the full roll length!)
-                    int bmpH = (int)(lines.Length * lineH) + 80;
+                    // Bitmap height: exact content height based on actual decoded line count
+                    int bmpH = (int)(lines.Length * lineH) + 60;
+                    if (bmpH < 100) bmpH = 100;
 
-                    // === RASTERIZATION: Render all text to an in-memory bitmap ===
-                    // This forces the Xprinter driver to receive a raster bitmap (same as browser HTML print)
-                    // instead of GDI vector text commands which Xprinter drivers often ignore.
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [GDI RENDER] Canvas: " + bmpW + "x" + bmpH + "px (" + (bmpH * 25.4f / dpiY).ToString("F1") + "mm tall, " + lines.Length + " lines)");
+                    Console.ResetColor();
+
+                    // === RASTERIZATION: Render all decoded text to an in-memory bitmap ===
+                    // This produces crisp raster output matching the browser's HTML print engine
                     using (Bitmap bmp = new Bitmap(bmpW, bmpH))
                     {
                         bmp.SetResolution(dpiX, dpiY);
                         using (Graphics g = Graphics.FromImage(bmp))
                         {
                             g.Clear(Color.White);
-                            // SingleBitPerPixelGridFit = crisp monochrome text (best for thermal)
+                            // SingleBitPerPixelGridFit = crisp monochrome text (optimal for thermal printheads)
                             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
 
                             float y = 4f;
@@ -81,7 +91,8 @@ namespace IsraPOS.PrintAgent
                                     upper.Contains("SALES RETURN"))
                                     currentFont = headerFont;
                                 else if (upper.Contains("TOTAL") || upper.Contains("CASH") ||
-                                         upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
+                                         upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE") ||
+                                         upper.Contains("DISCOUNT"))
                                     currentFont = boldFont;
 
                                 g.DrawString(line, currentFont, Brushes.Black, new PointF(x, y));
@@ -89,7 +100,7 @@ namespace IsraPOS.PrintAgent
                             }
                         }
 
-                        // Draw the rasterized bitmap to the printer context — Xprinter receives a bitmap
+                        // Draw the rasterized bitmap to the printer context
                         e.Graphics.DrawImage(bmp, new PointF(0, 0));
                     }
 
@@ -424,26 +435,30 @@ namespace IsraPOS.PrintAgent
 
         public static void Main(string[] args)
         {
-            Console.Title = "Isra POS Hardware Print Agent (Active)";
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("=================================================");
-            Console.WriteLine("  Isra Hardware POS - Standalone Print Agent     ");
-            Console.WriteLine("=================================================");
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("  Default Printer: " + GetDefaultPrinterName());
-            
-            string[] all = GetInstalledPrinters();
-            Console.WriteLine("  Installed Printers (" + all.Length + "):");
-            foreach (string p in all)
+            try
             {
-                Console.WriteLine("    * " + p);
-            }
+                Console.Title = "Isra POS Hardware Print Agent (Active)";
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("=================================================");
+                Console.WriteLine("  Isra Hardware POS - Standalone Print Agent     ");
+                Console.WriteLine("=================================================");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("  Default Printer: " + GetDefaultPrinterName());
+                
+                string[] all = GetInstalledPrinters();
+                Console.WriteLine("  Installed Printers (" + all.Length + "):");
+                foreach (string p in all)
+                {
+                    Console.WriteLine("    * " + p);
+                }
 
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("  100% Zero-Flash Printing Engine Ready.");
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("=================================================");
-            Console.ResetColor();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("  100% Zero-Flash Printing Engine Ready.");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("=================================================");
+                Console.ResetColor();
+            }
+            catch { }
 
             IPAddress ip = IPAddress.Parse("127.0.0.1");
             bool started = false;
@@ -490,9 +505,14 @@ namespace IsraPOS.PrintAgent
                     TcpClient client = listener.AcceptTcpClient();
                     ThreadPool.QueueUserWorkItem(HandleClient, client);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    break;
+                    try
+                    {
+                        Console.WriteLine("[Socket Accept Exception] " + ex.Message);
+                    }
+                    catch { }
+                    Thread.Sleep(100);
                 }
             }
         }
@@ -573,42 +593,52 @@ namespace IsraPOS.PrintAgent
                         return;
                     }
 
+                    JavaScriptSerializer jsonSerializer = new JavaScriptSerializer();
+
                     if (method == "POST" && path == "/print")
                     {
-                        string printerName = ExtractJsonString(body, "printerName");
-                        string base64 = ExtractJsonString(body, "rawBase64");
-                        string text = ExtractJsonString(body, "text");
+                        Dictionary<string, object> jsonDict = null;
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(body))
+                                jsonDict = jsonSerializer.Deserialize<Dictionary<string, object>>(body);
+                        }
+                        catch (Exception parseEx)
+                        {
+                            Console.WriteLine("[JSON Parse Warning] " + parseEx.Message);
+                        }
+
+                        string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
+                        string base64 = jsonDict != null && jsonDict.ContainsKey("rawBase64") ? Convert.ToString(jsonDict["rawBase64"]) : null;
+                        string text = jsonDict != null && jsonDict.ContainsKey("text") ? Convert.ToString(jsonDict["text"]) : null;
                         string target = ResolveTargetPrinter(printerName);
 
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "'");
+                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "' (Text: " + (text != null ? text.Length : 0) + " chars, Base64: " + (base64 != null ? base64.Length : 0) + " chars)");
                         Console.ResetColor();
 
                         bool printed = false;
 
-                        // 1. PRIMARY: GDI PrintDocument — inherits the paper size configured in Windows
-                        //    Printer Preferences (e.g. 80mm x Roll set in Xprinter driver settings).
-                        //    StandardPrintController suppresses the print dialog (0% flash).
+                        // 1. PRIMARY: GDI PrintDocument — renders properly decoded multi-line text to thermal bitmap
                         if (!string.IsNullOrEmpty(text))
                         {
                             Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI engine (using printer's own paper settings)...");
                             printed = GdiReceiptPrinter.PrintReceiptText(target, text);
                             if (!printed)
                             {
-                                // Fallback 1A: try TEXT spooler datatype
                                 Console.WriteLine("[GDI Warning] GDI failed — trying TEXT spooler fallback...");
                                 string textRes = RawPrinterHelper.SendTextToPrinter(target, text);
                                 if (textRes == "OK") printed = true;
                             }
                         }
 
-                        // 2. FALLBACK: RAW ESC/POS bytes — used only when no text was provided or GDI/TEXT both failed.
+                        // 2. FALLBACK: RAW ESC/POS bytes — used when no text was provided or GDI/TEXT both failed.
                         if (!printed && !string.IsNullOrEmpty(base64))
                         {
                             try
                             {
                                 byte[] bytes = Convert.FromBase64String(base64);
-                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes...");
+                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes to spooler...");
                                 string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
                                 if (res == "OK") printed = true;
                             }
@@ -637,20 +667,28 @@ namespace IsraPOS.PrintAgent
 
                     if (method == "POST" && path == "/test-print")
                     {
-                        string printerName = ExtractJsonString(body, "printerName");
+                        Dictionary<string, object> jsonDict = null;
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(body))
+                                jsonDict = jsonSerializer.Deserialize<Dictionary<string, object>>(body);
+                        }
+                        catch { }
+
+                        string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
                         string target = ResolveTargetPrinter(printerName);
 
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [TEST PRINT] Printing test page to '" + target + "'...");
                         Console.ResetColor();
 
-                        // Primary: TEXT datatype for reliable driver-native rendering
-                        string testTextRes = RawPrinterHelper.SendTextToPrinter(target, GetTestReceiptString(target));
-                        bool testPrinted = (testTextRes == "OK");
+                        // Primary: GDI engine with test receipt text
+                        string testText = GetTestReceiptString(target);
+                        bool testPrinted = GdiReceiptPrinter.PrintReceiptText(target, testText);
 
                         if (!testPrinted)
                         {
-                            Console.WriteLine("[TEXT Warning] " + testTextRes + " — trying ESC/POS RAW fallback...");
+                            Console.WriteLine("[GDI Warning] GDI failed — trying ESC/POS RAW fallback...");
                             byte[] testBytes = BuildTestReceiptEscpos(target);
                             string rawRes = RawPrinterHelper.SendBytesToPrinter(target, testBytes);
                             if (rawRes == "OK") testPrinted = true;
@@ -675,7 +713,15 @@ namespace IsraPOS.PrintAgent
 
                     if (method == "POST" && path == "/open-drawer")
                     {
-                        string printerName = ExtractJsonString(body, "printerName");
+                        Dictionary<string, object> jsonDict = null;
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(body))
+                                jsonDict = jsonSerializer.Deserialize<Dictionary<string, object>>(body);
+                        }
+                        catch { }
+
+                        string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
                         string target = ResolveTargetPrinter(printerName);
                         byte[] drawerBytes = BuildCashDrawerKick();
 
@@ -731,30 +777,6 @@ namespace IsraPOS.PrintAgent
         {
             if (string.IsNullOrEmpty(s)) return "";
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
-        }
-
-        private static string ExtractJsonString(string json, string key)
-        {
-            if (string.IsNullOrEmpty(json)) return null;
-            string needle = "\"" + key + "\"";
-            int idx = json.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
-            if (idx == -1) return null;
-
-            int colon = json.IndexOf(':', idx + needle.Length);
-            if (colon == -1) return null;
-
-            int quoteStart = json.IndexOf('"', colon + 1);
-            if (quoteStart == -1) return null;
-
-            int quoteEnd = quoteStart + 1;
-            while (quoteEnd < json.Length)
-            {
-                if (json[quoteEnd] == '"' && json[quoteEnd - 1] != '\\') break;
-                quoteEnd++;
-            }
-
-            if (quoteEnd >= json.Length) return null;
-            return json.Substring(quoteStart + 1, quoteEnd - quoteStart - 1).Replace("\\\"", "\"").Replace("\\\\", "\\");
         }
     }
 }
