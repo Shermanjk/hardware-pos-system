@@ -125,6 +125,91 @@ namespace IsraPOS.PrintAgent
         [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
         public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
 
+        /// <summary>
+        /// Sends plain text to the Windows print spooler using the TEXT datatype.
+        /// The printer driver renders the text natively — handles line length and paper feed automatically.
+        /// This is the most reliable method for all thermal printer drivers (Xprinter, Epson, Star, Bixolon).
+        /// </summary>
+        public static string SendTextToPrinter(string szPrinterName, string text)
+        {
+            // Normalize line endings to \r\n (required by Windows print spooler TEXT mode)
+            string normalized = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            // Append a form-feed to signal end-of-document to the driver
+            if (!normalized.EndsWith("\f"))
+                normalized += "\f";
+            byte[] pBytes = Encoding.ASCII.GetBytes(normalized);
+            return SendTextBytes(szPrinterName, pBytes);
+        }
+
+        private static string SendTextBytes(string szPrinterName, byte[] pBytes)
+        {
+            IntPtr hPrinter = IntPtr.Zero;
+            DOCINFOW di = new DOCINFOW();
+            di.pDocName = "ISRA POS Receipt";
+            di.pDataType = "TEXT";
+
+            if (!OpenPrinter(szPrinterName.Trim(), out hPrinter, IntPtr.Zero))
+            {
+                int err = Marshal.GetLastWin32Error();
+                return "OpenPrinter failed for '" + szPrinterName + "': Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+            }
+
+            try
+            {
+                if (!StartDocPrinter(hPrinter, 1, di))
+                {
+                    di.pDataType = null;
+                    if (!StartDocPrinter(hPrinter, 1, di))
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        return "StartDocPrinter failed: Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+                    }
+                }
+
+                try
+                {
+                    if (!StartPagePrinter(hPrinter))
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        return "StartPagePrinter failed: Win32 Error " + err + " (" + new Win32Exception(err).Message + ")";
+                    }
+
+                    try
+                    {
+                        IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(pBytes.Length);
+                        Marshal.Copy(pBytes, 0, pUnmanagedBytes, pBytes.Length);
+                        int dwWritten = 0;
+                        bool bSuccess = WritePrinter(hPrinter, pUnmanagedBytes, pBytes.Length, out dwWritten);
+                        Marshal.FreeCoTaskMem(pUnmanagedBytes);
+
+                        if (!bSuccess || dwWritten != pBytes.Length)
+                        {
+                            int err = Marshal.GetLastWin32Error();
+                            return "WritePrinter failed: Win32 Error " + err + " (written " + dwWritten + "/" + pBytes.Length + ")";
+                        }
+                    }
+                    finally
+                    {
+                        EndPagePrinter(hPrinter);
+                    }
+                }
+                finally
+                {
+                    EndDocPrinter(hPrinter);
+                }
+            }
+            finally
+            {
+                ClosePrinter(hPrinter);
+            }
+
+            return "OK";
+        }
+
+        /// <summary>
+        /// Sends raw ESC/POS bytes directly to the printer spooler (RAW datatype).
+        /// Used for ESC/POS binary commands — auto-paper-cut, cash drawer kick, etc.
+        /// </summary>
         public static string SendBytesToPrinter(string szPrinterName, byte[] pBytes)
         {
             IntPtr hPrinter = IntPtr.Zero;
@@ -481,26 +566,39 @@ namespace IsraPOS.PrintAgent
 
                         bool printed = false;
 
-                        // 1. If plain text receipt string is provided, print via universal Windows GDI engine (0% Flash, 100% Text Output on all Windows Printer Drivers)
+                        // 1. PRIMARY: Windows TEXT datatype — printer driver renders text natively, handles paper length automatically.
+                        //    This is the most reliable approach for all Windows thermal printer drivers (Xprinter, Epson, Star, etc.)
+                        //    and eliminates blank paper feed caused by incorrect GDI paper size calculations.
                         if (!string.IsNullOrEmpty(text))
                         {
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Driver GDI engine...");
-                            printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Windows TEXT spooler (native driver rendering)...");
+                            string textRes = RawPrinterHelper.SendTextToPrinter(target, text);
+                            if (textRes == "OK")
+                            {
+                                printed = true;
+                            }
+                            else
+                            {
+                                Console.WriteLine("[TEXT Spooler Warning] " + textRes + " — trying GDI fallback...");
+                                printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                            }
                         }
 
-                        // 2. If GDI printing was not used or failed, fall back to RAW ESC/POS byte spooling
+                        // 2. FALLBACK: RAW ESC/POS bytes — used only if no text was provided or TEXT/GDI both failed.
                         if (!printed && !string.IsNullOrEmpty(base64))
                         {
                             try
                             {
                                 byte[] bytes = Convert.FromBase64String(base64);
-                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw bytes to spooler...");
+                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes...");
                                 string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
                                 if (res == "OK") printed = true;
                                 else
                                 {
+                                    // Last resort: decode raw bytes as UTF-8 text and send as TEXT
                                     string decodedText = Encoding.UTF8.GetString(bytes);
-                                    printed = GdiReceiptPrinter.PrintReceiptText(target, decodedText);
+                                    string textFallback = RawPrinterHelper.SendTextToPrinter(target, decodedText);
+                                    if (textFallback == "OK") printed = true;
                                 }
                             }
                             catch (Exception ex)
@@ -532,17 +630,22 @@ namespace IsraPOS.PrintAgent
                         string target = ResolveTargetPrinter(printerName);
 
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [TEST PRINT] Printing dual ESC/POS + GDI test page to '" + target + "'...");
+                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [TEST PRINT] Printing test page to '" + target + "'...");
                         Console.ResetColor();
 
-                        // Try raw ESC/POS first
-                        byte[] testBytes = BuildTestReceiptEscpos(target);
-                        string rawRes = RawPrinterHelper.SendBytesToPrinter(target, testBytes);
+                        // Primary: TEXT datatype for reliable driver-native rendering
+                        string testTextRes = RawPrinterHelper.SendTextToPrinter(target, GetTestReceiptString(target));
+                        bool testPrinted = (testTextRes == "OK");
 
-                        // Also send GDI PrintDocument so both Label and Receipt mode Xprinters print 100%
-                        bool gdiRes = GdiReceiptPrinter.PrintReceiptText(target, GetTestReceiptString(target));
+                        if (!testPrinted)
+                        {
+                            Console.WriteLine("[TEXT Warning] " + testTextRes + " — trying ESC/POS RAW fallback...");
+                            byte[] testBytes = BuildTestReceiptEscpos(target);
+                            string rawRes = RawPrinterHelper.SendBytesToPrinter(target, testBytes);
+                            if (rawRes == "OK") testPrinted = true;
+                        }
 
-                        if (rawRes == "OK" || gdiRes)
+                        if (testPrinted)
                         {
                             Console.ForegroundColor = ConsoleColor.Green;
                             Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Test receipt dispatched to '" + target + "'");
@@ -552,9 +655,9 @@ namespace IsraPOS.PrintAgent
                         else
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [ERROR] Test print failed: " + rawRes);
+                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [ERROR] Test print failed.");
                             Console.ResetColor();
-                            SendResponse(stream, 500, "Internal Server Error", "{\"error\":\"" + EscapeJson(rawRes) + "\"}");
+                            SendResponse(stream, 500, "Internal Server Error", "{\"error\":\"Print job failed on all methods\"}");
                         }
                         return;
                     }
