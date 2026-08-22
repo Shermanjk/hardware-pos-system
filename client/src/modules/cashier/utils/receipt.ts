@@ -103,7 +103,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const storeTIN = `${tinFormatted}-${branchCode}`;
   const ptuNo = settings.ptu_or_accn_no || "";
   const documentType = settings.document_type || "SALES INVOICE";
-  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const currSym = "";
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
 
@@ -189,22 +189,22 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
 
   const vatBreakdownHTML = `
   <div class="divider"></div>
-  <div class="row"><span>VATable Sales:</span><span>${currSym} ${fmtCents(vatableNetCents)}</span></div>
-  <div class="row"><span>12% VAT Amount:</span><span>${currSym} ${fmtCents(vatAmountCents)}</span></div>
-  <div class="row"><span>VAT-Exempt Sales:</span><span>${currSym} ${fmtCents(vatExemptCentsCalculated)}</span></div>
-  <div class="row"><span>Zero-Rated Sales:</span><span>${currSym} ${fmtCents(zeroRatedCents)}</span></div>
-  ${nonTaxableCents > 0 && !settings.vat_enabled ? `<div class="row"><span>Non-VAT Sales:</span><span>${currSym} ${fmtCents(nonTaxableCents)}</span></div>` : ''}`;
+  <div class="row"><span>VATable Sales:</span><span>${fmtCents(vatableNetCents)}</span></div>
+  <div class="row"><span>12% VAT Amount:</span><span>${fmtCents(vatAmountCents)}</span></div>
+  <div class="row"><span>VAT-Exempt Sales:</span><span>${fmtCents(vatExemptCentsCalculated)}</span></div>
+  <div class="row"><span>Zero-Rated Sales:</span><span>${fmtCents(zeroRatedCents)}</span></div>
+  ${nonTaxableCents > 0 && !settings.vat_enabled ? `<div class="row"><span>Non-VAT Sales:</span><span>${fmtCents(nonTaxableCents)}</span></div>` : ''}`;
 
   let discountHTML = "";
   if (discountCents > 0) {
     const pctStr = discountPercentage ? ` (${discountPercentage}%)` : "";
     discountHTML = `
     <div class="divider"></div>
-    <div class="row"><span>DISCOUNT: ${discountName || "Discount"}${pctStr}:</span><span>- ${currSym} ${fmtCents(discountCents)}</span></div>
+    <div class="row"><span>DISCOUNT: ${discountName || "Discount"}${pctStr}:</span><span>-${fmtCents(discountCents)}</span></div>
     <div class="divider"></div>
-    <div class="row"><span>GROSS TOTAL:</span><span>${currSym} ${fmtCents(grossCents)}</span></div>
-    <div class="row"><span>VAT-EXEMPT AMOUNT:</span><span>${currSym} ${fmtCents(isScPwd ? vatExemptCents : 0)}</span></div>
-    <div class="row"><span>NET TOTAL:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>`;
+    <div class="row"><span>GROSS TOTAL:</span><span>${fmtCents(grossCents)}</span></div>
+    <div class="row"><span>VAT-EXEMPT AMOUNT:</span><span>${fmtCents(isScPwd ? vatExemptCents : 0)}</span></div>
+    <div class="row"><span>NET TOTAL:</span><span>${fmtCents(finalTotalCents)}</span></div>`;
   }
 
   return `<!DOCTYPE html>
@@ -311,22 +311,22 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       </tbody>
     </table>
     
-    <div class="row" style="margin-top: 5px;"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL:&nbsp;&nbsp;${currSym} ${fmtCents(grossCents)}</span></div>
+    <div class="row" style="margin-top: 5px;"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL:&nbsp;&nbsp;${fmtCents(grossCents)}</span></div>
     ${discountHTML}
     ${vatBreakdownHTML}
     
     <div style="margin: 6px 0;"></div>
     ${params.paymentType === "CREDIT" ? `
-    <div class="row bold"><span>TOTAL AMOUNT:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
+    <div class="row bold"><span>TOTAL AMOUNT:</span><span>${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>PAYMENT METHOD:</span><span>CREDIT / CHARGE</span></div>
     ${(params.downPaymentCents && params.downPaymentCents > 0) ? `
-    <div class="row"><span>Down Payment (Cash):</span><span>${currSym} ${fmtCents(params.downPaymentCents)}</span></div>
-    <div class="row bold"><span>Charged to Account:</span><span>${currSym} ${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
+    <div class="row"><span>Down Payment (Cash):</span><span>${fmtCents(params.downPaymentCents)}</span></div>
+    <div class="row bold"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
     ` : `
-    <div class="row bold"><span>Charged to Account:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
+    <div class="row bold"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents)}</span></div>
     `}
     ${params.creditBalance !== undefined && params.creditBalance !== null ? `
-    <div class="row"><span>Total Account Balance:</span><span>${currSym} ${fmtCents(params.creditBalance)}</span></div>
+    <div class="row"><span>Total Account Balance:</span><span>${fmtCents(params.creditBalance)}</span></div>
     ` : ''}
     <div class="divider"></div>
     <div class="section" style="margin-top: 14px; margin-bottom: 4px;">
@@ -334,9 +334,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       <div class="center" style="font-size: 9px;">CUSTOMER ACKNOWLEDGEMENT / SIGNATURE</div>
     </div>
     ` : `
-    <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>${currSym} ${fmtCents(finalTotalCents)}</span></div>
-    <div class="row"><span>Cash Tendered:</span><span>${currSym} ${fmtCents(cashCents)}</span></div>
-    <div class="row"><span>Change:</span><span>${currSym} ${fmtCents(displayChangeCents)}</span></div>
+    <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>${fmtCents(finalTotalCents)}</span></div>
+    <div class="row"><span>Cash Tendered:</span><span>${fmtCents(cashCents)}</span></div>
+    <div class="row"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
     `}
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
@@ -389,7 +389,7 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
   const documentType = settings.document_type || "SALES INVOICE";
-  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const currSym = "";
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -464,52 +464,52 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     lines.push(item.name);
     const qtyStr = item.quantity.toString().padEnd(4);
     const unitStr = (item.unit || "").slice(0, 5).padEnd(5);
-    const priceStr = `${currSym} ${fmt(toCentavos(item.unitPrice))}`.padStart(12);
-    const totalStr = `${currSym} ${fmt(toCentavos(item.subtotal))}`.padStart(15);
+    const priceStr = `${fmt(toCentavos(item.unitPrice))}`.padStart(12);
+    const totalStr = `${fmt(toCentavos(item.subtotal))}`.padStart(15);
     lines.push(`${qtyStr} ${unitStr} ${priceStr} ${totalStr}`);
   }
 
   lines.push("----------------------------------------");
-  lines.push(`ITEMS: ${totalItems}              TOTAL: ${currSym} ${fmt(grossCents)}`);
+  lines.push(`ITEMS: ${totalItems}              TOTAL: ${fmt(grossCents)}`);
 
   if (discountCents > 0) {
     const dLabel = discountName || (discountPercentage ? `${discountPercentage}%` : "Discount");
     lines.push("----------------------------------------");
-    lines.push(`DISCOUNT (${dLabel}):         -${currSym} ${fmt(discountCents)}`);
-    lines.push(`GROSS TOTAL:                   ${currSym} ${fmt(grossCents)}`);
-    lines.push(`NET TOTAL:                     ${currSym} ${fmt(finalTotalCents)}`);
+    lines.push(`DISCOUNT (${dLabel}):         -${fmt(discountCents)}`);
+    lines.push(`GROSS TOTAL:                   ${fmt(grossCents)}`);
+    lines.push(`NET TOTAL:                     ${fmt(finalTotalCents)}`);
   }
 
   lines.push("----------------------------------------");
   lines.push("             TAX BREAKDOWN");
-  lines.push(`VATable Sales:                 ${currSym} ${fmt(vatableNetCents)}`);
-  lines.push(`12% VAT Amount:                ${currSym} ${fmt(vatAmountCents)}`);
-  lines.push(`VAT-Exempt Sales:              ${currSym} ${fmt(vatExemptCentsCalculated)}`);
-  lines.push(`Zero-Rated Sales:              ${currSym} ${fmt(zeroRatedCents)}`);
+  lines.push(`VATable Sales:                 ${fmt(vatableNetCents)}`);
+  lines.push(`12% VAT Amount:                ${fmt(vatAmountCents)}`);
+  lines.push(`VAT-Exempt Sales:              ${fmt(vatExemptCentsCalculated)}`);
+  lines.push(`Zero-Rated Sales:              ${fmt(zeroRatedCents)}`);
   if (nonTaxableCents > 0 && !settings.vat_enabled) {
-    lines.push(`Non-VAT Sales:                 ${currSym} ${fmt(nonTaxableCents)}`);
+    lines.push(`Non-VAT Sales:                 ${fmt(nonTaxableCents)}`);
   }
 
   lines.push("----------------------------------------");
   if (paymentType === "CREDIT") {
-    lines.push(`TOTAL AMOUNT:                  ${currSym} ${fmt(finalTotalCents)}`);
+    lines.push(`TOTAL AMOUNT:                  ${fmt(finalTotalCents)}`);
     lines.push(`PAYMENT METHOD:                CREDIT / CHARGE`);
     if (downPaymentCents > 0) {
-      lines.push(`Down Payment (Cash):           ${currSym} ${fmt(downPaymentCents)}`);
-      lines.push(`Charged to Account:            ${currSym} ${fmt(finalTotalCents - downPaymentCents)}`);
+      lines.push(`Down Payment (Cash):           ${fmt(downPaymentCents)}`);
+      lines.push(`Charged to Account:            ${fmt(finalTotalCents - downPaymentCents)}`);
     } else {
-      lines.push(`Charged to Account:            ${currSym} ${fmt(finalTotalCents)}`);
+      lines.push(`Charged to Account:            ${fmt(finalTotalCents)}`);
     }
     if (creditBalance !== undefined && creditBalance !== null) {
-      lines.push(`Total Account Balance:         ${currSym} ${fmt(creditBalance)}`);
+      lines.push(`Total Account Balance:         ${fmt(creditBalance)}`);
     }
     lines.push("----------------------------------------");
     lines.push("   CUSTOMER ACKNOWLEDGEMENT / SIGNATURE");
     lines.push("\n   _____________________________________\n");
   } else {
-    lines.push(`TOTAL AMOUNT DUE:              ${currSym} ${fmt(finalTotalCents)}`);
-    lines.push(`Cash Tendered:                 ${currSym} ${fmt(cashCents)}`);
-    lines.push(`Change:                        ${currSym} ${fmt(displayChangeCents)}`);
+    lines.push(`TOTAL AMOUNT DUE:              ${fmt(finalTotalCents)}`);
+    lines.push(`Cash Tendered:                 ${fmt(cashCents)}`);
+    lines.push(`Change:                        ${fmt(displayChangeCents)}`);
   }
 
   lines.push("----------------------------------------");
@@ -541,7 +541,7 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const storeAddress = settings.address || "";
   const storeTIN = settings.tin || settings.business_license || "";
-  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const currSym = "";
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -564,8 +564,8 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   if (customerCode) lines.push(`Customer Code:  ${customerCode}`);
   if (notes) lines.push(`Notes:          ${notes}`);
   lines.push("----------------------------------------");
-  lines.push(`AMOUNT PAID:                   ${currSym} ${fmt(amountPaidCents)}`);
-  lines.push(`REMAINING BALANCE:             ${currSym} ${fmt(newBalanceCents)}`);
+  lines.push(`AMOUNT PAID:                   ${fmt(amountPaidCents)}`);
+  lines.push(`REMAINING BALANCE:             ${fmt(newBalanceCents)}`);
   lines.push("----------------------------------------");
   lines.push(`Received By:    ${cashierName}`);
   lines.push("----------------------------------------");
@@ -586,7 +586,7 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const storeAddress = settings.address || "";
   const storeTIN = settings.tin || settings.business_license || "";
-  const currSym = settings.currency === "PHP" ? "P" : settings.currency;
+  const currSym = "";
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -651,8 +651,8 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     ${customerCode ? `<div class="row"><span>Customer Code:</span><span>${customerCode}</span></div>` : ''}
     ${notes ? `<div class="row"><span>Notes:</span><span>${notes}</span></div>` : ''}
     <div class="divider"></div>
-    <div class="row bold" style="font-size: 13px;"><span>AMOUNT PAID:</span><span>${currSym} ${fmtCents(amountPaidCents)}</span></div>
-    <div class="row bold"><span>REMAINING BALANCE:</span><span>${currSym} ${fmtCents(newBalanceCents)}</span></div>
+    <div class="row bold" style="font-size: 13px;"><span>AMOUNT PAID:</span><span>${fmtCents(amountPaidCents)}</span></div>
+    <div class="row bold"><span>REMAINING BALANCE:</span><span>${fmtCents(newBalanceCents)}</span></div>
     <div class="divider"></div>
     <div class="row"><span>Received By:</span><span>${cashierName}</span></div>
     <div class="divider"></div>
