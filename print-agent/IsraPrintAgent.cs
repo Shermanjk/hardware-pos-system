@@ -23,61 +23,84 @@ namespace IsraPOS.PrintAgent
                 PrintDocument pd = new PrintDocument();
                 pd.PrinterSettings.PrinterName = printerName;
 
-                // KEY FIX: Inherit the paper size that the user already configured in
-                // Windows Printer Preferences (e.g. "80mm x Roll" set in Xprinter driver).
-                // Do NOT hardcode a custom size — that overrides the driver's paper config.
+                // Inherit the printer's own page settings (paper size, DPI, etc.)
                 pd.DefaultPageSettings = pd.PrinterSettings.DefaultPageSettings;
+                pd.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
 
-                // Minimal margins for thermal edge-to-edge printing
-                pd.DefaultPageSettings.Margins = new Margins(8, 8, 5, 5);
-
-                // Suppress print dialog (no popup, 0% flash)
+                // Suppress print dialog (console app — no UI needed)
                 pd.PrintController = new StandardPrintController();
-
-                // Fonts sized for 80mm thermal paper (~42-char line width at 8pt Courier New)
-                Font bodyFont   = new Font("Courier New", 8f, FontStyle.Regular);
-                Font headerFont = new Font("Courier New", 9f, FontStyle.Bold);
-                Font boldFont   = new Font("Courier New", 8f, FontStyle.Bold);
 
                 pd.PrintPage += (sender, e) =>
                 {
-                    Graphics g = e.Graphics;
-                    Brush brush = Brushes.Black;
-                    float y = e.MarginBounds.Top;
-                    float leftMargin = e.MarginBounds.Left;
-                    float lineH = bodyFont.GetHeight(g) + 2f;
+                    float dpiX = e.Graphics.DpiX;
+                    float dpiY = e.Graphics.DpiY;
 
-                    foreach (string line in lines)
+                    // Fonts rendered in PRINTER points (scaled by printer DPI)
+                    Font bodyFont   = new Font("Courier New", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
+                    Font headerFont = new Font("Courier New", 8.5f, FontStyle.Bold,    GraphicsUnit.Point);
+                    Font boldFont   = new Font("Courier New", 7.5f, FontStyle.Bold,    GraphicsUnit.Point);
+
+                    // Line height at printer DPI
+                    float lineH = bodyFont.GetHeight(dpiY) + 2f;
+
+                    // Bitmap width: derive from printer's paper width (in hundredths of inch → inches → pixels)
+                    float paperWidthIn = pd.DefaultPageSettings.PaperSize.Width / 100f;
+                    int bmpW = (int)(paperWidthIn * dpiX);
+                    if (bmpW <= 20) bmpW = (int)(2.28f * dpiX); // 58mm fallback at printer DPI
+
+                    // Bitmap height: exact content height (not the full roll length!)
+                    int bmpH = (int)(lines.Length * lineH) + 80;
+
+                    // === RASTERIZATION: Render all text to an in-memory bitmap ===
+                    // This forces the Xprinter driver to receive a raster bitmap (same as browser HTML print)
+                    // instead of GDI vector text commands which Xprinter drivers often ignore.
+                    using (Bitmap bmp = new Bitmap(bmpW, bmpH))
                     {
-                        if (string.IsNullOrEmpty(line))
+                        bmp.SetResolution(dpiX, dpiY);
+                        using (Graphics g = Graphics.FromImage(bmp))
                         {
-                            y += lineH;
-                            continue;
+                            g.Clear(Color.White);
+                            // SingleBitPerPixelGridFit = crisp monochrome text (best for thermal)
+                            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+
+                            float y = 4f;
+                            float x = 4f;
+
+                            foreach (string line in lines)
+                            {
+                                if (string.IsNullOrEmpty(line))
+                                {
+                                    y += lineH;
+                                    continue;
+                                }
+
+                                Font currentFont = bodyFont;
+                                string upper = line.ToUpper();
+                                if (upper.Contains("ISRA HARDWARE") || upper.Contains("OFFICIAL RECEIPT") ||
+                                    upper.Contains("SALES INVOICE")  || upper.Contains("CREDIT PAYMENT") ||
+                                    upper.Contains("SALES RETURN"))
+                                    currentFont = headerFont;
+                                else if (upper.Contains("TOTAL") || upper.Contains("CASH") ||
+                                         upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
+                                    currentFont = boldFont;
+
+                                g.DrawString(line, currentFont, Brushes.Black, new PointF(x, y));
+                                y += lineH;
+                            }
                         }
 
-                        Font currentFont = bodyFont;
-                        string upper = line.ToUpper();
-                        if (upper.Contains("ISRA HARDWARE") || upper.Contains("OFFICIAL RECEIPT") ||
-                            upper.Contains("SALES INVOICE") || upper.Contains("CREDIT PAYMENT") ||
-                            upper.Contains("SALES RETURN"))
-                            currentFont = headerFont;
-                        else if (upper.Contains("TOTAL") || upper.Contains("CASH") ||
-                                 upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
-                            currentFont = boldFont;
-
-                        g.DrawString(line, currentFont, brush, leftMargin, y);
-                        y += currentFont.GetHeight(g) + 2;
+                        // Draw the rasterized bitmap to the printer context — Xprinter receives a bitmap
+                        e.Graphics.DrawImage(bmp, new PointF(0, 0));
                     }
+
+                    bodyFont.Dispose();
+                    headerFont.Dispose();
+                    boldFont.Dispose();
 
                     e.HasMorePages = false;
                 };
 
                 pd.Print();
-
-                bodyFont.Dispose();
-                headerFont.Dispose();
-                boldFont.Dispose();
-
                 return true;
             }
             catch (Exception ex)
