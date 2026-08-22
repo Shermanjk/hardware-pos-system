@@ -32,23 +32,28 @@ namespace IsraPOS.PrintAgent
 
                     pd.PrintPage += (sender, e) =>
                     {
-                        float dpiX = e.Graphics.DpiX;
-                        float dpiY = e.Graphics.DpiY;
-                        if (dpiX <= 0) dpiX = 203f;
-                        if (dpiY <= 0) dpiY = 203f;
+                        // PrintDocument coordinate space in PrintPage is hundredths of an inch (1/100 in).
+                        // Driver page settings define paper roll width (e.g. 315 for 80mm roll, 228 for 58mm roll).
+                        float paperWidthHundredths = pd.DefaultPageSettings.PaperSize.Width;
+                        if (paperWidthHundredths <= 50) paperWidthHundredths = 315f; // Default 80mm roll (3.15 in)
 
-                        // Calculate physical width matching standard 76mm printable receipt width
-                        float printableWidthInches = 76f / 25.4f; // 2.992 in
-                        float targetPixelWidth = printableWidthInches * dpiX; // ~607 px @ 203 DPI
-                        float scale = targetPixelWidth / (float)sourceBmp.Width;
-                        float destW = sourceBmp.Width * scale;
-                        float destH = sourceBmp.Height * scale;
+                        // Optimal printable content width on 80mm roll is ~285 hundredths (72.4mm), leaving safe margins.
+                        // On 58mm roll, printable content width is ~200 hundredths (50.8mm).
+                        float printableWidthHundredths = paperWidthHundredths >= 280 ? Math.Min(paperWidthHundredths - 20f, 285f) : (paperWidthHundredths - 16f);
+                        float leftMarginHundredths = Math.Max(0f, (paperWidthHundredths - printableWidthHundredths) / 2f);
+
+                        float aspectRatio = (float)sourceBmp.Height / (float)sourceBmp.Width;
+                        float destWidthHundredths = printableWidthHundredths;
+                        float destHeightHundredths = destWidthHundredths * aspectRatio;
+
+                        float widthMm = destWidthHundredths * 25.4f / 100f;
+                        float heightMm = destHeightHundredths * 25.4f / 100f;
 
                         Console.ForegroundColor = ConsoleColor.Cyan;
-                        Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [IMAGE RENDER] Source: " + sourceBmp.Width + "x" + sourceBmp.Height + "px -> Print: " + destW.ToString("F0") + "x" + destH.ToString("F0") + "px (" + (destH * 25.4f / dpiY).ToString("F1") + "mm tall)");
+                        Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [IMAGE RENDER] Source: " + sourceBmp.Width + "x" + sourceBmp.Height + "px -> Print Area: " + widthMm.ToString("F1") + "mm wide x " + heightMm.ToString("F1") + "mm tall (Left Margin: " + (leftMarginHundredths * 25.4f / 100f).ToString("F1") + "mm)");
                         Console.ResetColor();
 
-                        e.Graphics.DrawImage(sourceBmp, new RectangleF(0, 0, destW, destH));
+                        e.Graphics.DrawImage(sourceBmp, new RectangleF(leftMarginHundredths, 0, destWidthHundredths, destHeightHundredths));
                         e.HasMorePages = false;
                     };
 

@@ -320,8 +320,8 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
-    <div class="center">POS Software: Antigravity POS v2.0</div>
-    <div class="center">Accreditation No: 000-000000000-000000</div>
+    <div class="center">${settings.receipt_footer || "POS Software: Antigravity POS v2.0"}</div>
+    <div class="center">Accreditation No: ${settings.ptu_or_accn_no || "000-000000000-000000"}</div>
     <div class="divider"></div>
     ${posMin ? `
     <div class="center bold">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
