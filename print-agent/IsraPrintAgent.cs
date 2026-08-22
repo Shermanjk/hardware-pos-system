@@ -14,45 +14,60 @@ namespace IsraPOS.PrintAgent
 {
     public class GdiReceiptPrinter
     {
+        // 80mm thermal paper width in hundredths of an inch (80mm = ~315 hundredths)
+        private const int PaperWidthHundredths = 315;
+
         public static bool PrintReceiptText(string printerName, string text)
         {
             try
             {
+                string[] lines = text.Replace("\r\n", "\n").Split('\n');
+
+                // Fonts: Courier New 8pt for 80mm thermal paper (fits ~42 chars)
+                Font bodyFont   = new Font("Courier New", 8f, FontStyle.Regular);
+                Font headerFont = new Font("Courier New", 9f, FontStyle.Bold);
+                Font boldFont   = new Font("Courier New", 8f, FontStyle.Bold);
+
+                // Measure total height needed using a dummy Graphics object
+                float lineH = bodyFont.GetHeight() + 2f;
+                float totalHeight = 0;
+                foreach (string line in lines)
+                    totalHeight += lineH;
+                totalHeight += 30; // bottom padding
+
+                // Convert points to hundredths of an inch (1 inch = 100 hundredths, 1pt ~= 1.39 hundredths)
+                int pageHeightHundredths = (int)(totalHeight * 100f / 96f) + 100;
+
                 PrintDocument pd = new PrintDocument();
                 pd.PrinterSettings.PrinterName = printerName;
-                pd.PrintController = new StandardPrintController(); // Suppresses Windows printing popup dialog!
+                pd.PrintController = new StandardPrintController(); // No popup dialog
 
-                string[] lines = text.Replace("\r\n", "\n").Split('\n');
+                // Set custom paper size to match 80mm thermal roll
+                PaperSize thermalSize = new PaperSize("Thermal80", PaperWidthHundredths, pageHeightHundredths);
+                pd.DefaultPageSettings.PaperSize = thermalSize;
+                pd.DefaultPageSettings.Margins = new Margins(10, 10, 5, 5);
 
                 pd.PrintPage += (sender, e) =>
                 {
                     Graphics g = e.Graphics;
-                    Font headerFont = new Font("Courier New", 10, FontStyle.Bold);
-                    Font bodyFont = new Font("Courier New", 8.5f, FontStyle.Regular);
-                    Font boldFont = new Font("Courier New", 8.5f, FontStyle.Bold);
                     Brush brush = Brushes.Black;
-
-                    float y = 10;
-                    float leftMargin = 10;
-                    float pageWidth = e.PageBounds.Width;
+                    float y = e.MarginBounds.Top;
+                    float leftMargin = e.MarginBounds.Left;
 
                     foreach (string line in lines)
                     {
-                        if (string.IsNullOrWhiteSpace(line) && line != "")
+                        if (string.IsNullOrEmpty(line))
                         {
-                            y += 12;
+                            y += lineH;
                             continue;
                         }
 
                         Font currentFont = bodyFont;
-                        if (line.Contains("ISRA HARDWARE") || line.Contains("OFFICIAL RECEIPT") || line.Contains("SALES INVOICE"))
-                        {
+                        string upper = line.ToUpper();
+                        if (upper.Contains("ISRA HARDWARE") || upper.Contains("OFFICIAL RECEIPT") || upper.Contains("SALES INVOICE") || upper.Contains("CREDIT PAYMENT"))
                             currentFont = headerFont;
-                        }
-                        else if (line.Contains("TOTAL") || line.Contains("CASH") || line.Contains("CHANGE") || line.Contains("AMOUNT"))
-                        {
+                        else if (upper.Contains("TOTAL") || upper.Contains("CASH") || upper.Contains("CHANGE") || upper.Contains("AMOUNT DUE"))
                             currentFont = boldFont;
-                        }
 
                         g.DrawString(line, currentFont, brush, leftMargin, y);
                         y += currentFont.GetHeight(g) + 2;
@@ -62,6 +77,11 @@ namespace IsraPOS.PrintAgent
                 };
 
                 pd.Print();
+
+                bodyFont.Dispose();
+                headerFont.Dispose();
+                boldFont.Dispose();
+
                 return true;
             }
             catch (Exception ex)
