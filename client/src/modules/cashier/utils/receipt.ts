@@ -89,11 +89,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
   const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
 
-  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
-  const proprietor             = settings.proprietor             || "";
-  const storeFb                = settings.facebook                || "";
-  const storePhone             = settings.contact_number          || "";
-  const storeAddress           = settings.address                || "";
+  const storeName = settings.store_name || "ISRA HARDWARE TRADING";
+  const proprietor = settings.proprietor || "";
+  const storeFb = settings.facebook || "";
+  const storePhone = settings.contact_number || "";
+  const storeAddress = settings.address || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
   const tinFormatted = cleanTin.length === 9
@@ -102,10 +102,10 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
   const storeTIN = `${tinFormatted}-${branchCode}`;
   const ptuNo = settings.ptu_or_accn_no || "";
-  const documentType           = settings.document_type           || "SALES INVOICE";
-  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
-  const posMin                 = settings.pos_min    || "";
-  const posSerial              = settings.pos_serial || "";
+  const documentType = settings.document_type || "SALES INVOICE";
+  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const posMin = settings.pos_min || "";
+  const posSerial = settings.pos_serial || "";
 
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -234,13 +234,14 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       width: 72mm;
       max-width: 72mm;
       margin: 0 auto;
-      padding: 0 2mm 0 2mm;
+      padding: 0 0mm;
+      box-sizing: border-box;
       background: #fff;
     }
     .center { text-align: center; margin: 2px 0; word-break: break-word; }
     .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2.5px 0; word-break: break-word; }
-    .row span:first-child { flex: 1 1 auto; padding-right: 6px; min-width: 0; }
-    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 4px; max-width: 60%; }
+    .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
     
     .cust-row { display: flex; align-items: flex-end; margin: 3px 0; }
     .cust-lbl { width: 75px; flex-shrink: 0; font-size: 11.5px; }
@@ -257,18 +258,18 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .items .col-hdr-qty   { width: 12%; text-align: left; }
     .items .col-hdr-unit  { width: 14%; text-align: left; }
     .items .col-hdr-desc  { width: 44%; text-align: left; }
-    .items .col-hdr-amt   { width: 30%; text-align: right; padding-right: 4px; }
+    .items .col-hdr-amt   { width: 30%; text-align: right; padding-right: 0; }
     
-    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 4px 4px 2px 0; font-size: 11.5px; font-weight: normal; line-height: 1.35; }
+    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 4px 2px 2px 0; font-size: 11.5px; font-weight: normal; line-height: 1.35; }
     .item-detail-row td { padding: 1px 0 5px 0; font-size: 11.5px; font-weight: normal; }
     .item-detail-row .col-qty   { width: 12%; text-align: left; }
     .item-detail-row .col-unit  { width: 14%; text-align: left; }
     .item-detail-row .col-price { width: 44%; text-align: left; }
-    .item-detail-row .col-amt   { width: 30%; text-align: right; white-space: nowrap; padding-right: 4px; }
+    .item-detail-row .col-amt   { width: 30%; text-align: right; white-space: nowrap; padding-right: 0; }
     
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 72mm; max-width: 72mm; margin: 0 auto; padding: 0 2mm 0 2mm; }
+      .receipt { width: 72mm; max-width: 72mm; margin: 0 auto; padding: 0; }
     }
   </style>
 </head>
@@ -372,11 +373,11 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
   const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
 
-  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
-  const proprietor             = settings.proprietor             || "";
-  const storeAddress           = settings.address                || "";
-  const storePhone             = settings.contact_number          || "";
-  const storeFb                = settings.facebook                || "";
+  const storeName = settings.store_name || "ISRA HARDWARE TRADING";
+  const proprietor = settings.proprietor || "";
+  const storeAddress = settings.address || "";
+  const storePhone = settings.contact_number || "";
+  const storeFb = settings.facebook || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
   const tinFormatted = cleanTin.length === 9
@@ -384,11 +385,11 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     : (settings.tin || "000-000-000");
   const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
   const storeTIN = `${tinFormatted}-${branchCode}`;
-  const ptuNo                  = settings.ptu_or_accn_no          || "";
-  const posMin                 = settings.pos_min                 || "";
-  const posSerial              = settings.pos_serial              || "";
-  const documentType           = settings.document_type           || "SALES INVOICE";
-  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const ptuNo = settings.ptu_or_accn_no || "";
+  const posMin = settings.pos_min || "";
+  const posSerial = settings.pos_serial || "";
+  const documentType = settings.document_type || "SALES INVOICE";
+  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -536,11 +537,11 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
     notes, settings,
   } = params;
 
-  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
+  const storeName = settings.store_name || "ISRA HARDWARE TRADING";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
-  const storeAddress           = settings.address                || "";
-  const storeTIN               = settings.tin || settings.business_license || "";
-  const currSym                = settings.currency === "PHP" ? "P" : (settings.currency || "P");
+  const storeAddress = settings.address || "";
+  const storeTIN = settings.tin || settings.business_license || "";
+  const currSym = settings.currency === "PHP" ? "P" : (settings.currency || "P");
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -581,15 +582,15 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     notes, settings,
   } = params;
 
-  const storeName              = settings.store_name              || "";
+  const storeName = settings.store_name || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
-  const storeAddress           = settings.address                || "";
-  const storeTIN               = settings.tin || settings.business_license || "";
-  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
+  const storeAddress = settings.address || "";
+  const storeTIN = settings.tin || settings.business_license || "";
+  const currSym = settings.currency === "PHP" ? "P" : settings.currency;
 
-  const now      = new Date();
-  const dateStr  = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-  const timeStr  = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const fmtCents = (cents: number) => (cents / 100).toFixed(2);
 

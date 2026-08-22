@@ -201,6 +201,7 @@ namespace IsraPOS.PrintAgent
 
             int byteWidth = (width + 7) / 8; // 72 bytes per row for 576 dots
             int topOffsetDots = (int)(margins.topMarginMm * 8.0f);
+            int leftOffsetDots = (int)(margins.leftMarginMm * 8.0f);
             int contentHeightMm = (int)Math.Ceiling(height / 8.0f);
             
             // EXACT dynamic total page height in TSPL: topMarginMm + contentHeightMm + exact bottomMarginMm
@@ -208,6 +209,7 @@ namespace IsraPOS.PrintAgent
 
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [TSPL MARGINS] Top: " + margins.topMarginMm.ToString("F1") +
+                "mm | Left: " + margins.leftMarginMm.ToString("F1") +
                 "mm | Content: " + contentHeightMm.ToString() +
                 "mm | Bottom: " + margins.bottomMarginMm.ToString("F1") +
                 "mm | Total Paper Roll: " + totalHeightMm.ToString() + "mm");
@@ -276,11 +278,11 @@ namespace IsraPOS.PrintAgent
                     string header = string.Format(
                         "SIZE 72 mm, {0} mm\r\n" +
                         "GAP 0,0\r\n" +
-                        "DIRECTION 1\r\n" +
+                        "DIRECTION 0\r\n" +
                         "REFERENCE 0,0\r\n" +
                         "CLS\r\n" +
-                        "BITMAP 0,{1},{2},{3},0,",
-                        totalHeightMm, topOffsetDots, byteWidth, height
+                        "BITMAP {1},{2},{3},{4},0,",
+                        totalHeightMm, leftOffsetDots, topOffsetDots, byteWidth, height
                     );
 
                     byte[] headerBytes = Encoding.ASCII.GetBytes(header);
