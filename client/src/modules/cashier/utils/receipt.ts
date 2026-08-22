@@ -231,10 +231,10 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     }
     body { padding: 0; background: #fff; }
     .receipt {
-      width: 72mm;
-      max-width: 72mm;
+      width: 76mm;
+      max-width: 76mm;
       margin: 0 auto;
-      padding: 0 0mm;
+      padding: 0 1mm;
       box-sizing: border-box;
       background: #fff;
     }
@@ -269,7 +269,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 72mm; max-width: 72mm; margin: 0 auto; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
     }
   </style>
 </head>

@@ -1,6 +1,6 @@
 {
-  "topMarginMm": 20.0,
-  "bottomMarginMm": 10.0,
-  "leftMarginMm": 0.0,
+  "topMarginMm": 10.0,
+  "bottomMarginMm": 5.0,
+  "leftMarginMm": 1.0,
   "contentWidthMm": 71.6
 }
