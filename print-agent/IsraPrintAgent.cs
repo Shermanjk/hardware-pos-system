@@ -461,8 +461,15 @@ namespace IsraPOS.PrintAgent
 
                         bool printed = false;
 
-                        // 1. Try RAW ESC/POS binary printing first
-                        if (!string.IsNullOrEmpty(base64))
+                        // 1. If plain text receipt string is provided, print via universal Windows GDI engine (0% Flash, 100% Text Output on all Windows Printer Drivers)
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Driver GDI engine...");
+                            printed = GdiReceiptPrinter.PrintReceiptText(target, text);
+                        }
+
+                        // 2. If GDI printing was not used or failed, fall back to RAW ESC/POS byte spooling
+                        if (!printed && !string.IsNullOrEmpty(base64))
                         {
                             try
                             {
@@ -470,29 +477,16 @@ namespace IsraPOS.PrintAgent
                                 Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw bytes to spooler...");
                                 string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
                                 if (res == "OK") printed = true;
+                                else
+                                {
+                                    string decodedText = Encoding.UTF8.GetString(bytes);
+                                    printed = GdiReceiptPrinter.PrintReceiptText(target, decodedText);
+                                }
                             }
                             catch (Exception ex)
                             {
                                 Console.WriteLine("[RAW Spooler Warning] " + ex.Message);
                             }
-                        }
-
-                        // 2. Dual / Universal Driver GDI Printing (ensures 100% paper output for Windows Printer Drivers like Xprinter / POS-80)
-                        if (!string.IsNullOrEmpty(text))
-                        {
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via Driver GDI engine...");
-                            bool gdiOk = GdiReceiptPrinter.PrintReceiptText(target, text);
-                            if (gdiOk) printed = true;
-                        }
-                        else if (!printed && !string.IsNullOrEmpty(base64))
-                        {
-                            try
-                            {
-                                byte[] bytes = Convert.FromBase64String(base64);
-                                string decodedText = Encoding.UTF8.GetString(bytes);
-                                printed = GdiReceiptPrinter.PrintReceiptText(target, decodedText);
-                            }
-                            catch { }
                         }
 
                         if (printed)
