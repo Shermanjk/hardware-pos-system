@@ -5,6 +5,7 @@ import { buildCreditPaymentReceiptEscpos, buildSaleReceiptEscpos } from "@/share
 import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
+import { rasterizeReceiptHtml } from "@/shared/utils/receiptHtmlRasterizer";
 import { toCentavos } from "./money";
 
 export interface CartItem {
@@ -480,55 +481,7 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   return lines.join("\n");
 }
 
-export async function printSaleReceipt(params: SaleReceiptParams): Promise<void> {
-  const bytes = buildSaleReceiptEscpos(params);
-  const text = buildSaleReceiptText(params);
-
-  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS + GDI Fallback)
-  try {
-    const success = await localPrintAgent.printRaw(bytes, undefined, text);
-    if (success) return;
-  } catch (err) {
-    console.warn("[LocalPrintAgent] Print failed:", err);
-  }
-
-  // 2. Try Web Serial (Direct USB if connected)
-  if (webSerialPrinter.isConnected()) {
-    try {
-      webSerialPrinter.printRaw(bytes);
-      return;
-    } catch (err) {
-      console.error("[WebSerial] Direct print failed:", err);
-    }
-  }
-
-  // 3. Fallback: Browser silent print
-  const html = buildReceiptHTML(params);
-  printHtmlSilently(html);
-}
-
-export async function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): Promise<void> {
-  const bytes = buildCreditPaymentReceiptEscpos(params);
-  const text = buildCreditPaymentReceiptText(params);
-
-  // 1. Try Local Print Agent (100% Zero-Flash, Hardware ESC/POS + GDI Fallback)
-  try {
-    const success = await localPrintAgent.printRaw(bytes, undefined, text);
-    if (success) return;
-  } catch (err) {
-    console.warn("[LocalPrintAgent] Credit print failed:", err);
-  }
-
-  // 2. Try Web Serial (Direct USB if connected)
-  if (webSerialPrinter.isConnected()) {
-    try {
-      webSerialPrinter.printRaw(bytes);
-      return;
-    } catch (err) {
-      console.error("[WebSerial] Direct credit print failed:", err);
-    }
-  }
-
+export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams): string {
   const {
     receiptNumber, customerName, customerCode,
     amountPaidCents, newBalanceCents, cashierName,
@@ -547,7 +500,7 @@ export async function printCreditPaymentReceipt(params: CreditPaymentReceiptPara
 
   const fmtCents = (cents: number) => (cents / 100).toFixed(2);
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
@@ -614,7 +567,72 @@ export async function printCreditPaymentReceipt(params: CreditPaymentReceiptPara
   </div>
 </body>
 </html>`;
+}
 
+export async function printSaleReceipt(params: SaleReceiptParams): Promise<void> {
+  const html = buildReceiptHTML(params);
+  const bytes = buildSaleReceiptEscpos(params);
+  const text = buildSaleReceiptText(params);
+  const isCash = params.paymentType === "CASH" || !params.paymentType;
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image)
+  try {
+    let imageBase64: string | undefined;
+    if (localPrintAgent.isAvailable()) {
+      const raster = await rasterizeReceiptHtml(html);
+      imageBase64 = raster?.imageBase64;
+    }
+
+    const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, isCash);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
+  if (webSerialPrinter.isConnected()) {
+    try {
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct print failed:", err);
+    }
+  }
+
+  // 3. Fallback: Browser silent print
+  printHtmlSilently(html);
+}
+
+export async function printCreditPaymentReceipt(params: CreditPaymentReceiptParams): Promise<void> {
+  const html = buildCreditPaymentReceiptHTML(params);
+  const bytes = buildCreditPaymentReceiptEscpos(params);
+  const text = buildCreditPaymentReceiptText(params);
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image)
+  try {
+    let imageBase64: string | undefined;
+    if (localPrintAgent.isAvailable()) {
+      const raster = await rasterizeReceiptHtml(html);
+      imageBase64 = raster?.imageBase64;
+    }
+
+    const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, true);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Credit print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
+  if (webSerialPrinter.isConnected()) {
+    try {
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct credit print failed:", err);
+    }
+  }
+
+  // 3. Fallback: Browser silent print
   printHtmlSilently(html);
 }
 

@@ -129,31 +129,41 @@ class LocalPrintAgentService {
   }
 
   /**
-   * Send raw ESC/POS bytes directly to Windows thermal printer
-   * Uses selected printer in localStorage or defaults to Windows Default Printer
+   * Send receipt print job directly to Windows thermal printer via Print Agent.
+   * Supports high-resolution raster image (from HTML/CSS), plain text, and raw ESC/POS bytes.
    */
-  async printRaw(bytes: Uint8Array, printerName?: string, text?: string): Promise<boolean> {
+  async printRaw(
+    bytes?: Uint8Array,
+    printerName?: string,
+    text?: string,
+    imageBase64?: string,
+    kickDrawer?: boolean
+  ): Promise<boolean> {
+    const t0 = performance.now();
+
     // Probe health first if agent state is stale or offline
     if (!this.isAgentOnline || Date.now() - this.lastHealthCheck > 15000) {
       await this.checkHealth();
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 8000);
 
     const targetPrinter = printerName || localStorage.getItem("pos_selected_printer") || undefined;
 
     try {
-      const base64 = uint8ArrayToBase64(bytes);
+      const base64 = bytes ? uint8ArrayToBase64(bytes) : undefined;
       const res = await fetch(`${this.getBaseUrl()}/print`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          imageBase64: imageBase64 || undefined,
           rawBase64: base64,
           text: text || undefined,
           printerName: targetPrinter,
+          kickDrawer: kickDrawer || false,
         }),
         signal: controller.signal,
       });
@@ -161,6 +171,11 @@ class LocalPrintAgentService {
 
       if (res.ok) {
         this.isAgentOnline = true;
+        const elapsed = Math.round(performance.now() - t0);
+        console.log(
+          `%c[LocalPrintAgent] Print request completed in ${elapsed}ms (Target: "${targetPrinter || "Default"}")`,
+          "color: #10b981; font-weight: bold;"
+        );
         return true;
       }
     } catch (err) {

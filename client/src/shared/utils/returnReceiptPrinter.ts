@@ -3,6 +3,7 @@ import { buildReturnReceiptEscpos } from "@/shared/services/escpos/escposBuilder
 import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
+import { rasterizeReceiptHtml } from "@/shared/utils/receiptHtmlRasterizer";
 
 export interface ReturnReceiptItem {
   product_name: string;
@@ -31,10 +32,10 @@ export interface ReturnReceiptData {
 }
 
 export function buildReturnReceiptText(data: ReturnReceiptData): string {
-  const storeName              = data.store_settings?.store_name              || "ISRA HARDWARE POS";
-  const registeredTaxpayerName = data.store_settings?.registered_taxpayer_name || "";
-  const storeAddress           = data.store_settings?.address                || "";
-  const cleanTin = (data.store_settings?.tin || "000000000").replace(/[^0-9]/g, "");
+  const storeName              = data.settings?.store_name              || "ISRA HARDWARE POS";
+  const registeredTaxpayerName = data.settings?.registered_taxpayer_name || "";
+  const storeAddress           = data.settings?.address                || "";
+  const cleanTin = (data.settings?.tin || "000000000").replace(/[^0-9]/g, "");
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : cleanTin;
@@ -63,10 +64,11 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push("----------------------------------------");
 
   for (const item of data.items) {
-    const qtyStr = item.quantity.toString().padEnd(4);
+    const qty = item.quantity_returned || 1;
+    const qtyStr = qty.toString().padEnd(4);
     const nameStr = item.product_name.slice(0, 18).padEnd(18);
     const priceStr = fmt(item.unit_price).padStart(7);
-    const totalStr = fmt(item.subtotal).padStart(8);
+    const totalStr = fmt(item.unit_price * qty).padStart(8);
     lines.push(`${qtyStr} ${nameStr} ${priceStr} ${totalStr}`);
   }
 
@@ -81,28 +83,7 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   return lines.join("\n");
 }
 
-export async function printReturnReceipt(data: ReturnReceiptData): Promise<void> {
-  const bytes = buildReturnReceiptEscpos(data);
-  const text = buildReturnReceiptText(data);
-
-  // 1. Try Local Print Agent (100% Zero-Flash, ESC/POS + GDI Fallback)
-  try {
-    const success = await localPrintAgent.printRaw(bytes, undefined, text);
-    if (success) return;
-  } catch (err) {
-    console.warn("[LocalPrintAgent] Return print failed:", err);
-  }
-
-  // 2. Try Web Serial (Direct USB if connected)
-  if (webSerialPrinter.isConnected()) {
-    try {
-      webSerialPrinter.printRaw(bytes);
-      return;
-    } catch (err) {
-      console.error("[WebSerial] Direct return print failed, falling back to HTML iframe print:", err);
-    }
-  }
-
+export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
   const settings = data.settings;
   const storeName              = settings.store_name              || "";
   const proprietor             = settings.proprietor             || "";
@@ -172,7 +153,7 @@ export async function printReturnReceipt(data: ReturnReceiptData): Promise<void>
     resolutionHTML = `<div class="section">RETURN REJECTED</div>`;
   }
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
@@ -284,7 +265,38 @@ export async function printReturnReceipt(data: ReturnReceiptData): Promise<void>
   </div>
 </body>
 </html>`;
+}
 
+export async function printReturnReceipt(data: ReturnReceiptData): Promise<void> {
+  const html = buildReturnReceiptHTML(data);
+  const bytes = buildReturnReceiptEscpos(data);
+  const text = buildReturnReceiptText(data);
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image)
+  try {
+    let imageBase64: string | undefined;
+    if (localPrintAgent.isAvailable()) {
+      const raster = await rasterizeReceiptHtml(html);
+      imageBase64 = raster?.imageBase64;
+    }
+
+    const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, false);
+    if (success) return;
+  } catch (err) {
+    console.warn("[LocalPrintAgent] Return print failed:", err);
+  }
+
+  // 2. Try Web Serial (Direct USB if connected)
+  if (webSerialPrinter.isConnected()) {
+    try {
+      webSerialPrinter.printRaw(bytes);
+      return;
+    } catch (err) {
+      console.error("[WebSerial] Direct return print failed, falling back to HTML iframe print:", err);
+    }
+  }
+
+  // 3. Fallback: Browser silent print
   printHtmlSilently(html);
 }
 

@@ -13,6 +13,59 @@ using System.Web.Script.Serialization;
 
 namespace IsraPOS.PrintAgent
 {
+    public class ImageReceiptPrinter
+    {
+        public static bool PrintReceiptImage(string printerName, byte[] imageBytes)
+        {
+            try
+            {
+                if (imageBytes == null || imageBytes.Length == 0) return false;
+
+                using (MemoryStream ms = new MemoryStream(imageBytes))
+                using (Bitmap sourceBmp = new Bitmap(ms))
+                {
+                    PrintDocument pd = new PrintDocument();
+                    pd.PrinterSettings.PrinterName = printerName;
+                    pd.DefaultPageSettings = pd.PrinterSettings.DefaultPageSettings;
+                    pd.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+                    pd.PrintController = new StandardPrintController();
+
+                    pd.PrintPage += (sender, e) =>
+                    {
+                        float dpiX = e.Graphics.DpiX;
+                        float dpiY = e.Graphics.DpiY;
+                        if (dpiX <= 0) dpiX = 203f;
+                        if (dpiY <= 0) dpiY = 203f;
+
+                        // Calculate physical width matching standard 76mm printable receipt width
+                        float printableWidthInches = 76f / 25.4f; // 2.992 in
+                        float targetPixelWidth = printableWidthInches * dpiX; // ~607 px @ 203 DPI
+                        float scale = targetPixelWidth / (float)sourceBmp.Width;
+                        float destW = sourceBmp.Width * scale;
+                        float destH = sourceBmp.Height * scale;
+
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [IMAGE RENDER] Source: " + sourceBmp.Width + "x" + sourceBmp.Height + "px -> Print: " + destW.ToString("F0") + "x" + destH.ToString("F0") + "px (" + (destH * 25.4f / dpiY).ToString("F1") + "mm tall)");
+                        Console.ResetColor();
+
+                        e.Graphics.DrawImage(sourceBmp, new RectangleF(0, 0, destW, destH));
+                        e.HasMorePages = false;
+                    };
+
+                    pd.Print();
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("[Image Print Error] " + ex.Message);
+                Console.ResetColor();
+                return false;
+            }
+        }
+    }
+
     public class GdiReceiptPrinter
     {
         public static bool PrintReceiptText(string printerName, string text)
@@ -609,20 +662,37 @@ namespace IsraPOS.PrintAgent
                         }
 
                         string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
+                        string imageBase64 = jsonDict != null && jsonDict.ContainsKey("imageBase64") ? Convert.ToString(jsonDict["imageBase64"]) : null;
                         string base64 = jsonDict != null && jsonDict.ContainsKey("rawBase64") ? Convert.ToString(jsonDict["rawBase64"]) : null;
                         string text = jsonDict != null && jsonDict.ContainsKey("text") ? Convert.ToString(jsonDict["text"]) : null;
+                        bool kickDrawer = jsonDict != null && jsonDict.ContainsKey("kickDrawer") && Convert.ToBoolean(jsonDict["kickDrawer"]);
                         string target = ResolveTargetPrinter(printerName);
 
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "' (Text: " + (text != null ? text.Length : 0) + " chars, Base64: " + (base64 != null ? base64.Length : 0) + " chars)");
+                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "' (Image: " + (!string.IsNullOrEmpty(imageBase64) ? "YES" : "NO") + ", Text: " + (text != null ? text.Length : 0) + " chars, Base64: " + (base64 != null ? base64.Length : 0) + " chars, Drawer: " + kickDrawer + ")");
                         Console.ResetColor();
 
                         bool printed = false;
 
-                        // 1. PRIMARY: GDI PrintDocument — renders properly decoded multi-line text to thermal bitmap
-                        if (!string.IsNullOrEmpty(text))
+                        // 1. PRIMARY: Exact HTML Raster Image (Single Source of Truth)
+                        if (!string.IsNullOrEmpty(imageBase64))
                         {
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI engine (using printer's own paper settings)...");
+                            try
+                            {
+                                byte[] imgBytes = Convert.FromBase64String(imageBase64);
+                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing canonical receipt image (" + imgBytes.Length + " bytes)...");
+                                printed = ImageReceiptPrinter.PrintReceiptImage(target, imgBytes);
+                            }
+                            catch (Exception imgEx)
+                            {
+                                Console.WriteLine("[Image Decode Warning] " + imgEx.Message);
+                            }
+                        }
+
+                        // 2. FALLBACK 1: GDI text rendering
+                        if (!printed && !string.IsNullOrEmpty(text))
+                        {
+                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI text engine...");
                             printed = GdiReceiptPrinter.PrintReceiptText(target, text);
                             if (!printed)
                             {
@@ -632,7 +702,7 @@ namespace IsraPOS.PrintAgent
                             }
                         }
 
-                        // 2. FALLBACK: RAW ESC/POS bytes — used when no text was provided or GDI/TEXT both failed.
+                        // 3. FALLBACK 2: RAW ESC/POS bytes
                         if (!printed && !string.IsNullOrEmpty(base64))
                         {
                             try
@@ -646,6 +716,17 @@ namespace IsraPOS.PrintAgent
                             {
                                 Console.WriteLine("[RAW Spooler Warning] " + ex.Message);
                             }
+                        }
+
+                        // Hardware Cash Drawer Kick (if requested for cash sale)
+                        if (kickDrawer)
+                        {
+                            try
+                            {
+                                byte[] drawerBytes = BuildCashDrawerKick();
+                                RawPrinterHelper.SendBytesToPrinter(target, drawerBytes);
+                            }
+                            catch { }
                         }
 
                         if (printed)
