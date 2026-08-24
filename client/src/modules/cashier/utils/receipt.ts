@@ -136,15 +136,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     const qty = item.quantity;
     const unit = item.unit || "pc";
     const desc = item.name;
-    const up = fmtCents(toCentavos(item.unitPrice));
     const amt = fmtCents(toCentavos(item.subtotal));
-    return `<tr class="item-name-row">
-      <td colspan="4" class="col-name">${desc}</td>
-    </tr>
-    <tr class="item-detail-row">
+    return `<tr class="item-row">
       <td class="col-qty">${qty}</td>
       <td class="col-unit">${unit}</td>
-      <td class="col-price">${up}</td>
+      <td class="col-desc">${desc}</td>
       <td class="col-amt">${amt}</td>
     </tr>`;
   }).join("");
@@ -243,9 +239,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
     .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
     
-    .cust-row { display: flex; align-items: flex-end; margin: 3px 0; }
-    .cust-lbl { width: 75px; flex-shrink: 0; font-size: 11.5px; }
-    .cust-line { flex: 1 1 auto; border-bottom: 1px solid #000; min-height: 13px; font-size: 11.5px; padding-left: 2px; }
+    .cust-row { display: flex; align-items: baseline; margin: 2.5px 0; width: 100%; }
+    .cust-lbl { width: 85px; flex-shrink: 0; font-size: 11.5px; white-space: nowrap; }
+    .cust-line { flex: 1 1 auto; border-bottom: 1px solid #000; min-height: 13px; font-size: 11.5px; padding-left: 2px; word-break: break-word; }
     
     .section { margin: 2.5px 0; word-break: break-word; }
     .bold { font-weight: bold; }
@@ -253,19 +249,58 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .header-info { font-size: 11px; line-height: 1.45; text-align: center; margin-bottom: 4px; }
     .divider { border-top: 1px dashed #000; margin: 6px 0; }
     
-    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
-    .items th { font-size: 11.5px; font-weight: normal; border-bottom: 1px dashed #000; padding: 3px 0 4px 0; }
-    .items .col-hdr-qty   { width: 12%; text-align: left; }
-    .items .col-hdr-unit  { width: 14%; text-align: left; }
-    .items .col-hdr-desc  { width: 44%; text-align: left; }
-    .items .col-hdr-amt   { width: 30%; text-align: right; padding-right: 0; }
-    
-    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 4px 2px 2px 0; font-size: 11.5px; font-weight: normal; line-height: 1.35; }
-    .item-detail-row td { padding: 1px 0 5px 0; font-size: 11.5px; font-weight: normal; }
-    .item-detail-row .col-qty   { width: 12%; text-align: left; }
-    .item-detail-row .col-unit  { width: 14%; text-align: left; }
-    .item-detail-row .col-price { width: 44%; text-align: left; }
-    .item-detail-row .col-amt   { width: 30%; text-align: right; white-space: nowrap; padding-right: 0; }
+    .items {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin: 4px 0;
+    }
+    .items th,
+    .items td {
+      vertical-align: top;
+      padding: 2px 0;
+      box-sizing: border-box;
+    }
+    .items th {
+      font-size: 10.5px;
+      font-weight: bold;
+      padding-bottom: 3px;
+    }
+    .items tr.header-divider-row td {
+      padding: 0;
+      height: 1px;
+      border-bottom: 1px dashed #000;
+    }
+    .items tbody tr.item-row td {
+      padding-top: 3px;
+      padding-bottom: 3px;
+      font-size: 11.5px;
+      font-weight: normal;
+    }
+    .items .col-qty {
+      width: 10%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-unit {
+      width: 14%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-desc {
+      width: 51%;
+      text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      padding-right: 4px;
+    }
+    .items .col-amt {
+      width: 25%;
+      text-align: right;
+      white-space: nowrap;
+      padding-right: 0;
+    }
     
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
@@ -290,7 +325,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     
     <div class="row"><span>SI No: ${invoiceNumber}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
-    <div class="row"><span>SOLD TO: ${customerInfo.name || "Walk-In Customer"}</span></div>
+    <div class="cust-row"><span class="cust-lbl">SOLD TO:</span><span class="cust-line">${customerInfo.name || "Walk-In Customer"}</span></div>
     ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
     <div class="cust-row"><span class="cust-lbl">TIN:</span><span class="cust-line">${tinVal}</span></div>
     <div class="cust-row"><span class="cust-lbl">ADDRESS:</span><span class="cust-line">${addrVal}</span></div>
@@ -300,10 +335,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <table class="items">
       <thead>
         <tr>
-          <th class="col-hdr-qty">QTY</th>
-          <th class="col-hdr-unit">UNIT</th>
-          <th class="col-hdr-desc">DESCRIPTION</th>
-          <th class="col-hdr-amt">AMOUNT</th>
+          <th class="col-qty">QTY</th>
+          <th class="col-unit">UNIT</th>
+          <th class="col-desc">DESCRIPTION</th>
+          <th class="col-amt">AMOUNT</th>
+        </tr>
+        <tr class="header-divider-row">
+          <td colspan="4"></td>
         </tr>
       </thead>
       <tbody>

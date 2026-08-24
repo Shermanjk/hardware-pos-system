@@ -16,10 +16,10 @@ import {
     type CashSession,
     type CloseSessionResult,
 } from "@/shared/api/cashReconciliationApi";
-import { getXReading } from "@/shared/api/birApi";
+import { getXReading, createZReading, getZReading, type ZReadingRecord } from "@/shared/api/birApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
-import { formatXReadingText, printThermalMonospace } from "@/shared/utils/birReceiptFormatter";
-import { AlertCircle, CheckCircle2, LogOut, Printer, TrendingDown, TrendingUp } from "lucide-react";
+import { formatXReadingText, formatZReadingText, printThermalMonospace } from "@/shared/utils/birReceiptFormatter";
+import { AlertCircle, CheckCircle2, FileCheck, LogOut, Printer, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,10 +36,30 @@ function fmt(n: number | null | undefined): string {
   );
 }
 
+function pad4(num: number | string | null | undefined): string {
+  return String(num || 0).padStart(4, "0");
+}
+
 function parsePeso(raw: string): number | null {
   const cleaned = raw.replace(/[₱,\s]/g, "");
   const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? null : parsed;
+}
+
+function formatCurrencyInput(raw: string): string {
+  const clean = raw.replace(/[^\d.]/g, "");
+  if (!clean) return "";
+
+  const parts = clean.split(".");
+  const intPart = parts[0];
+  const decPart = parts.length > 1 ? parts.slice(1).join("").slice(0, 2) : null;
+
+  const formattedInt = intPart === "" ? "0" : Number(intPart).toLocaleString("en-US");
+
+  if (decPart !== null) {
+    return `${formattedInt}.${decPart}`;
+  }
+  return formattedInt;
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -96,7 +116,9 @@ export default function EndShiftModal({
   const [shiftLabel, setShiftLabel] = useState("Day Shift");
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [actualCashInput, setActualCashInput] = useState("");
+  const [isEODClose, setIsEODClose] = useState(false);
   const [result, setResult] = useState<CloseSessionResult | null>(null);
+  const [zReadingResult, setZReadingResult] = useState<ZReadingRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +129,8 @@ export default function EndShiftModal({
     setStep("loading");
     setError(null);
     setResult(null);
+    setZReadingResult(null);
+    setIsEODClose(false);
     setActualCashInput("");
     setOpeningCashInput("");
 
@@ -141,7 +165,6 @@ export default function EndShiftModal({
     try {
       await openSession({ opening_cash: amount, shift_label: shiftLabel });
       toast.success("Shift started successfully.");
-      // Reload session then go to end-shift view
       const s = await getMySession();
       setSession(s);
       onShiftOpened?.();
@@ -156,7 +179,7 @@ export default function EndShiftModal({
     }
   };
 
-  // ── End shift handler ─────────────────────────────────────────────────────
+  // ── End shift & optional Z-Reading handler ────────────────────────────────
   const handleEndShift = async () => {
     setError(null);
     const amount = parsePeso(actualCashInput);
@@ -167,8 +190,62 @@ export default function EndShiftModal({
 
     setSubmitting(true);
     try {
+      // 1. Close cashier shift & submit cash count
       const res = await closeSession({ actual_cash: amount });
       setResult(res);
+
+      // 2. If EOD is checked, atomically commit and print the BIR Z-Reading
+      if (isEODClose) {
+        try {
+          const zRes = await createZReading();
+          const fullZ = await getZReading(zRes.id);
+          setZReadingResult(fullZ);
+          
+          // Print official Z-Reading slip
+          const settings = await getSettings().catch(() => ({}) as StoreSettings);
+          const formattedZ = formatZReadingText({
+            zCounterNo: fullZ.z_counter_no,
+            resetCounterNo: fullZ.reset_counter_no,
+            readingDate: fullZ.reading_date,
+            generatedByName: fullZ.generated_by_name || "Cashier",
+            openedAt: fullZ.opened_at,
+            closedAt: fullZ.closed_at,
+            begInvoiceNo: fullZ.beg_invoice_no,
+            endInvoiceNo: fullZ.end_invoice_no,
+            begVoidNo: fullZ.beg_void_no,
+            endVoidNo: fullZ.end_void_no,
+            begReturnNo: fullZ.beg_return_no,
+            endReturnNo: fullZ.end_return_no,
+            dailyGrossSales: fullZ.daily_gross_sales,
+            totalReturns: fullZ.total_returns,
+            totalVoids: fullZ.total_voids,
+            scDiscount: fullZ.sc_discount,
+            pwdDiscount: fullZ.pwd_discount,
+            regularDiscount: fullZ.regular_discount,
+            totalDiscounts: fullZ.total_discounts,
+            netSales: fullZ.net_sales,
+            vatableSales: fullZ.vatable_sales,
+            vatAmount: fullZ.vat_amount,
+            vatExemptSales: fullZ.vat_exempt_sales,
+            zeroRatedSales: fullZ.zero_rated_sales,
+            nonVatSales: fullZ.non_vat_sales,
+            cashSales: fullZ.cash_sales,
+            creditSales: fullZ.credit_sales,
+            oldGrandTotal: fullZ.old_grand_total,
+            newGrandTotal: fullZ.new_grand_total,
+            transactionCount: fullZ.transaction_count,
+            voidCount: fullZ.void_count,
+            returnCount: fullZ.return_count,
+            settings: settings as StoreSettings,
+          });
+          printThermalMonospace(formattedZ);
+          toast.success(`Official Z-Reading #${pad4(fullZ.z_counter_no)} committed & sent to printer!`);
+        } catch (zErr: any) {
+          console.error("Z-Reading execution error during shift close:", zErr);
+          toast.warning("Shift closed, but Z-Reading failed: " + (zErr?.response?.data?.message || zErr?.message));
+        }
+      }
+
       setStep("result");
       onShiftClosed?.();
       toast.success("Shift ended. Reconciliation submitted.");
@@ -183,6 +260,7 @@ export default function EndShiftModal({
   };
 
   const [printingXReading, setPrintingXReading] = useState(false);
+  const [printingZReading, setPrintingZReading] = useState(false);
 
   const handlePrintXReading = async (targetSessionId?: number) => {
     const sId = targetSessionId || session?.id;
@@ -226,6 +304,56 @@ export default function EndShiftModal({
       toast.error("Failed to generate X-Reading printout.");
     } finally {
       setPrintingXReading(false);
+    }
+  };
+
+  const handlePrintZReading = async () => {
+    if (!zReadingResult) return;
+    setPrintingZReading(true);
+    try {
+      const settings = await getSettings().catch(() => ({}) as StoreSettings);
+      const formattedZ = formatZReadingText({
+        zCounterNo: zReadingResult.z_counter_no,
+        resetCounterNo: zReadingResult.reset_counter_no,
+        readingDate: zReadingResult.reading_date,
+        generatedByName: zReadingResult.generated_by_name || "Cashier",
+        openedAt: zReadingResult.opened_at,
+        closedAt: zReadingResult.closed_at,
+        begInvoiceNo: zReadingResult.beg_invoice_no,
+        endInvoiceNo: zReadingResult.end_invoice_no,
+        begVoidNo: zReadingResult.beg_void_no,
+        endVoidNo: zReadingResult.end_void_no,
+        begReturnNo: zReadingResult.beg_return_no,
+        endReturnNo: zReadingResult.end_return_no,
+        dailyGrossSales: zReadingResult.daily_gross_sales,
+        totalReturns: zReadingResult.total_returns,
+        totalVoids: zReadingResult.total_voids,
+        scDiscount: zReadingResult.sc_discount,
+        pwdDiscount: zReadingResult.pwd_discount,
+        regularDiscount: zReadingResult.regular_discount,
+        totalDiscounts: zReadingResult.total_discounts,
+        netSales: zReadingResult.net_sales,
+        vatableSales: zReadingResult.vatable_sales,
+        vatAmount: zReadingResult.vat_amount,
+        vatExemptSales: zReadingResult.vat_exempt_sales,
+        zeroRatedSales: zReadingResult.zero_rated_sales,
+        nonVatSales: zReadingResult.non_vat_sales,
+        cashSales: zReadingResult.cash_sales,
+        creditSales: zReadingResult.credit_sales,
+        oldGrandTotal: zReadingResult.old_grand_total,
+        newGrandTotal: zReadingResult.new_grand_total,
+        transactionCount: zReadingResult.transaction_count,
+        voidCount: zReadingResult.void_count,
+        returnCount: zReadingResult.return_count,
+        settings: settings as StoreSettings,
+      });
+      printThermalMonospace(formattedZ);
+      toast.success("Z-Reading re-sent to thermal printer.");
+    } catch (err) {
+      console.error("Print Z-Reading error:", err);
+      toast.error("Failed to print Z-Reading.");
+    } finally {
+      setPrintingZReading(false);
     }
   };
 
@@ -299,14 +427,13 @@ export default function EndShiftModal({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">₱</span>
                   <input
                     ref={inputRef}
-                    type="number"
-                    min={0}
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={openingCashInput}
-                    onChange={(e) => setOpeningCashInput(e.target.value)}
+                    onChange={(e) => setOpeningCashInput(formatCurrencyInput(e.target.value))}
                     onKeyDown={(e) => { if (e.key === "Enter") handleOpenShift(); }}
-                    className="w-full h-12 border-2 border-gray-300 rounded-md pl-7 pr-3 text-lg font-bold text-right focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full h-12 border-2 border-gray-300 rounded-md pl-7 pr-3 text-lg font-bold text-right focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 <p className="text-xs text-gray-400">Enter 0 if starting with an empty drawer.</p>
@@ -370,20 +497,38 @@ export default function EndShiftModal({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">₱</span>
                   <input
                     ref={inputRef}
-                    type="number"
-                    min={0}
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={actualCashInput}
-                    onChange={(e) => setActualCashInput(e.target.value)}
+                    onChange={(e) => setActualCashInput(formatCurrencyInput(e.target.value))}
                     onKeyDown={(e) => { if (e.key === "Enter") handleEndShift(); }}
-                    className="w-full h-14 border-2 border-gray-300 rounded-md pl-7 pr-3 text-xl font-bold text-right focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full h-14 border-2 border-gray-300 rounded-md pl-7 pr-3 text-xl font-bold text-right focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 <p className="text-xs text-gray-400">
                   Enter the total amount of all physical cash counted in the drawer.
                 </p>
               </div>
+
+              {/* ── Close Store & Execute Z-Reading Checkbox ─────────────── */}
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-50 cursor-pointer transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={isEODClose}
+                  onChange={(e) => setIsEODClose(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="text-xs space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-bold text-indigo-950">
+                    <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>Close Store & Generate Daily Z-Reading (EOD)</span>
+                  </div>
+                  <p className="text-indigo-700/90 leading-relaxed">
+                    Atomically commits the official BIR End-of-Day audit report, increments Z-Counter, rolls over Grand Total (GT), and prints the Z-reading slip.
+                  </p>
+                </div>
+              </label>
 
               {error && (
                 <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -407,15 +552,19 @@ export default function EndShiftModal({
                   Cancel
                 </Button>
                 <Button
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold"
+                  className={`flex-1 font-semibold text-white ${
+                    isEODClose ? "bg-indigo-600 hover:bg-indigo-700" : "bg-red-600 hover:bg-red-700"
+                  }`}
                   onClick={handleEndShift}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <span className="flex items-center gap-2">
                       <span className="inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      Submitting…
+                      {isEODClose ? "Closing EOD…" : "Submitting…"}
                     </span>
+                  ) : isEODClose ? (
+                    "End Shift & Run Z-Reading"
                   ) : (
                     "Submit Cash Count"
                   )}
@@ -465,16 +614,49 @@ export default function EndShiftModal({
                 </table>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full gap-2 border-slate-300 font-semibold text-slate-800 hover:bg-slate-100"
-                onClick={() => handlePrintXReading(session?.id)}
-                disabled={printingXReading}
-              >
-                <Printer className="h-4 w-4 text-slate-600" />
-                {printingXReading ? "Printing X-Reading…" : "Print X-Reading Report (80mm)"}
-              </Button>
+              {/* Z-Reading Status Card if EOD was executed */}
+              {zReadingResult && (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-900">
+                      <FileCheck className="h-4 w-4 text-indigo-600" />
+                      Official BIR Z-Reading #{pad4(zReadingResult.z_counter_no)} Committed
+                    </span>
+                    <span className="text-[10px] bg-indigo-200 text-indigo-900 font-mono px-1.5 py-0.5 rounded font-bold">
+                      EOD Locked
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-indigo-800">
+                    <span>New Grand Total (GT):</span>
+                    <span className="font-bold tabular-nums">₱{fmt(zReadingResult.new_grand_total)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2 border-slate-300 font-semibold text-slate-800 hover:bg-slate-100"
+                  onClick={() => handlePrintXReading(session?.id)}
+                  disabled={printingXReading}
+                >
+                  <Printer className="h-4 w-4 text-slate-600" />
+                  {printingXReading ? "Printing X-Reading…" : "Print X-Reading Report (80mm)"}
+                </Button>
+
+                {zReadingResult && (
+                  <Button
+                    type="button"
+                    className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                    onClick={handlePrintZReading}
+                    disabled={printingZReading}
+                  >
+                    <Printer className="h-4 w-4 text-white" />
+                    {printingZReading ? "Printing Z-Reading…" : `Reprint Z-Reading #${pad4(zReadingResult.z_counter_no)}`}
+                  </Button>
+                )}
+              </div>
 
               <div className="text-xs text-gray-500 text-center">
                 This record has been submitted and sent to the Admin for review.

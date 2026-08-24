@@ -22,14 +22,16 @@ class WebSerialPrinterService {
   private baudRate = 9600; // Standard default for most USB-Serial thermal POS printers (9600, 38400, or 115200)
 
   constructor() {
-    // Load saved baud rate from localStorage if present
-    const savedBaud = localStorage.getItem("pos_serial_baud_rate");
-    if (savedBaud) {
-      const parsed = parseInt(savedBaud, 10);
-      if (!isNaN(parsed) && parsed > 0) this.baudRate = parsed;
+    // Load saved baud rate from localStorage if present in browser
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      const savedBaud = localStorage.getItem("pos_serial_baud_rate");
+      if (savedBaud) {
+        const parsed = parseInt(savedBaud, 10);
+        if (!isNaN(parsed) && parsed > 0) this.baudRate = parsed;
+      }
     }
 
-    if (this.isSupported()) {
+    if (this.isSupported() && typeof navigator !== "undefined") {
       (navigator as any).serial?.addEventListener("disconnect", (e: any) => {
         console.warn("[WebSerial] Printer disconnected:", e);
         this.handleDisconnect();

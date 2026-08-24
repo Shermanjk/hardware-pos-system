@@ -100,54 +100,82 @@
       margin-bottom: 2px;
     }
 
+    .cust-row {
+      display: flex;
+      align-items: baseline;
+      margin: 2.5px 0;
+      width: 100%;
+    }
+    .cust-lbl {
+      width: 85px;
+      flex-shrink: 0;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .cust-line {
+      flex: 1;
+      border-bottom: 1px solid #000;
+      min-height: 13px;
+      font-size: 11px;
+      padding-left: 2px;
+      word-break: break-word;
+    }
+
     .divider {
       border-top: 1px dashed #000;
       margin: 4px 0;
     }
 
-    /* Item Table */
     .items {
       width: 100%;
-      border-collapse: collapse;
-      margin: 2px 0;
       table-layout: fixed;
+      border-collapse: collapse;
+      margin: 4px 0;
     }
-
-    .items th, .items td {
-      padding: 1px 0;
-      vertical-align: middle;
+    .items th,
+    .items td {
+      vertical-align: top;
+      padding: 2px 0;
+      box-sizing: border-box;
     }
-
     .items th {
       font-size: 10.5px;
       font-weight: bold;
+      padding-bottom: 3px;
     }
-
-    .items .col-hdr-qty   { width: 12%; text-align: center; }
-    .items .col-hdr-unit  { width: 14%; text-align: left; }
-    .items .col-hdr-space { width: 4%; }
-    .items .col-hdr-price { width: 35%; text-align: right; }
-    .items .col-hdr-amt   { width: 35%; text-align: right; }
-
-    .item-name-row td.col-name {
+    .items tr.header-divider-row td {
+      padding: 0;
+      height: 1px;
+      border-bottom: 1px dashed #000;
+    }
+    .items tbody tr.item-row td {
+      padding-top: 3px;
+      padding-bottom: 3px;
+      font-size: 11px;
+    }
+    .items .col-qty {
+      width: 10%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-unit {
+      width: 14%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-desc {
+      width: 51%;
+      text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
       word-break: break-word;
-      overflow-wrap: anywhere;
-      padding: 3px 0 1px 0;
-      font-size: 11px;
-      font-weight: bold;
-      line-height: 1.3;
+      padding-right: 4px;
     }
-
-    .item-detail-row td {
-      padding: 1px 0 4px 0;
-      font-size: 11px;
+    .items .col-amt {
+      width: 25%;
+      text-align: right;
+      white-space: nowrap;
     }
-
-    .item-detail-row .col-qty    { width: 12%; text-align: center; }
-    .item-detail-row .col-unit   { width: 14%; text-align: left; }
-    .item-detail-row .col-spacer { width: 4%; }
-    .item-detail-row .col-price  { width: 35%; text-align: right; white-space: nowrap; }
-    .item-detail-row .col-amt    { width: 35%; text-align: right; white-space: nowrap; }
 
     .footer-text {
       font-size: 10px;
@@ -202,33 +230,31 @@
       <div class="divider"></div>
 
       <!-- Customer Information -->
-      <div class="section">SOLD TO: Walk-in Customer</div>
-      <div class="section">TIN: N/A</div>
-      <div class="section">ADDRESS: N/A</div>
-      <div class="section">BUSINESS STYLE: N/A</div>
+      <div class="cust-row"><span class="cust-lbl">SOLD TO:</span><span class="cust-line">Walk-in Customer</span></div>
+      <div class="cust-row"><span class="cust-lbl">TIN:</span><span class="cust-line"></span></div>
+      <div class="cust-row"><span class="cust-lbl">ADDRESS:</span><span class="cust-line"></span></div>
+      <div class="cust-row"><span class="cust-lbl">BUS STYLE:</span><span class="cust-line"></span></div>
       <div class="divider"></div>
 
       <!-- Item Table -->
       <table class="items">
         <thead>
           <tr>
-            <th class="col-hdr-qty">QTY</th>
-            <th class="col-hdr-unit">UNIT</th>
-            <th class="col-hdr-space"></th>
-            <th class="col-hdr-price">PRICE</th>
-            <th class="col-hdr-amt">AMT</th>
+            <th class="col-qty">QTY</th>
+            <th class="col-unit">UNIT</th>
+            <th class="col-desc">DESCRIPTION</th>
+            <th class="col-amt">AMOUNT</th>
+          </tr>
+          <tr class="header-divider-row">
+            <td colspan="4"></td>
           </tr>
         </thead>
         <tbody>
-          <tr class="item-name-row">
-            <td colspan="5" class="col-name">Industrial Grade 12-Inch Drop-Forged Carbon Steel Straight Pattern Tin Snips and Wire Cutter with Offset Handle and Ergonomic Non-Slip Cushion Grip</td>
-          </tr>
-          <tr class="item-detail-row">
+          <tr class="item-row">
             <td class="col-qty">1</td>
             <td class="col-unit">pc</td>
-            <td class="col-spacer"></td>
-            <td class="col-price">P 250.00</td>
-            <td class="col-amt">P 250.00</td>
+            <td class="col-desc">Industrial Grade 12-Inch Drop-Forged Carbon Steel Straight Pattern Tin Snips and Wire Cutter with Offset Handle and Ergonomic Non-Slip Cushion Grip</td>
+            <td class="col-amt">250.00</td>
           </tr>
         </tbody>
       </table>

@@ -22,7 +22,7 @@ function round2(num: number): number {
 // Real-time calculation of all uncommitted transactions since the last Z-Reading cutoff
 router.get(
   "/z-reading/preview",
-  requireRole("Admin"),
+  requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       // 1. Get the last Z-Reading record to determine cutoff start time & accumulators
@@ -197,7 +197,7 @@ router.get(
 // Atomically generate and commit the non-resettable Z-Reading record
 router.post(
   "/z-reading",
-  requireRole("Admin"),
+  requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
     const conn = await pool.getConnection();
     try {
@@ -421,7 +421,7 @@ router.post(
 // List historical Z-Readings with optional date filtering
 router.get(
   "/z-readings",
-  requireRole("Admin"),
+  requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { date_from, date_to, limit = "100" } = req.query as Record<string, string>;
@@ -466,7 +466,7 @@ router.get(
 // Get full details of a specific Z-Reading (for printing/viewing)
 router.get(
   "/z-reading/:id",
-  requireRole("Admin"),
+  requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = Number(req.params.id);
