@@ -86,37 +86,48 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   };
 
   const handleUnifiedSearch = async () => {
-    if (!unifiedSearch.trim()) return;
+    const term = unifiedSearch.trim();
+    if (!term) return;
     setReturnLookupLoading(true); setReturnLookupError(null); setSaleSearchResults([]);
     try {
-      // First try as invoice lookup (check if it looks like an invoice)
-      if (unifiedSearch.trim().toUpperCase().startsWith("INV-")) {
+      // First try as invoice lookup if term has digits or INV-
+      const isLikelyInvoice = term.toUpperCase().startsWith("INV-") || /^\d+$/.test(term);
+      if (isLikelyInvoice) {
         try {
-          const sale = await getSaleByInvoice(unifiedSearch.trim());
-          if (sale.void_status === "voided") {
-            setReturnLookupError("This sale has been voided and cannot be returned.");
+          const sale = await getSaleByInvoice(term);
+          if (sale && sale.id) {
+            if (sale.void_status === "voided") {
+              setReturnLookupError("This sale has been voided and cannot be returned.");
+              return;
+            }
+            setReturnSale(sale);
+            const init: Record<number, SelectedItem> = {};
+            sale.items.forEach((item) => {
+              const remaining = item.quantity - item.quantity_returned;
+              if (remaining > 0 && item.is_returnable) {
+                init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode };
+              }
+            });
+            setSelectedItems(init);
             return;
           }
-          setReturnSale(sale);
-          const init: Record<number, SelectedItem> = {};
-          sale.items.forEach((item) => {
-            const remaining = item.quantity - item.quantity_returned;
-            if (remaining > 0 && item.is_returnable) {
-              init[item.id] = { checked: false, quantity: 1, reason: "Damaged", scannedBarcode: "", barcodeConfirmed: !item.barcode };
-            }
-          });
-          setSelectedItems(init);
-        } catch (invoiceErr) {
-          setReturnLookupError("Invoice not found.");
+        } catch {
+          // If invoice not found directly, continue to customer/invoice search below
         }
+      }
+
+      // Search sales by invoice number or customer name
+      const results = await searchSales({ invoice_number: term, return_status: "no_returns" });
+      const active = results.filter((s) => s.void_status !== "voided");
+      if (active.length > 0) {
+        setSaleSearchResults(active);
       } else {
-        // Otherwise search by customer name (exclude sales with completed returns)
-        const results = await searchSales({ customer_name: unifiedSearch.trim(), return_status: "no_returns" });
-        const active = results.filter((s) => s.void_status !== "voided");
-        if (active.length === 0) {
-          setReturnLookupError("No transactions found.");
+        const byCustomer = await searchSales({ customer_name: term, return_status: "no_returns" });
+        const activeCust = byCustomer.filter((s) => s.void_status !== "voided");
+        if (activeCust.length === 0) {
+          setReturnLookupError("No matching transactions found.");
         } else {
-          setSaleSearchResults(active);
+          setSaleSearchResults(activeCust);
         }
       }
     } catch { setReturnLookupError("Search failed."); }
@@ -637,7 +648,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
             <div className="space-y-4">
               <div className="text-xs text-gray-500">
                 <p>Return: <span className="font-mono font-semibold">{resolveData.return_number}</span></p>
-                <p>Invoice: <span className="font-semibold">{resolveData.invoice_number}</span></p>
+                <p>Invoice: <span className="font-semibold">{resolveData.invoice_number ? resolveData.invoice_number.replace(/^INV-?/i, "") : ""}</span></p>
               </div>
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
                 <p className="text-xs font-semibold text-blue-900 mb-1">Approved Resolution</p>

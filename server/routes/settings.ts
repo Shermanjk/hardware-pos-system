@@ -61,6 +61,9 @@ const settingsSchema = z.object({
   pos_min:                   z.string().max(30).optional().nullable(),
   pos_serial:                z.string().max(30).optional().nullable(),
   ptu_or_accn_no:            z.string().max(100).optional().nullable(),
+  ptu_date_issued:           z.string().optional().nullable(),
+  accreditation_no:          z.string().max(100).optional().nullable(),
+  accreditation_date_issued: z.string().optional().nullable(),
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────
@@ -71,11 +74,14 @@ router.get("/", async (req: Request, res: Response) => {
     res.set("Cache-Control", "no-store");
     res.status(200).json({
       ...row,
-      branch_code:    row.branch_code ?? "00000",
-      ptu_or_accn_no: row.ptu_or_accn_no ?? null,
-      vat_rate:       Number(row.vat_rate ?? 0),
-      vat_enabled:    Boolean(row.vat_enabled),
-      vat_registered: Boolean(row.vat_enabled), // Alias for frontend compatibility
+      branch_code:               row.branch_code ?? "00000",
+      ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
+      ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
+      accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
+      accreditation_date_issued: row.accreditation_date_issued ? String(row.accreditation_date_issued).slice(0, 10) : null,
+      vat_rate:                  Number(row.vat_rate ?? 0),
+      vat_enabled:               Boolean(row.vat_enabled),
+      vat_registered:            Boolean(row.vat_enabled), // Alias for frontend compatibility
     });
   } catch (err) {
     console.error("[settings/GET] Unexpected error:", err);
@@ -115,6 +121,9 @@ router.put("/", async (req: Request, res: Response) => {
       "pos_min",
       "pos_serial",
       "ptu_or_accn_no",
+      "ptu_date_issued",
+      "accreditation_no",
+      "accreditation_date_issued",
     ];
     const isModifyingStatutory = statutoryFields.some((field) => (data as any)[field] !== undefined);
 
@@ -138,27 +147,30 @@ router.put("/", async (req: Request, res: Response) => {
     const values: unknown[] = [];
 
     const fieldMap: Record<string, string> = {
-      store_name:               "store_name",
-      facebook:                 "facebook",
-      contact_number:           "contact_number",
-      address:                  "address",
-      currency:                 "currency",
-      vat_rate:                 "vat_rate",
-      business_license:         "business_license",
-      registered_taxpayer_name: "registered_taxpayer_name",
-      proprietor:               "proprietor",
-      tin:                      "tin",
-      branch_code:              "branch_code",
-      document_type:            "document_type",
-      pos_min:                  "pos_min",
-      pos_serial:               "pos_serial",
-      ptu_or_accn_no:           "ptu_or_accn_no",
-      vat_enabled:              "vat_enabled",
-      vat_registered:           "vat_enabled", // alias maps to same column
+      store_name:                "store_name",
+      facebook:                  "facebook",
+      contact_number:            "contact_number",
+      address:                   "address",
+      currency:                  "currency",
+      vat_rate:                  "vat_rate",
+      business_license:          "business_license",
+      registered_taxpayer_name:  "registered_taxpayer_name",
+      proprietor:                "proprietor",
+      tin:                       "tin",
+      branch_code:               "branch_code",
+      document_type:             "document_type",
+      pos_min:                   "pos_min",
+      pos_serial:                "pos_serial",
+      ptu_or_accn_no:            "ptu_or_accn_no",
+      ptu_date_issued:           "ptu_date_issued",
+      accreditation_no:          "accreditation_no",
+      accreditation_date_issued: "accreditation_date_issued",
+      vat_enabled:               "vat_enabled",
+      vat_registered:            "vat_enabled", // alias maps to same column
       // Legacy field names for backward compatibility
-      store_fb:                 "facebook",
-      store_phone:              "contact_number",
-      store_address:            "address",
+      store_fb:                  "facebook",
+      store_phone:               "contact_number",
+      store_address:             "address",
     };
 
     for (const [key, col] of Object.entries(fieldMap)) {
@@ -181,6 +193,9 @@ router.put("/", async (req: Request, res: Response) => {
       data.tin !== undefined ||
       data.branch_code !== undefined ||
       data.ptu_or_accn_no !== undefined ||
+      data.ptu_date_issued !== undefined ||
+      data.accreditation_no !== undefined ||
+      data.accreditation_date_issued !== undefined ||
       data.pos_min !== undefined ||
       data.pos_serial !== undefined ||
       data.document_type !== undefined ||
@@ -206,11 +221,14 @@ router.put("/", async (req: Request, res: Response) => {
 
     res.status(200).json({
       ...row,
-      branch_code:    row.branch_code ?? "00000",
-      ptu_or_accn_no: row.ptu_or_accn_no ?? null,
-      vat_rate:       Number(row.vat_rate ?? 0),
-      vat_enabled:    Boolean(row.vat_enabled),
-      vat_registered: Boolean(row.vat_enabled), // Alias for frontend compatibility
+      branch_code:               row.branch_code ?? "00000",
+      ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
+      ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
+      accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
+      accreditation_date_issued: row.accreditation_date_issued ? String(row.accreditation_date_issued).slice(0, 10) : null,
+      vat_rate:                  Number(row.vat_rate ?? 0),
+      vat_enabled:               Boolean(row.vat_enabled),
+      vat_registered:            Boolean(row.vat_enabled), // Alias for frontend compatibility
     });
   } catch (err) {
     console.error("[settings/PUT] Unexpected error:", err);

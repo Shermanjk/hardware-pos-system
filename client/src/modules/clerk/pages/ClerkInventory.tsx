@@ -84,7 +84,7 @@ function statusBadge(quantity: number, reorder_level: number) {
   }
 }
 
-// ─── Product Detail Modal ─────────────────────────────────────────────────────
+// ─── Product Detail Sheet (Right-Side Sliding Drawer) ─────────────────────────
 
 interface ProductDetailModalProps {
   product: ProductRecord | null;
@@ -94,75 +94,190 @@ interface ProductDetailModalProps {
 }
 
 function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductDetailModalProps) {
-  if (!product) return null;
+  const [activeProduct, setActiveProduct] = useState<ProductRecord | null>(null);
+
+  useEffect(() => {
+    if (product) {
+      setActiveProduct(product);
+    }
+  }, [product]);
+
+  const displayProduct = product || activeProduct;
+  if (!displayProduct) return null;
+
+  const quantityParts = formatQuantityParts(
+    displayProduct.quantity,
+    displayProduct.unit_abbreviation,
+    displayProduct.quantity_type,
+    displayProduct.unit_allow_decimal
+  );
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            Product Details
-          </DialogTitle>
-          <DialogDescription>
-            Read-only view of the registered product information.
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Product Details - {displayProduct.product_name}</SheetTitle>
 
-        <div className="space-y-4">
-          {/* Barcode badge */}
-          <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-2">
-              <Hash className="h-4 w-4 text-blue-600" />
-              <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Barcode</span>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <Package className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0 pr-8">
+            <h2 className="text-lg font-bold text-white truncate">{displayProduct.product_name}</h2>
+            <p className="text-xs text-blue-100 mt-0.5">Complete Product Information</p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+          {/* Identification Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Identification</h3>
             </div>
-            <span className="font-mono font-bold text-blue-900 text-lg">{product.barcode}</span>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-1">Barcode</p>
+                <p className="text-sm font-mono font-semibold text-gray-900 bg-white px-3 py-2 rounded border border-gray-200 flex items-center justify-between">
+                  <span>{displayProduct.barcode}</span>
+                  {displayProduct.barcode_source === "store" ? (
+                    <span className="text-[11px] font-sans font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      Store Generated
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Detail grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { icon: Boxes,  label: "Product Name",    value: product.product_name, span: true  },
-              { icon: Tag,    label: "Category",         value: product.category, span: false },
-              { icon: Truck,  label: "Supplier",         value: product.supplier, span: false },
-              { icon: Layers, label: "Unit",             value: product.unit, span: false },
-              { icon: Hash,   label: "Current Quantity", value: product.quantity, span: false },
-              { icon: AlertTriangle, label: "Reorder Level", value: product.reorder_level, span: false },
-            ].map(({ icon: Icon, label, value, span }) => (
-              <div
-                key={label}
-                className={`p-3 bg-gray-50 rounded-lg ${span ? "col-span-2" : ""}`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Icon className="h-3.5 w-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-500 font-medium">{label}</span>
+          {/* Product Information Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Product Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Category</p>
+                  <span className="inline-block text-xs font-semibold text-gray-700 bg-white px-3 py-1.5 rounded-full border border-gray-200">
+                    {displayProduct.category || "—"}
+                  </span>
                 </div>
-                <p className="text-sm font-semibold text-gray-900">{value}</p>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Supplier</p>
+                  <p className="text-sm font-medium text-gray-900">{displayProduct.supplier || "—"}</p>
+                </div>
               </div>
-            ))}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Unit</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {displayProduct.unit} ({displayProduct.unit_abbreviation || "—"})
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Unit Type</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {displayProduct.unit_type || "Standard"}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium mb-1">Quantity Type</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {displayProduct.quantity_type === "WEIGHTED" ? "Weighted (Variable)" : "Whole Unit"}
+                </p>
+              </div>
+            </div>
+          </div>
 
-            {/* Status */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <span className="text-xs text-gray-500 font-medium block mb-1.5">Status</span>
-              {statusBadge(product.quantity, product.reorder_level)}
+          {/* Stock Information Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Stock Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Current Stock</p>
+                  <div className="flex items-baseline gap-1">
+                    <p className={`text-2xl font-bold tabular-nums ${
+                      displayProduct.quantity === 0 ? "text-red-600" :
+                      displayProduct.quantity <= displayProduct.reorder_level ? "text-amber-600" : "text-gray-900"
+                    }`}>
+                      {quantityParts.number}
+                    </p>
+                    {quantityParts.unit && (
+                      <span className="text-sm text-gray-500 font-medium">{quantityParts.unit}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Reorder Level</p>
+                  <p className="text-2xl font-bold text-gray-700 tabular-nums">{displayProduct.reorder_level}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-500 font-medium">Stock Status</p>
+                {statusBadge(displayProduct.quantity, displayProduct.reorder_level)}
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing Section (Retail Selling Price) */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-4 w-1 bg-blue-600 rounded-full" />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Pricing Information</h3>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              {displayProduct.pricing_type === "MARKET_BASED" ? (
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">Pricing Type</p>
+                  <span className="inline-block text-xs font-semibold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                    Market-Based Pricing
+                  </span>
+                  <p className="text-xs text-gray-500 mt-2">
+                    This product uses market-based pricing.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-1">Retail Selling Price</p>
+                    <p className="text-xl font-bold text-emerald-600 tabular-nums">
+                      ₱{Number(displayProduct.selling_price || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-1">Pricing Model</p>
+                    <span className="inline-block text-xs font-semibold text-slate-700 bg-white px-2.5 py-1 rounded border border-gray-200">
+                      Fixed Price
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between gap-3 pt-2 border-t border-gray-100">
-          <Button variant="outline" onClick={onClose} className="gap-2">
-            <X className="h-4 w-4" /> Close
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between shrink-0">
+          <Button variant="outline" onClick={onClose} className="border-gray-300">
+            Close
           </Button>
           <Button
-            onClick={() => { onClose(); onPrintBarcode(product); }}
-            className="gap-2 bg-blue-600 hover:bg-blue-700"
+            onClick={() => { onClose(); onPrintBarcode(displayProduct); }}
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
           >
             <Printer className="h-4 w-4" /> Print Barcode
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

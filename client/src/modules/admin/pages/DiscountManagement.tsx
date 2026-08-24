@@ -10,6 +10,7 @@ import httpClient from "@/shared/api/httpClient";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { loadToken } from "@/shared/utils/auth";
 import axios from "axios";
+import { toast } from "sonner";
 import { AlertCircle, Check, Clock, Edit, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -227,9 +228,13 @@ export default function DiscountManagement() {
       await httpClient.delete(`/api/discounts/${selectedDiscount.id}`);
       setIsDeleteDialogOpen(false);
       setSelectedDiscount(null);
+      toast.success("Discount deleted successfully");
       loadDiscounts();
     } catch (err) {
-      setDiscountsError(axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to delete discount" : "An error occurred");
+      const msg = axios.isAxiosError(err) ? err.response?.data?.message ?? "Failed to delete discount" : "An error occurred";
+      setDiscountsError(msg);
+      toast.error(msg);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -393,7 +398,7 @@ export default function DiscountManagement() {
                           {discount.requires_admin_approval ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Required</span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Auto</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Not Required</span>
                           )}
                         </td>
                         <td className="py-3.5 px-5 text-center">

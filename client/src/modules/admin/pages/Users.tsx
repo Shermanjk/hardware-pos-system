@@ -11,7 +11,8 @@ import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import axios from "axios";
 import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, Search, ShieldOff, Sparkles, UserCog, UserPlus, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const DRAFT_KEY_CREATE_USER = "admin-user-create";
 
@@ -58,15 +59,15 @@ function formatLastLogin(record: UserRecord): string {
     if (!isNaN(d.getTime())) return d.toLocaleDateString();
   }
   if (record.must_change_password) return "Never logged in";
-  return "—";
+  return "Active";
 }
 
 function extractErrors(err: unknown): Record<string, string> {
   if (axios.isAxiosError(err)) {
     const body = err.response?.data;
-    if (body?.errors && Array.isArray(body.errors)) {
+    if (Array.isArray(body?.errors)) {
       const map: Record<string, string> = {};
-      for (const e of body.errors as { field: string; message: string }[]) {
+      for (const e of body.errors) {
         map[e.field] = e.message;
       }
       return map;
@@ -76,8 +77,41 @@ function extractErrors(err: unknown): Record<string, string> {
   return { general: "An unexpected error occurred. Please try again." };
 }
 
-async function copyToClipboard(text: string) {
-  try { await navigator.clipboard.writeText(text); } catch { /* silent */ }
+async function copyToClipboard(text: string): Promise<boolean> {
+  // 1. Modern clipboard API (HTTPS or localhost)
+  if (navigator?.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Password copied to clipboard!");
+      return true;
+    } catch {
+      // Fall through to fallback
+    }
+  }
+
+  // 2. Universal fallback for plain HTTP / LAN connections (e.g. http://noob:3001)
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
+    textArea.setAttribute("readonly", "");
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const success = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    if (success) {
+      toast.success("Password copied to clipboard!");
+      return true;
+    }
+  } catch {
+    // silent
+  }
+
+  toast.info("Please select and copy the password manually.");
+  return false;
 }
 
 function printCredentials(username: string, password: string) {
@@ -103,11 +137,18 @@ interface TempPasswordDisplayProps {
 function TempPasswordDisplay({ password, username, onDone }: TempPasswordDisplayProps) {
   const [copied, setCopied] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleCopy = async () => {
-    await copyToClipboard(password);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyToClipboard(password);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleSelect = () => {
+    inputRef.current?.select();
   };
 
   return (
@@ -124,10 +165,14 @@ function TempPasswordDisplay({ password, username, onDone }: TempPasswordDisplay
         <Label className="text-sm font-semibold text-gray-900 mb-1.5 block">Temporary Password</Label>
         <div className="relative">
           <Input
+            ref={inputRef}
             readOnly
             type={showPwd ? "text" : "password"}
             value={password}
-            className="pr-10 text-lg font-mono bg-gray-50 select-all tracking-widest"
+            onClick={handleSelect}
+            onFocus={handleSelect}
+            className="pr-10 text-lg font-mono bg-gray-50 select-all tracking-widest cursor-pointer"
+            title="Click to select all"
           />
           <button
             type="button"
@@ -164,13 +209,12 @@ interface CreateUserModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: (user: UserRecord) => void;
-  existingUsers: UserRecord[];
+  existingUsers?: UserRecord[];
 }
 
-function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUserModalProps) {
+function CreateUserModal({ open, onClose, onCreated }: CreateUserModalProps) {
   const [fullName,    setFullName]    = useState("");
   const [username,    setUsername]    = useState("");
-  const [employeeId,  setEmployeeId]  = useState("");
   const [role,        setRole]        = useState<"Cashier" | "Inventory Clerk">("Cashier");
   const [status,      setStatus]      = useState<"Active" | "Inactive">("Active");
   const [isLoading,   setIsLoading]   = useState(false);
@@ -179,7 +223,7 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
   const [createdUsername, setCreatedUsername] = useState("");
 
   // ── Draft recovery ────────────────────────────────────────────────────────
-  interface UserCreateDraft { fullName: string; username: string; employeeId: string; role: string; status: string; savedAt: string; }
+  interface UserCreateDraft { fullName: string; username: string; role: string; status: string; savedAt: string; }
   const userDraft = useDraftRecovery<UserCreateDraft>(DRAFT_KEY_CREATE_USER);
   const [recoverableDraft, setRecoverableDraft] = useState<UserCreateDraft | null>(null);
 
@@ -189,7 +233,6 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
     if (draft?.fullName || draft?.username) {
       setFullName(draft.fullName || "");
       setUsername(draft.username || "");
-      setEmployeeId(draft.employeeId || "");
       setRole((draft.role as any) || "Cashier");
       setStatus((draft.status as any) || "Active");
       setRecoverableDraft(draft);
@@ -202,13 +245,13 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
   useEffect(() => {
     if (!open) return;
     if (fullName || username) {
-      userDraft.saveDraft({ fullName, username, employeeId, role, status, savedAt: new Date().toISOString() });
+      userDraft.saveDraft({ fullName, username, role, status, savedAt: new Date().toISOString() });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fullName, username, employeeId, role, status]);
+  }, [open, fullName, username, role, status]);
 
   const reset = () => {
-    setFullName(""); setUsername(""); setEmployeeId("");
+    setFullName(""); setUsername("");
     setRole("Cashier"); setStatus("Active");
     setErrors({}); setTempPassword(null); setCreatedUsername("");
     userDraft.discardDraft();
@@ -216,18 +259,14 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
 
   const handleClose = () => { reset(); onClose(); };
 
-  const handleAutoGenerateEmpId = () => {
-    const nextId = generateNextEmployeeId(existingUsers);
-    setEmployeeId(nextId);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
     const payload: CreateUserPayload = {
-      full_name: fullName.trim(), username: username.trim(),
-      role, status,
-      ...(employeeId.trim() ? { employee_id: employeeId.trim() } : {}),
+      full_name: fullName.trim(),
+      username: username.trim(),
+      role,
+      status,
     };
     setIsLoading(true);
     try {
@@ -257,7 +296,7 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
         onRestore={() => setRecoverableDraft(null)}
         onDiscard={() => {
           userDraft.discardDraft();
-          setFullName(""); setUsername(""); setEmployeeId("");
+          setFullName(""); setUsername("");
           setRole("Cashier"); setStatus("Active");
           setRecoverableDraft(null);
         }}
@@ -316,38 +355,6 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
                 {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <Label htmlFor="cu-empid" className="font-semibold">
-                    Employee ID <span className="text-gray-400 font-normal">(optional)</span>
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={handleAutoGenerateEmpId}
-                    disabled={isLoading}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 hover:underline focus:outline-none transition-colors"
-                  >
-                    <Sparkles className="h-3 w-3" /> Auto-generate
-                  </button>
-                </div>
-                <div className="relative">
-                  <Input id="cu-empid" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
-                    placeholder="e.g. EMP-001" disabled={isLoading}
-                    className={errors.employee_id ? "border-red-400 pr-8" : "pr-8"} />
-                  {employeeId && !isLoading && (
-                    <button
-                      type="button"
-                      onClick={() => setEmployeeId("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      title="Clear Employee ID"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                {errors.employee_id && <p className="mt-1 text-xs text-red-600">{errors.employee_id}</p>}
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="mb-1.5 block font-semibold">Role <span className="text-red-500">*</span></Label>
@@ -374,7 +381,7 @@ function CreateUserModal({ open, onClose, onCreated, existingUsers }: CreateUser
 
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-xs text-blue-700">
-                  A secure temporary password will be generated automatically. The employee must change it on first login.
+                  Employee ID (e.g. <strong>EMP-001</strong>) and a secure temporary password will be generated automatically.
                 </p>
               </div>
             </div>
@@ -400,12 +407,11 @@ interface EditUserModalProps {
   user: UserRecord | null;
   onClose: () => void;
   onUpdated: (user: UserRecord) => void;
-  existingUsers: UserRecord[];
+  existingUsers?: UserRecord[];
 }
 
-function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModalProps) {
+function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
   const [fullName,  setFullName]  = useState(user?.full_name  ?? "");
-  const [employeeId,setEmployeeId]= useState(user?.employee_id ?? "");
   const [role,      setRole]      = useState<"Cashier" | "Inventory Clerk">(
     (user?.role === "Cashier" || user?.role === "Inventory Clerk") ? user.role : "Cashier"
   );
@@ -416,18 +422,11 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
   useEffect(() => {
     if (user) {
       setFullName(user.full_name);
-      setEmployeeId(user.employee_id ?? "");
       setRole((user.role === "Cashier" || user.role === "Inventory Clerk") ? user.role : "Cashier");
       setStatus(user.status);
       setErrors({});
     }
   }, [user]);
-
-  const handleAutoGenerateEmpId = () => {
-    const otherUsers = existingUsers.filter((u) => u.id !== user?.id);
-    const nextId = generateNextEmployeeId(otherUsers);
-    setEmployeeId(nextId);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -435,8 +434,8 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
     setErrors({});
     const payload: UpdateUserPayload = {
       full_name: fullName.trim() || undefined,
-      role, status,
-      employee_id: employeeId.trim() ? employeeId.trim() : null,
+      role,
+      status,
     };
     setIsLoading(true);
     try {
@@ -454,14 +453,16 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
     <Dialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Edit User</DialogTitle>
-        {/* Gray header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-gray-500 rounded-t-lg">
+        {/* Dark header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <UserCog className="h-5 w-5 text-white" />
           </div>
           <div>
             <h2 className="text-base font-bold text-white">Edit User</h2>
-            <p className="text-xs text-gray-300 mt-0.5">Update account details</p>
+            <p className="text-xs text-slate-200 mt-0.5">
+              @{user?.username} {user?.employee_id ? `· ${user.employee_id}` : ""}
+            </p>
           </div>
         </div>
 
@@ -474,45 +475,15 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
               </div>
             )}
             <div>
-              <Label className="mb-1.5 block font-semibold">Full Name</Label>
+              <Label className="mb-1.5 block font-semibold">Full Name <span className="text-red-500">*</span></Label>
               <Input value={fullName} onChange={(e) => setFullName(e.target.value)}
                 disabled={isLoading} className={errors.full_name ? "border-red-400" : ""} />
               {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name}</p>}
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="font-semibold">
-                  Employee ID <span className="text-gray-400 font-normal">(optional)</span>
-                </Label>
-                <button
-                  type="button"
-                  onClick={handleAutoGenerateEmpId}
-                  disabled={isLoading}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 hover:underline focus:outline-none transition-colors"
-                >
-                  <Sparkles className="h-3 w-3" /> Auto-generate
-                </button>
-              </div>
-              <div className="relative">
-                <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
-                  placeholder="e.g. EMP-001" disabled={isLoading}
-                  className={errors.employee_id ? "border-red-400 pr-8" : "pr-8"} />
-                {employeeId && !isLoading && (
-                  <button
-                    type="button"
-                    onClick={() => setEmployeeId("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    title="Clear Employee ID"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-              {errors.employee_id && <p className="mt-1 text-xs text-red-600">{errors.employee_id}</p>}
-            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-1.5 block font-semibold">Role</Label>
+                <Label className="mb-1.5 block font-semibold">Role <span className="text-red-500">*</span></Label>
                 <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -522,7 +493,7 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
                 </Select>
               </div>
               <div>
-                <Label className="mb-1.5 block font-semibold">Status</Label>
+                <Label className="mb-1.5 block font-semibold">Status <span className="text-red-500">*</span></Label>
                 <Select value={status} onValueChange={(v) => setStatus(v as typeof status)} disabled={isLoading}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -536,8 +507,8 @@ function EditUserModal({ user, onClose, onUpdated, existingUsers }: EditUserModa
 
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
-            <Button type="submit" disabled={isLoading} className="bg-gray-800 hover:bg-gray-900">
-              {isLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2 inline-block" />}
+            <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
               {isLoading ? "Saving…" : "Save Changes"}
             </Button>
           </div>

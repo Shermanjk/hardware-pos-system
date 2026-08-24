@@ -870,7 +870,7 @@ router.post(
       await conn.beginTransaction();
 
       const [rows] = await conn.execute<any[]>(
-        `SELECT id, invoice_number, void_status, customer_name, total_amount FROM sales WHERE id = ? FOR UPDATE`,
+        `SELECT id, invoice_number, void_status, customer_name, total_amount, created_at FROM sales WHERE id = ? FOR UPDATE`,
         [saleId]
       );
       const sale = rows[0];
@@ -883,6 +883,23 @@ router.post(
         await conn.rollback();
         res.status(422).json({ message: "This sale already has a void request or has been voided." });
         return;
+      }
+
+      // Check if this sale belongs to a closed Z-Reading window (BIR Compliance Guard)
+      const [lastZRows] = await conn.execute<any[]>(
+        `SELECT closed_at FROM z_readings ORDER BY id DESC LIMIT 1`
+      );
+      if (lastZRows.length > 0 && lastZRows[0].closed_at) {
+        const lastZClosedAt = new Date(lastZRows[0].closed_at);
+        const saleCreatedAt = new Date(sale.created_at);
+        if (saleCreatedAt <= lastZClosedAt) {
+          await conn.rollback();
+          res.status(422).json({
+            message: "This transaction belongs to a closed Z-Reading period and cannot be voided. In accordance with BIR regulations, please process a Return / Refund instead.",
+            code: "TRANSACTION_LOCKED_POST_Z_READING",
+          });
+          return;
+        }
       }
 
       // Check for active or completed returns on this sale
@@ -960,7 +977,7 @@ router.patch(
       await conn.beginTransaction();
 
       const [rows] = await conn.execute<any[]>(
-        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number
+        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number, s.created_at
          FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
          WHERE sv.id = ? FOR UPDATE`,
         [voidId]
@@ -975,6 +992,23 @@ router.patch(
         await conn.rollback();
         res.status(422).json({ message: "Only pending void requests can be approved." });
         return;
+      }
+
+      // Check if this sale belongs to a closed Z-Reading window (BIR Compliance Guard)
+      const [lastZRowsApprove] = await conn.execute<any[]>(
+        `SELECT closed_at FROM z_readings ORDER BY id DESC LIMIT 1`
+      );
+      if (lastZRowsApprove.length > 0 && lastZRowsApprove[0].closed_at) {
+        const lastZClosedAt = new Date(lastZRowsApprove[0].closed_at);
+        const saleCreatedAt = new Date(voidRow.created_at);
+        if (saleCreatedAt <= lastZClosedAt) {
+          await conn.rollback();
+          res.status(422).json({
+            message: "This transaction belongs to a closed Z-Reading period and cannot be voided. In accordance with BIR regulations, please process a Return / Refund instead.",
+            code: "TRANSACTION_LOCKED_POST_Z_READING",
+          });
+          return;
+        }
       }
 
       // ── Restore inventory for each sold item (deducting any already returned items) ───
@@ -1256,7 +1290,7 @@ router.post(
 
       // ── 2. Load and lock the void request ─────────────────────────────────
       const [rows] = await conn.execute<any[]>(
-        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number
+        `SELECT sv.id, sv.sale_id, sv.status, sv.reason, s.invoice_number, s.created_at
          FROM sale_voids sv JOIN sales s ON s.id = sv.sale_id
          WHERE sv.id = ? FOR UPDATE`,
         [voidId]
@@ -1275,6 +1309,23 @@ router.post(
             : "This void request can no longer be approved.",
         });
         return;
+      }
+
+      // Check if this sale belongs to a closed Z-Reading window (BIR Compliance Guard)
+      const [lastZRowsOverride] = await conn.execute<any[]>(
+        `SELECT closed_at FROM z_readings ORDER BY id DESC LIMIT 1`
+      );
+      if (lastZRowsOverride.length > 0 && lastZRowsOverride[0].closed_at) {
+        const lastZClosedAt = new Date(lastZRowsOverride[0].closed_at);
+        const saleCreatedAt = new Date(voidRow.created_at);
+        if (saleCreatedAt <= lastZClosedAt) {
+          await conn.rollback();
+          res.status(422).json({
+            message: "This transaction belongs to a closed Z-Reading period and cannot be voided. In accordance with BIR regulations, please process a Return / Refund instead.",
+            code: "TRANSACTION_LOCKED_POST_Z_READING",
+          });
+          return;
+        }
       }
 
       // ── 3. Restore inventory — identical to void-approve ──────────────────
@@ -1386,8 +1437,15 @@ router.get(
       const params: (string | number)[] = [];
 
       if (invoice_number) {
-        conditions.push("s.invoice_number LIKE ?");
-        params.push(`%${invoice_number}%`);
+        const rawSearch = invoice_number.trim();
+        const stripped = rawSearch.replace(/^INV-?/i, "").trim();
+        const padded = /^\d+$/.test(stripped) ? stripped.padStart(6, "0") : stripped;
+        const invPrefixed = `INV-${padded}`;
+
+        const searchTerms = Array.from(new Set([rawSearch, stripped, padded, invPrefixed])).filter(Boolean);
+        const likeClauses = searchTerms.map(() => "s.invoice_number LIKE ?").join(" OR ");
+        conditions.push(`(${likeClauses})`);
+        searchTerms.forEach((term) => params.push(`%${term}%`));
       }
       if (customer_name) {
         conditions.push("s.customer_name LIKE ?");
@@ -1589,6 +1647,13 @@ router.get(
     const { invoiceNumber } = req.params;
 
     try {
+      const rawParam = invoiceNumber.trim();
+      const strippedParam = rawParam.replace(/^INV-?/i, "").trim();
+      const paddedParam = /^\d+$/.test(strippedParam) ? strippedParam.padStart(6, "0") : strippedParam;
+      const invPrefixed = `INV-${paddedParam}`;
+      const lookupKeys = Array.from(new Set([rawParam, strippedParam, paddedParam, invPrefixed])).filter(Boolean);
+      const placeholders = lookupKeys.map(() => "?").join(", ");
+
       const [saleRows] = await pool.execute<any[]>(
         `SELECT s.id, s.invoice_number, s.customer_name, s.customer_address,
                 s.customer_tin, s.cashier_id, u.full_name AS cashier_name,
@@ -1619,9 +1684,9 @@ router.get(
          LEFT JOIN discount_requests dr ON dr.sale_id = s.id
          LEFT JOIN discounts dr_d ON dr_d.id = dr.discount_id
          LEFT JOIN users app_u ON app_u.id = dr.approved_by
-         WHERE s.invoice_number = ?
+         WHERE s.invoice_number IN (${placeholders})
          LIMIT 1`,
-        [invoiceNumber]
+        lookupKeys
       );
 
       const sale = saleRows[0];

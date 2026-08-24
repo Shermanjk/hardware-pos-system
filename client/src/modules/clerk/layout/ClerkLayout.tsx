@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import ClerkSidebar from "./ClerkSidebar";
 import ClerkTopNav from "./ClerkTopNav";
 import PageTransition from "@/shared/components/PageTransition";
+import BackToTop from "@/shared/components/BackToTop";
 import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
 import { ServerStatusBanner } from "@/shared/components/ServerStatusBanner";
 
@@ -23,6 +24,7 @@ function ProtectedClerkRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function ClerkLayout({ children }: ClerkLayoutProps) {
+  const mainRef = useRef<HTMLElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
@@ -35,12 +37,13 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <ServerStatusBanner />
           <ClerkTopNav onMenuClick={() => setSidebarOpen((v) => !v)} />
-          <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <main ref={mainRef} className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
             <PageTransition>
               {children}
             </PageTransition>
           </main>
         </div>
+        <BackToTop containerRef={mainRef} threshold={200} />
       </div>
     </ProtectedClerkRoute>
   );

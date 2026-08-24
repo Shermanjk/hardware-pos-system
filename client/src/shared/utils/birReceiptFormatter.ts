@@ -54,6 +54,11 @@ export function pad4(num: number | string | null | undefined): string {
   return String(num || 0).padStart(4, "0");
 }
 
+export function cleanInvoiceNumber(inv?: string | null): string {
+  if (!inv) return "";
+  return String(inv).replace(/^INV-?/i, "").trim();
+}
+
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
 export interface SalesInvoiceItem {
@@ -188,6 +193,7 @@ export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string
   const min = settings.pos_min || "N/A";
   const serial = settings.pos_serial || "N/A";
   const ptu = settings.ptu_or_accn_no || "";
+  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
 
   lines.push(doubleDivider());
   lines.push(centerLine(storeName));
@@ -201,6 +207,9 @@ export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string
   lines.push(centerLine(`MIN: ${min} | S/N: ${serial}`));
   if (ptu) {
     lines.push(centerLine(`PTU / ACCN: ${ptu}`));
+    if (settings.ptu_date_issued) {
+      lines.push(centerLine(`Date Issued: ${settings.ptu_date_issued}`));
+    }
   }
   if (settings.contact_number) {
     lines.push(centerLine(`Tel: ${settings.contact_number}`));
@@ -227,7 +236,7 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   lines.push(...buildStoreHeaderLines(settings, settings.document_type || "SALES INVOICE"));
 
   // Invoice & Customer Metadata
-  lines.push(padLine("Invoice No:", params.invoiceNumber));
+  lines.push(padLine("SI No:", cleanInvoiceNumber(params.invoiceNumber)));
   lines.push(padLine("Date & Time:", `${dateStr} ${timeStr}`));
   lines.push(padLine("Cashier:", params.cashierName));
   if (params.terminalId) {
@@ -315,8 +324,12 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   }
 
   // Accreditation Footer & Disclaimer
-  lines.push(centerLine("POS Software: Antigravity POS v2.0"));
-  lines.push(centerLine("Accreditation No: 000-000000000-000000"));
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  lines.push(centerLine("POS Software: ISRA POS System v1.0"));
+  lines.push(centerLine(`Accreditation No: ${accNo}`));
+  if (settings.accreditation_date_issued) {
+    lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+  }
   lines.push(doubleDivider());
 
   if (isTestMode || !settings.pos_min) {
@@ -355,8 +368,8 @@ export function formatXReadingText(params: XReadingParams): string {
   lines.push(padLine("Cashier:", params.cashierName));
   lines.push(padLine("Shift Opened:", openDate));
   lines.push(padLine("Shift Closed:", closeDate));
-  lines.push(padLine("Beginning Invoice:", params.begInvoiceNo || "None"));
-  lines.push(padLine("Ending Invoice:", params.endInvoiceNo || "None"));
+  lines.push(padLine("Beginning Invoice:", cleanInvoiceNumber(params.begInvoiceNo) || "None"));
+  lines.push(padLine("Ending Invoice:", cleanInvoiceNumber(params.endInvoiceNo) || "None"));
   lines.push(padLine("Transactions:", String(params.transactionCount)));
   lines.push(divider());
 
@@ -429,8 +442,8 @@ export function formatZReadingText(params: ZReadingParams): string {
   lines.push(divider());
 
   lines.push(centerLine("AUDIT SEQUENCES"));
-  lines.push(padLine("Beginning Invoice No:", params.begInvoiceNo || "None"));
-  lines.push(padLine("Ending Invoice No:", params.endInvoiceNo || "None"));
+  lines.push(padLine("Beginning Invoice No:", cleanInvoiceNumber(params.begInvoiceNo) || "None"));
+  lines.push(padLine("Ending Invoice No:", cleanInvoiceNumber(params.endInvoiceNo) || "None"));
   lines.push(padLine("Beginning Void No:", params.begVoidNo || "None"));
   lines.push(padLine("Ending Void No:", params.endVoidNo || "None"));
   lines.push(padLine("Beginning Return No:", params.begReturnNo || "None"));
@@ -478,8 +491,12 @@ export function formatZReadingText(params: ZReadingParams): string {
   lines.push(padLine("NEW GRAND TOTAL:", `P ${fmtPeso(params.newGrandTotal)}`));
   lines.push(doubleDivider());
 
-  lines.push(centerLine("POS Software: Antigravity POS v2.0"));
-  lines.push(centerLine("Accreditation No: 000-000000000-000000"));
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  lines.push(centerLine("POS Software: ISRA POS System v1.0"));
+  lines.push(centerLine(`Accreditation No: ${accNo}`));
+  if (settings.accreditation_date_issued) {
+    lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+  }
   lines.push(doubleDivider());
   return lines.join("\n");
 }

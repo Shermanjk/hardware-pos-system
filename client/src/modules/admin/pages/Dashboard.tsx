@@ -35,6 +35,7 @@ interface DashboardData {
     customers_with_balance?: number;
   };
   weekly_sales:    { sale_date: string; transactions: number; revenue: number }[];
+  daily_sales_30d?:{ sale_date: string; transactions: number; revenue: number }[];
   monthly_sales:   { month: string; revenue: number }[];
   top_products:    { name: string; units_sold: number; revenue: number }[];
   recent_sales:    { invoice_number: string; customer_name: string; total_amount: number; cashier_name: string; created_at: string }[];
@@ -83,7 +84,7 @@ function ChartCustomTooltip({ active, payload, label }: any) {
     return (
       <div className="bg-slate-900/95 text-white px-3.5 py-2.5 rounded-xl shadow-xl border border-slate-700/80 backdrop-blur-md text-xs">
         <p className="text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
-          {label || item.day || item.month}
+          {item.fullLabel || label || item.day || item.month}
         </p>
         <p className="text-base font-black text-blue-400 font-mono tracking-tight">
           {fmt(Number(value))}
@@ -279,17 +280,66 @@ export default function Dashboard() {
     });
   })();
 
+  const [revenueTimeframe, setRevenueTimeframe] = useState<"7D" | "30D" | "6M">("30D");
+
   const weeklyTotalRevenue = weeklyChart.reduce((acc, curr) => acc + curr.revenue, 0);
   const weeklyTotalTx = weeklyChart.reduce((acc, curr) => acc + curr.transactions, 0);
   const weeklyAvgDaily = weeklyTotalRevenue / (weeklyChart.length || 1);
   const maxWeeklyDay = weeklyChart.reduce((max, curr) => (curr.revenue > max.revenue ? curr : max), weeklyChart[0] || { revenue: 0, day: "-" });
 
-  const monthlyChart = (data?.monthly_sales ?? []).map((r) => ({
-    month: r.month.slice(5) + "/" + r.month.slice(2, 4),
-    revenue: Number(r.revenue),
-  }));
+  // Dynamic Trading Chart Data across Timeframes
+  const revenueChartData = (() => {
+    if (revenueTimeframe === "7D") {
+      return weeklyChart.map((d) => ({
+        label: d.day,
+        fullLabel: d.day,
+        revenue: d.revenue,
+        transactions: d.transactions,
+      }));
+    }
 
-  const monthlyTotal = monthlyChart.reduce((acc, curr) => acc + curr.revenue, 0);
+    if (revenueTimeframe === "30D") {
+      const source = data?.daily_sales_30d ?? [];
+      if (source.length === 0) {
+        // Fallback to weeklyChart if 30d not loaded yet
+        return weeklyChart.map((d) => ({
+          label: d.day,
+          fullLabel: d.day,
+          revenue: d.revenue,
+          transactions: d.transactions,
+        }));
+      }
+      return source.map((r) => {
+        const d = new Date(r.sale_date + "T00:00:00");
+        const label = d.toLocaleDateString("en-PH", { month: "numeric", day: "numeric" });
+        const fullLabel = d.toLocaleDateString("en-PH", { month: "short", day: "numeric", weekday: "short" });
+        return {
+          label,
+          fullLabel,
+          revenue: Number(r.revenue),
+          transactions: Number(r.transactions),
+        };
+      });
+    }
+
+    // 6M (Continuous 6 months)
+    return (data?.monthly_sales ?? []).map((r) => {
+      const parts = r.month.split("-");
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+      const label = d.toLocaleDateString("en-PH", { month: "short" });
+      const fullLabel = d.toLocaleDateString("en-PH", { month: "long", year: "numeric" });
+      return {
+        label,
+        fullLabel,
+        revenue: Number(r.revenue),
+        transactions: undefined,
+      };
+    });
+  })();
+
+  const activeRevenueTotal = revenueChartData.reduce((acc, curr) => acc + curr.revenue, 0);
+  const activeMaxPoint = revenueChartData.reduce((max, curr) => (curr.revenue > max.revenue ? curr : max), revenueChartData[0] || { revenue: 0, label: "-" });
+  const activeAvgRevenue = activeRevenueTotal / (revenueChartData.length || 1);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -761,66 +811,113 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom Row: 6-Month Area Chart + Recent Sales */}
+      {/* Bottom Row: Trading-Style Revenue Trajectory + Recent Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Monthly Trend Area Chart */}
+        {/* Revenue Trajectory Trading Chart */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 mb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shadow-2xs">
                 <TrendingUp className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 tracking-tight">Revenue Trend</h2>
-                <p className="text-xs text-slate-500">6-Month financial trajectory</p>
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">Revenue Trajectory</h2>
+                <p className="text-xs text-slate-500">
+                  {revenueTimeframe === "7D" ? "7-Day high-frequency daily trend" : revenueTimeframe === "30D" ? "30-Day continuous financial wave" : "6-Month multi-period macro trajectory"}
+                </p>
               </div>
             </div>
-            <div className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700">
-              Total: {fmt(monthlyTotal)}
+
+            {/* Trading Controls & Quick Badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Timeframe selector */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs font-semibold">
+                {(["7D", "30D", "6M"] as const).map((tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setRevenueTimeframe(tf)}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                      revenueTimeframe === tf
+                        ? "bg-white text-blue-700 font-bold shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+
+              <div className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700">
+                Total: {fmt(activeRevenueTotal)}
+              </div>
+            </div>
+          </div>
+
+          {/* Mini Financial Stats Strip */}
+          <div className="grid grid-cols-3 gap-2 mb-3 px-3 py-2 bg-slate-50/70 border border-slate-100 rounded-xl text-xs">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium block">Peak Session</span>
+              <span className="font-bold text-slate-800 font-mono">{fmtShort(activeMaxPoint.revenue)}</span>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium block">Period Average</span>
+              <span className="font-bold text-slate-800 font-mono">{fmtShort(activeAvgRevenue)}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] text-slate-400 font-medium block">Trajectory</span>
+              <span className="font-bold text-emerald-600 inline-flex items-center gap-0.5">
+                <TrendingUp className="h-3 w-3" /> Active
+              </span>
             </div>
           </div>
 
           {loading ? (
             <Skeleton className="h-48 w-full" />
-          ) : monthlyChart.length === 0 ? (
+          ) : revenueChartData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-sm text-slate-400">
               No historical data available
             </div>
           ) : (
-            <div className="w-full h-52 pt-2">
+            <div className="w-full h-52 pt-1">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyChart} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <AreaChart data={revenueChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="revenueAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                    <linearGradient id="tradeAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2563eb" stopOpacity={0.35} />
+                      <stop offset="50%" stopColor="#3b82f6" stopOpacity={0.12} />
+                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis
-                    dataKey="month"
+                    dataKey="label"
                     stroke="#cbd5e1"
-                    tick={{ fill: "#64748b", fontSize: 11, fontWeight: 500 }}
+                    tick={{ fill: "#64748b", fontSize: 10, fontWeight: 600 }}
                     axisLine={{ stroke: "#e2e8f0" }}
                     tickLine={false}
+                    interval={revenueTimeframe === "30D" ? 4 : 0}
                   />
                   <YAxis
                     stroke="#cbd5e1"
-                    tick={{ fill: "#64748b", fontSize: 11, fontWeight: 500 }}
+                    tick={{ fill: "#64748b", fontSize: 10, fontWeight: 500 }}
                     axisLine={{ stroke: "#e2e8f0" }}
                     tickLine={false}
                     tickFormatter={(v) => fmtShort(v)}
                   />
-                  <Tooltip content={<ChartCustomTooltip />} />
+                  <Tooltip
+                    content={<ChartCustomTooltip />}
+                    cursor={{ stroke: "#94a3b8", strokeWidth: 1, strokeDasharray: "3 3" }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="revenue"
                     stroke="#2563eb"
-                    strokeWidth={3}
+                    strokeWidth={2.5}
                     fillOpacity={1}
-                    fill="url(#revenueAreaGradient)"
-                    dot={{ fill: "#2563eb", stroke: "#ffffff", strokeWidth: 2, r: 4 }}
-                    activeDot={{ fill: "#1d4ed8", stroke: "#ffffff", strokeWidth: 3, r: 6 }}
+                    fill="url(#tradeAreaGradient)"
+                    dot={revenueTimeframe === "6M" ? { fill: "#2563eb", stroke: "#ffffff", strokeWidth: 2, r: 3 } : false}
+                    activeDot={{ fill: "#1d4ed8", stroke: "#ffffff", strokeWidth: 3, r: 5 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -862,7 +959,7 @@ export default function Dashboard() {
                         {sale.customer_name || "Walk-in Customer"}
                       </p>
                       <p className="text-xs text-slate-400 font-mono mt-0.5">
-                        {sale.invoice_number} · <span className="text-slate-600">{sale.cashier_name}</span> · {fmtTime(sale.created_at)}
+                        {sale.invoice_number ? sale.invoice_number.replace(/^INV-?/i, "") : ""} · <span className="text-slate-600">{sale.cashier_name}</span> · {fmtTime(sale.created_at)}
                       </p>
                     </div>
                   </div>

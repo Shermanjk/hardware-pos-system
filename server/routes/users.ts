@@ -58,6 +58,39 @@ function validatePasswordComplexity(password: string): string[] {
   return errors;
 }
 
+// ─── Auto-generate next Employee ID ──────────────────────────────────────────
+async function generateNextEmployeeId(): Promise<string> {
+  const [rows] = await pool.execute<any[]>(
+    "SELECT employee_id FROM users WHERE employee_id IS NOT NULL"
+  );
+  const existingIds = new Set(
+    rows
+      .map((u) => u.employee_id?.trim().toUpperCase())
+      .filter((id): id is string => Boolean(id))
+  );
+
+  let maxSeq = 0;
+  for (const id of Array.from(existingIds)) {
+    const match = id.match(/^(?:EMP-?|E-?)?(\d+)$/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+
+  let nextSeq = maxSeq + 1;
+  let candidate = `EMP-${String(nextSeq).padStart(3, "0")}`;
+
+  while (existingIds.has(candidate)) {
+    nextSeq++;
+    candidate = `EMP-${String(nextSeq).padStart(3, "0")}`;
+  }
+
+  return candidate;
+}
+
 // ─── GET /api/users ───────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
@@ -88,9 +121,14 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   const { full_name, username, role, status } = parsed.data;
-  const cleanEmpId = parsed.data.employee_id?.trim() || null;
+  let cleanEmpId = parsed.data.employee_id?.trim() || null;
 
   try {
+    // If employee_id is not provided, automatically generate sequential EMP-001, EMP-002, etc.
+    if (!cleanEmpId) {
+      cleanEmpId = await generateNextEmployeeId();
+    }
+
     // Check for duplicate username
     const [existingUser] = await pool.execute<any[]>(
       "SELECT id FROM users WHERE username = ? LIMIT 1",

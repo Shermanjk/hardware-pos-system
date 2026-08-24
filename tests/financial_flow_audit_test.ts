@@ -30,35 +30,30 @@ async function runRegressionTestSuite() {
   }
 
   try {
+    await conn.beginTransaction();
     const [userRows] = await conn.execute<any[]>("SELECT id FROM users LIMIT 1");
     const validUserId = userRows[0]?.id || 1;
+    const ts = Math.floor((Date.now() % 500000000) + 100000000);
 
     // ─── TEST 1: SC/PWD 20% Discount Effective Return Price Calculation ────────
     console.log("--- Test Group 1: Discounted & SC/PWD Return Price Calculation ---");
     {
-      const saleId = 999901;
-      const productId = 999901;
-      const saleItemId = 999901;
-
-      // Clean up test data
-      await conn.execute(`DELETE FROM return_items WHERE sale_item_id = ?`, [saleItemId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sale_items WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM products WHERE id = ?`, [productId]);
+      const saleId = ts + 1;
+      const productId = ts + 1;
+      const saleItemId = ts + 1;
 
       // Insert product
       await conn.execute(
         `INSERT INTO products (id, barcode, product_name, selling_price, cost_price, quantity, is_returnable, status)
-         VALUES (?, 'BC-999901', 'Test SC/PWD Item', 1120.00, 800.00, 50, 1, 'Active')`,
-        [productId]
+         VALUES (?, ?, 'Test SC/PWD Item', 1120.00, 800.00, 50, 1, 'Active')`,
+        [productId, `BC-${productId}`]
       );
 
       // Insert SC/PWD sale
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, subtotal, discount, vat_amount, vat_exempt_amount, total_amount, sc_pwd_type, sc_pwd_id, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-TEST-001', ?, 1000.00, 200.00, 0.00, 1000.00, 800.00, 'SENIOR_CITIZEN', 'SC-12345', 'active', 'completed', 'Completed')`,
-        [saleId, validUserId]
+         VALUES (?, ?, ?, 1000.00, 200.00, 0.00, 1000.00, 800.00, 'SENIOR_CITIZEN', 'SC-12345', 'active', 'completed', 'Completed')`,
+        [saleId, `INV-TEST-${saleId}`, validUserId]
       );
 
       // Insert sale item
@@ -89,26 +84,20 @@ async function runRegressionTestSuite() {
     // ─── TEST 2: Regular % Promotional Discount Effective Return Price Calculation
     console.log("\n--- Test Group 2: Promotional Discount Return Calculation ---");
     {
-      const saleId = 999902;
-      const productId = 999902;
-      const saleItemId = 999902;
-
-      await conn.execute(`DELETE FROM return_items WHERE sale_item_id = ?`, [saleItemId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sale_items WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM products WHERE id = ?`, [productId]);
+      const saleId = ts + 2;
+      const productId = ts + 2;
+      const saleItemId = ts + 2;
 
       await conn.execute(
         `INSERT INTO products (id, barcode, product_name, selling_price, cost_price, quantity, is_returnable, status)
-         VALUES (?, 'BC-999902', 'Test Promo Item', 500.00, 300.00, 50, 1, 'Active')`,
-        [productId]
+         VALUES (?, ?, 'Test Promo Item', 500.00, 300.00, 50, 1, 'Active')`,
+        [productId, `BC-${productId}`]
       );
 
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, subtotal, discount, vat_amount, total_amount, sc_pwd_type, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-TEST-002', ?, 1000.00, 100.00, 0.00, 900.00, 'NONE', 'active', 'completed', 'Completed')`,
-        [saleId, validUserId]
+         VALUES (?, ?, ?, 1000.00, 100.00, 0.00, 900.00, 'NONE', 'active', 'completed', 'Completed')`,
+        [saleId, `INV-TEST-${saleId}`, validUserId]
       );
 
       await conn.execute(
@@ -138,43 +127,36 @@ async function runRegressionTestSuite() {
     // ─── TEST 3: Scenario 1 — Pure Credit Sale → Partial Return ─────────────────
     console.log("\n--- Test Group 3: Scenario 1 — Pure Credit Sale → Partial Return ---");
     {
-      const customerId = 999910;
-      const saleId = 999910;
-      const productId = 999910;
-
-      await conn.execute(`DELETE FROM credit_allocations WHERE sale_ledger_id IN (SELECT id FROM credit_ledger WHERE customer_id = ?)`, [customerId]);
-      await conn.execute(`DELETE FROM credit_ledger WHERE customer_id = ?`, [customerId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sale_items WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM customers WHERE id = ?`, [customerId]);
-      await conn.execute(`DELETE FROM products WHERE id = ?`, [productId]);
+      const customerId = ts + 10;
+      const saleId = ts + 10;
+      const productId = ts + 10;
+      const invNo = `INV-TEST-${saleId}`;
 
       // Create customer
       await conn.execute(
         `INSERT INTO customers (id, customer_code, full_name, credit_limit, current_balance, is_credit_enabled, created_by)
-         VALUES (?, 'CUST-TEST-1', 'Juan Dela Cruz', 10000.00, 0.00, 1, ?)`,
-        [customerId, validUserId]
+         VALUES (?, ?, 'Juan Dela Cruz', 10000.00, 0.00, 1, ?)`,
+        [customerId, `CUST-${customerId}`, validUserId]
       );
 
       // Create product (Cement @ 500)
       await conn.execute(
         `INSERT INTO products (id, barcode, product_name, selling_price, cost_price, quantity, is_returnable, status)
-         VALUES (?, 'BC-CEMENT-1', 'Cement Bag', 500.00, 350.00, 20, 1, 'Active')`,
-        [productId]
+         VALUES (?, ?, 'Cement Bag', 500.00, 350.00, 20, 1, 'Active')`,
+        [productId, `BC-${productId}`]
       );
 
       // Sale: 2 bags = 1000.00 on Credit, 0 down payment
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, customer_id, payment_type, subtotal, total_amount, amount_paid_at_sale, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-000050', ?, ?, 'CREDIT', 1000.00, 1000.00, 0.00, 'active', 'completed', 'Completed')`,
-        [saleId, validUserId, customerId]
+         VALUES (?, ?, ?, ?, 'CREDIT', 1000.00, 1000.00, 0.00, 'active', 'completed', 'Completed')`,
+        [saleId, invNo, validUserId, customerId]
       );
 
       const [saleLedgerResult] = await conn.execute<any>(
         `INSERT INTO credit_ledger (customer_id, sale_id, entry_type, amount, reference, recorded_by)
-         VALUES (?, ?, 'CREDIT_SALE', 1000.00, 'INV-000050', ?)`,
-        [customerId, saleId, validUserId]
+         VALUES (?, ?, 'CREDIT_SALE', 1000.00, ?, ?)`,
+        [customerId, saleId, invNo, validUserId]
       );
       const saleLedgerId = saleLedgerResult.insertId;
 
@@ -214,42 +196,36 @@ async function runRegressionTestSuite() {
     // ─── TEST 4: Scenario 2 — Credit Sale with Down Payment → Partial Return ───
     console.log("\n--- Test Group 4: Scenario 2 — Credit Sale with Down Payment → Partial Return ---");
     {
-      const customerId = 999920;
-      const saleId = 999920;
-      const productId = 999920;
-
-      await conn.execute(`DELETE FROM credit_allocations WHERE sale_ledger_id IN (SELECT id FROM credit_ledger WHERE customer_id = ?)`, [customerId]);
-      await conn.execute(`DELETE FROM credit_ledger WHERE customer_id = ?`, [customerId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM customers WHERE id = ?`, [customerId]);
-      await conn.execute(`DELETE FROM products WHERE id = ?`, [productId]);
+      const customerId = ts + 20;
+      const saleId = ts + 20;
+      const productId = ts + 20;
+      const invNo = `INV-TEST-${saleId}`;
 
       // Customer: Maria Santos
       await conn.execute(
         `INSERT INTO customers (id, customer_code, full_name, credit_limit, current_balance, is_credit_enabled, created_by)
-         VALUES (?, 'CUST-TEST-2', 'Maria Santos', 10000.00, 0.00, 1, ?)`,
-        [customerId, validUserId]
+         VALUES (?, ?, 'Maria Santos', 10000.00, 0.00, 1, ?)`,
+        [customerId, `CUST-${customerId}`, validUserId]
       );
 
       // Sale: 10 sheets Plywood @ 400 = 4000.00 with 1000.00 down payment
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, customer_id, payment_type, subtotal, total_amount, amount_paid_at_sale, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-000060', ?, ?, 'CREDIT', 4000.00, 4000.00, 1000.00, 'active', 'completed', 'Completed')`,
-        [saleId, validUserId, customerId]
+         VALUES (?, ?, ?, ?, 'CREDIT', 4000.00, 4000.00, 1000.00, 'active', 'completed', 'Completed')`,
+        [saleId, invNo, validUserId, customerId]
       );
 
       const [saleLedgerResult] = await conn.execute<any>(
         `INSERT INTO credit_ledger (customer_id, sale_id, entry_type, amount, reference, recorded_by)
-         VALUES (?, ?, 'CREDIT_SALE', 4000.00, 'INV-000060', ?)`,
-        [customerId, saleId, validUserId]
+         VALUES (?, ?, 'CREDIT_SALE', 4000.00, ?, ?)`,
+        [customerId, saleId, invNo, validUserId]
       );
       const saleLedgerId = saleLedgerResult.insertId;
 
       const [dpLedgerResult] = await conn.execute<any>(
         `INSERT INTO credit_ledger (customer_id, sale_id, entry_type, amount, reference, notes, recorded_by)
-         VALUES (?, ?, 'PAYMENT', -1000.00, 'INV-000060', 'Down payment at sale', ?)`,
-        [customerId, saleId, validUserId]
+         VALUES (?, ?, 'PAYMENT', -1000.00, ?, 'Down payment at sale', ?)`,
+        [customerId, saleId, invNo, validUserId]
       );
 
       await conn.execute(
@@ -297,33 +273,28 @@ async function runRegressionTestSuite() {
     // ─── TEST 5: Scenario 3 — Credit Sale with Previous Partial Payment → Partial Return
     console.log("\n--- Test Group 5: Scenario 3 — Credit with Partial Payment → Partial Return ---");
     {
-      const customerId = 999930;
-      const saleId = 999930;
-
-      await conn.execute(`DELETE FROM credit_allocations WHERE sale_ledger_id IN (SELECT id FROM credit_ledger WHERE customer_id = ?)`, [customerId]);
-      await conn.execute(`DELETE FROM credit_ledger WHERE customer_id = ?`, [customerId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM customers WHERE id = ?`, [customerId]);
+      const customerId = ts + 30;
+      const saleId = ts + 30;
+      const invNo = `INV-TEST-${saleId}`;
 
       // Customer: Roberto Gomez
       await conn.execute(
         `INSERT INTO customers (id, customer_code, full_name, credit_limit, current_balance, is_credit_enabled, created_by)
-         VALUES (?, 'CUST-TEST-3', 'Roberto Gomez', 20000.00, 0.00, 1, ?)`,
-        [customerId, validUserId]
+         VALUES (?, ?, 'Roberto Gomez', 20000.00, 0.00, 1, ?)`,
+        [customerId, `CUST-${customerId}`, validUserId]
       );
 
       // Sale: 1 Water Pump = 10,000.00 on Credit, 0 down payment
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, customer_id, payment_type, subtotal, total_amount, amount_paid_at_sale, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-000070', ?, ?, 'CREDIT', 10000.00, 10000.00, 0.00, 'active', 'completed', 'Completed')`,
-        [saleId, validUserId, customerId]
+         VALUES (?, ?, ?, ?, 'CREDIT', 10000.00, 10000.00, 0.00, 'active', 'completed', 'Completed')`,
+        [saleId, invNo, validUserId, customerId]
       );
 
       const [saleLedgerResult] = await conn.execute<any>(
         `INSERT INTO credit_ledger (customer_id, sale_id, entry_type, amount, reference, recorded_by)
-         VALUES (?, ?, 'CREDIT_SALE', 10000.00, 'INV-000070', ?)`,
-        [customerId, saleId, validUserId]
+         VALUES (?, ?, 'CREDIT_SALE', 10000.00, ?, ?)`,
+        [customerId, saleId, invNo, validUserId]
       );
       const saleLedgerId = saleLedgerResult.insertId;
 
@@ -379,27 +350,22 @@ async function runRegressionTestSuite() {
     // ─── TEST 6: Void Defense-in-Depth & Return Mutual Exclusion ───────────────
     console.log("\n--- Test Group 6: Void Defense-in-Depth & Return Mutual Exclusion ---");
     {
-      const saleId = 999940;
-      const productId = 999940;
-      const saleItemId = 999940;
-
-      await conn.execute(`DELETE FROM return_items WHERE sale_item_id = ?`, [saleItemId]);
-      await conn.execute(`DELETE FROM returns WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sale_items WHERE sale_id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM sales WHERE id = ?`, [saleId]);
-      await conn.execute(`DELETE FROM products WHERE id = ?`, [productId]);
+      const saleId = ts + 40;
+      const productId = ts + 40;
+      const saleItemId = ts + 40;
+      const invNo = `INV-TEST-${saleId}`;
 
       await conn.execute(
         `INSERT INTO products (id, barcode, product_name, selling_price, cost_price, quantity, is_returnable, status)
-         VALUES (?, 'BC-VOID-TEST', 'Test Void Item', 100.00, 70.00, 10, 1, 'Active')`,
-        [productId]
+         VALUES (?, ?, 'Test Void Item', 100.00, 70.00, 10, 1, 'Active')`,
+        [productId, `BC-${productId}`]
       );
 
       // Sold 5 units
       await conn.execute(
         `INSERT INTO sales (id, invoice_number, cashier_id, subtotal, total_amount, void_status, payment_status, transaction_status)
-         VALUES (?, 'INV-VOID-001', ?, 500.00, 500.00, 'active', 'completed', 'Completed')`,
-        [saleId, validUserId]
+         VALUES (?, ?, ?, 500.00, 500.00, 'active', 'completed', 'Completed')`,
+        [saleId, invNo, validUserId]
       );
 
       await conn.execute(
@@ -453,16 +419,6 @@ async function runRegressionTestSuite() {
       assert(totalRestored === 3, "Void Approval Defense-in-Depth: Restores remaining 3 units (5 sold - 2 returned = 3)");
     }
 
-    // ─── Cleanup test data ───────────────────────────────────────────────────
-    await conn.execute(`DELETE FROM return_items WHERE sale_item_id IN (999901, 999902, 999940)`);
-    await conn.execute(`DELETE FROM returns WHERE sale_id IN (999901, 999902, 999910, 999920, 999930, 999940)`);
-    await conn.execute(`DELETE FROM credit_allocations WHERE sale_ledger_id IN (SELECT id FROM credit_ledger WHERE customer_id IN (999910, 999920, 999930))`);
-    await conn.execute(`DELETE FROM credit_ledger WHERE customer_id IN (999910, 999920, 999930)`);
-    await conn.execute(`DELETE FROM sale_items WHERE sale_id IN (999901, 999902, 999910, 999920, 999930, 999940)`);
-    await conn.execute(`DELETE FROM sales WHERE id IN (999901, 999902, 999910, 999920, 999930, 999940)`);
-    await conn.execute(`DELETE FROM customers WHERE id IN (999910, 999920, 999930)`);
-    await conn.execute(`DELETE FROM products WHERE id IN (999901, 999902, 999910, 999920, 999940)`);
-
     console.log("\n================================================================================");
     console.log(`TEST SUMMARY: ${passedCount} PASSED, ${failedCount} FAILED`);
     console.log("================================================================================");
@@ -471,6 +427,7 @@ async function runRegressionTestSuite() {
       process.exit(1);
     }
   } finally {
+    await conn.rollback();
     conn.release();
     await pool.end();
   }

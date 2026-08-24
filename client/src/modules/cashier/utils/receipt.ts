@@ -8,6 +8,11 @@ import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
 import { rasterizeReceiptHtml } from "@/shared/utils/receiptHtmlRasterizer";
 import { toCentavos } from "./money";
 
+export function cleanInvoiceNumber(inv?: string | null): string {
+  if (!inv) return "";
+  return String(inv).replace(/^INV-?/i, "").trim();
+}
+
 export interface CartItem {
   id: number;
   name: string;
@@ -102,6 +107,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
   const storeTIN = `${tinFormatted}-${branchCode}`;
   const ptuNo = settings.ptu_or_accn_no || "";
+  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
   const documentType = settings.document_type || "SALES INVOICE";
   const currSym = "";
   const posMin = settings.pos_min || "";
@@ -317,13 +325,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
       <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
       ${(posMin || posSerial) ? `<div class="center">${posMin ? `MIN: ${posMin}` : ''}${posMin && posSerial ? ' | ' : ''}${posSerial ? `S/N: ${posSerial}` : ''}</div>` : ''}
-      ${ptuNo ? `<div class="center">PTU No: ${ptuNo}</div>` : ''}
+      ${ptuNo ? `<div class="center">PTU No: ${ptuNo}${ptuDate}</div>` : ''}
       ${(storeFb || storePhone) ? `<div class="center">${storeFb ? `Fb: ${storeFb}` : ''}${storeFb && storePhone ? ' | ' : ''}${storePhone ? `Tel No: ${storePhone}` : ''}</div>` : ''}
     </div>
     
     <div class="center bold" style="margin: 9px 0 7px 0; font-size: 14px; letter-spacing: 0.5px;">${documentType}</div>
     
-    <div class="row"><span>SI No: ${invoiceNumber}</span></div>
+    <div class="row"><span>SI No: ${cleanInvoiceNumber(invoiceNumber)}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
     <div class="cust-row"><span class="cust-lbl">SOLD TO:</span><span class="cust-line">${customerInfo.name || "Walk-In Customer"}</span></div>
     ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
@@ -378,6 +386,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     `}
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
+    <div class="divider"></div>
+    <div class="center" style="font-size: 10px;">POS Software: ISRA POS System v1.0</div>
+    <div class="center" style="font-size: 10px;">Accreditation No: ${accNo}${accDate}</div>
     <div class="divider"></div>
     ${posMin ? `
     <div class="center">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
@@ -485,7 +496,7 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   if (storeFb || storePhone) lines.push(`Fb: ${storeFb} | Tel: ${storePhone}`);
   lines.push("----------------------------------------");
   lines.push(`              ${documentType}`);
-  lines.push(`Invoice No:     ${invoiceNumber}`);
+  lines.push(`SI No:          ${cleanInvoiceNumber(invoiceNumber)}`);
   lines.push(`Date:           ${dateStr}`);
   lines.push(`Time:           ${timeStr}`);
   lines.push("----------------------------------------");
@@ -552,6 +563,11 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
 
   lines.push("----------------------------------------");
   lines.push(`CASHIER: ${cashierName}`);
+  lines.push("----------------------------------------");
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  lines.push("       POS Software: ISRA POS System v1.0");
+  lines.push(`     Accreditation No: ${accNo}${accDate}`);
   lines.push("----------------------------------------");
   if (posMin) {
     lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");

@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { pool } from "../db.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
+import { authenticate } from "../middleware/authenticate.js";
 
 const router = Router();
 
@@ -46,12 +48,26 @@ router.post("/login", async (req: Request, res: Response) => {
 
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
+      await logAuditEvent({
+        action: "USER_LOGIN_FAILED",
+        performedById: user.id,
+        performedByUsername: user.username,
+        reason: "Invalid password entered",
+        metadata: { ip: req.ip },
+      });
       res.status(401).json({ message: "Invalid username or password." });
       return;
     }
 
     // 4. Check account status
     if (user.status === "Inactive") {
+      await logAuditEvent({
+        action: "USER_LOGIN_FAILED",
+        performedById: user.id,
+        performedByUsername: user.username,
+        reason: "Attempted login to deactivated account",
+        metadata: { ip: req.ip },
+      });
       res.status(403).json({
         message:
           "Your account has been deactivated. Please contact your administrator.",
@@ -74,6 +90,19 @@ router.post("/login", async (req: Request, res: Response) => {
       role: user.role,
       employee_id: user.employee_id ?? null,
     };
+
+    // Log successful login
+    await logAuditEvent({
+      action: "USER_LOGIN",
+      performedById: user.id,
+      performedByUsername: user.username,
+      newValues: {
+        role: user.role,
+        employee_id: user.employee_id,
+        login_time: new Date().toISOString(),
+      },
+      metadata: { ip: req.ip, rememberMe },
+    });
 
     // 7. If the account requires a password change, issue a restricted 15-min
     //    token with mustChangePassword: true and return early.
@@ -107,14 +136,30 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/auth/logout ────────────────────────────────────────────────────
+router.post("/logout", authenticate, async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+    await logAuditEvent({
+      action: "USER_LOGOUT",
+      performedById: user.id,
+      performedByUsername: user.username,
+      newValues: { logout_time: new Date().toISOString() },
+      metadata: { ip: req.ip },
+    });
+    res.status(200).json({ message: "Logged out successfully." });
+  } catch (err) {
+    console.error("[auth/logout] Error:", err);
+    res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
 // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
 // Silently renew a valid, non-expired JWT. Called by the client ~10 min before
 // expiry so cashiers and admins never get force-logged-out mid-shift.
 //
 // The `authenticate` middleware already rejects expired tokens with 401, so no
 // additional expiry check is needed here.
-import { authenticate } from "../middleware/authenticate.js";
-
 router.post("/refresh", authenticate, async (req: Request, res: Response) => {
   const user = req.user!;
 

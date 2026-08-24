@@ -75,7 +75,7 @@ export default function PaymentSuccessModal({ open, onClose, data, onReprint }: 
           <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500 mt-1">
             <Receipt className="w-3.5 h-3.5" />
             <span>Invoice:</span>
-            <span className="font-mono font-bold text-slate-700">{data.invoiceNumber}</span>
+            <span className="font-mono font-bold text-slate-700">{data.invoiceNumber ? data.invoiceNumber.replace(/^INV-?/i, "") : ""}</span>
             {data.customerName && (
               <>
                 <span className="text-slate-300">·</span>

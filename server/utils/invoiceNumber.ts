@@ -27,7 +27,7 @@ export async function generateInvoiceNumber(conn: PoolConnection): Promise<strin
     [next, rows[0].id]
   );
 
-  return `${prefix}-${String(next).padStart(6, "0")}`;
+  return String(next).padStart(6, "0");
 }
 
 /**

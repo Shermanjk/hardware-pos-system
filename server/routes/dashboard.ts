@@ -145,6 +145,51 @@ router.get("/", async (_req: Request, res: Response) => {
       revenue: Number(row.gross_revenue) - (refundMap.get(row.sale_date) || 0)
     }));
 
+    // ── 30-Day Daily Sales Trend (for high-resolution trading chart view) ───
+    const [trend30dRows] = await pool.execute<any[]>(`
+      SELECT
+        DATE_FORMAT(s.created_at, '%Y-%m-%d') AS sale_date,
+        COUNT(*)                              AS transactions,
+        COALESCE(SUM(s.total_amount), 0)      AS gross_revenue
+      FROM sales s
+      WHERE DATE(s.created_at) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+        AND s.void_status != 'voided'
+      GROUP BY DATE_FORMAT(s.created_at, '%Y-%m-%d')
+      ORDER BY sale_date ASC
+    `);
+
+    const [trend30dRefunds] = await pool.execute<any[]>(`
+      SELECT
+        DATE_FORMAT(r.resolved_at, '%Y-%m-%d') AS sale_date,
+        COALESCE(SUM(r.refund_amount), 0)      AS refunds
+      FROM returns r
+      JOIN sales s ON s.id = r.sale_id
+      WHERE DATE(r.resolved_at) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+        AND r.status = 'completed'
+        AND s.void_status != 'voided'
+      GROUP BY DATE_FORMAT(r.resolved_at, '%Y-%m-%d')
+    `);
+
+    const refund30dMap = new Map(trend30dRefunds.map((r: any) => [r.sale_date, Number(r.refunds)]));
+    const trendMap = new Map(trend30dRows.map((r: any) => [r.sale_date, {
+      transactions: Number(r.transactions),
+      revenue: Math.max(0, Number(r.gross_revenue) - (refund30dMap.get(r.sale_date) || 0))
+    }]));
+
+    // Fill all 30 days continuously so there are no empty date gaps
+    const daily_sales_30d: { sale_date: string; transactions: number; revenue: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const entry = trendMap.get(dateStr);
+      daily_sales_30d.push({
+        sale_date: dateStr,
+        transactions: entry?.transactions || 0,
+        revenue: entry?.revenue || 0,
+      });
+    }
+
     // ── Monthly revenue for last 6 months ────────────────────────────────────
     const [monthlyRows] = await pool.execute<any[]>(`
       SELECT
@@ -170,12 +215,22 @@ router.get("/", async (_req: Request, res: Response) => {
       GROUP BY DATE_FORMAT(r.resolved_at, '%Y-%m')
     `);
 
-    // Merge refunds into monthly data
+    // Merge refunds into monthly data and ensure all 6 continuous months are present
     const monthlyRefundMap = new Map(monthlyRefunds.map((r: any) => [r.month, Number(r.refunds)]));
-    const monthly_sales = monthlyRows.map((row: any) => ({
-      month: row.month,
-      revenue: Number(row.gross_revenue) - (monthlyRefundMap.get(row.month) || 0)
-    }));
+    const allMonths: { month: string; revenue: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const mStr = d.toISOString().slice(0, 7);
+      const row = monthlyRows.find((r: any) => r.month === mStr);
+      const ref = monthlyRefundMap.get(mStr) || 0;
+      allMonths.push({
+        month: mStr,
+        revenue: row ? Math.max(0, Number(row.gross_revenue) - ref) : 0,
+      });
+    }
+    const monthly_sales = allMonths;
 
     // ── Top 5 selling products (by qty sold, all time) ───────────────────────
     const [topProductRows] = await pool.execute<any[]>(`
@@ -239,11 +294,12 @@ router.get("/", async (_req: Request, res: Response) => {
         total_receivables:      Number(arRows[0].total_receivables),
         customers_with_balance: Number(arRows[0].customers_with_balance),
       },
-      weekly_sales:   weekly_sales,
-      monthly_sales:  monthly_sales,
-      top_products:   topProductRows,
-      recent_sales:   recentSalesRows,
-      low_stock_items: lowStockRows,
+      weekly_sales:     weekly_sales,
+      daily_sales_30d:  daily_sales_30d,
+      monthly_sales:    monthly_sales,
+      top_products:     topProductRows,
+      recent_sales:     recentSalesRows,
+      low_stock_items:  lowStockRows,
     });
   } catch (err) {
     console.error("[dashboard/GET /]", err);

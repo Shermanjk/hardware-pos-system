@@ -289,11 +289,27 @@ router.delete(
       );
       if (salesCheck[0].count > 0) {
         res.status(422).json({
-          message: "Cannot delete discount. It has been used in sales transactions.",
+          message: "Cannot delete discount. It has been used in sales transactions. You may change its status to Inactive instead.",
         });
         return;
       }
 
+      // Check if discount has pending approval requests
+      const [pendingCheck] = await pool.execute<any[]>(
+        `SELECT COUNT(*) AS count FROM discount_requests WHERE discount_id = ? AND status = 'pending'`,
+        [discountId]
+      );
+      if (pendingCheck[0].count > 0) {
+        res.status(422).json({
+          message: "Cannot delete discount while approval requests are pending. Please review or reject the pending requests first.",
+        });
+        return;
+      }
+
+      // Delete unattached or cancelled discount requests
+      await pool.execute(`DELETE FROM discount_requests WHERE discount_id = ?`, [discountId]);
+
+      // Delete the discount
       await pool.execute(`DELETE FROM discounts WHERE id = ?`, [discountId]);
 
       await logAuditEvent({

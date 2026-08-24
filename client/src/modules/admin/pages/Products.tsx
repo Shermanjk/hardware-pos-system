@@ -1138,10 +1138,14 @@ export default function Products() {
                           <span className="text-xs text-slate-400 font-medium">Inactive</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-5">
-                        <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
-                          {product.category || "—"}
-                        </span>
+                      <td className="py-3.5 px-5 whitespace-nowrap">
+                        {product.category ? (
+                          <span className="inline-flex items-center text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md whitespace-nowrap">
+                            {product.category}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-5 text-sm text-slate-600 font-medium">{product.supplier || "—"}</td>
                       <td className="py-3.5 px-5 text-right text-sm font-mono text-slate-600">₱{Number(product.cost_price).toFixed(2)}</td>

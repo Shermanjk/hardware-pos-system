@@ -176,7 +176,7 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
           {req && (
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
               <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold">{req.return_number}</span></div>
-              <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number}</span></div>
+              <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold">{req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}</span></div>
               <div><span className="text-gray-500">Customer:</span> <span className="font-medium">{req.customer_name}</span></div>
               <div><span className="text-gray-500">Amount:</span> <span className="font-bold text-emerald-700">{fmtPeso(req.amount || 0)}</span></div>
             </div>
@@ -365,7 +365,7 @@ function DetailDialog({ req, onClose, onApprove, onApproveReturn, onReject, acti
             <div className="p-4 bg-red-50 rounded-lg text-sm border border-red-200">
               <p className="text-xs font-semibold uppercase tracking-wide text-red-700 mb-3">Transaction Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number}</span></div>
+                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}</span></div>
                 <div><span className="text-gray-500">Amount:</span> <span className="font-bold text-gray-900 ml-1">{fmtPeso(req.amount || 0)}</span></div>
                 <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span></div>
               </div>
@@ -377,7 +377,7 @@ function DetailDialog({ req, onClose, onApprove, onApproveReturn, onReject, acti
               <p className="text-xs font-semibold uppercase tracking-wide text-green-700 mb-3">Return Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                 <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.return_number}</span></div>
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number}</span></div>
+                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}</span></div>
                 <div><span className="text-gray-500">Product:</span> <span className="font-medium text-gray-800 ml-1">{req.product_name}</span></div>
                 <div><span className="text-gray-500">Barcode:</span> <span className="font-mono text-gray-700 ml-1">{req.barcode}</span></div>
                 <div><span className="text-gray-500">Qty Returned:</span> <span className="font-semibold text-gray-900 ml-1">{req.physical_quantity}</span></div>

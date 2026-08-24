@@ -615,7 +615,7 @@ export default function CreditLedgerPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-700">
-                        {entry.reference || (entry.invoice_number ? entry.invoice_number : "—")}
+                        {entry.reference ? entry.reference.replace(/^INV-?/i, "") : (entry.invoice_number ? entry.invoice_number.replace(/^INV-?/i, "") : "—")}
                       </td>
                       <td className="py-3.5 px-4 text-right font-medium tabular-nums text-slate-900">
                         {isCharge ? fmt(entry.amount) : "—"}

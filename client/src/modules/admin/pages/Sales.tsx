@@ -231,7 +231,7 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Transaction Info</p>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm bg-gray-50 rounded-xl p-4 border border-gray-200">
-                    <div><span className="text-gray-500">Invoice No.:</span> <span className="font-bold font-mono text-gray-900 ml-1">{sale.invoice_number}</span></div>
+                    <div><span className="text-gray-500">SI No.:</span> <span className="font-bold font-mono text-gray-900 ml-1">{sale.invoice_number ? sale.invoice_number.replace(/^INV-?/i, "") : ""}</span></div>
                     <div><span className="text-gray-500">Date:</span> <span className="font-medium text-gray-800 ml-1">{fmtDate(sale.created_at)}</span></div>
                     <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{sale.customer_name}</span></div>
                     <div><span className="text-gray-500">Cashier:</span> <span className="font-medium text-gray-800 ml-1">{sale.cashier_name}</span></div>
@@ -688,7 +688,7 @@ export default function Sales() {
                 <Input
                   value={invoice}
                   onChange={(e) => setInvoice(e.target.value)}
-                  placeholder="e.g. INV-2026..."
+                  placeholder="e.g. 000142..."
                   className="h-9.5 text-sm"
                 />
               </div>
@@ -926,7 +926,7 @@ export default function Sales() {
                     <tr key={sale.id} className="hover:bg-blue-50/50 transition-colors">
                       <td className="py-3.5 px-5">
                         <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
-                          {sale.invoice_number}
+                          {sale.invoice_number ? sale.invoice_number.replace(/^INV-?/i, "") : "—"}
                         </span>
                       </td>
                       <td className="py-3.5 px-5 font-bold text-slate-900">{sale.customer_name || "Walk-in Customer"}</td>

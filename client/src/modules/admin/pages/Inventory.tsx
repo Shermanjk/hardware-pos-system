@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -137,15 +136,15 @@ function StockTable({
         <table className="w-full text-sm text-left">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Barcode</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Product Name</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Category</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Stock Level</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Reorder Min</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Damaged</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Status</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Last Updated</th>
-              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap">Barcode</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide min-w-[200px]">Product Name</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap">Category</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center whitespace-nowrap">Stock Level</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center whitespace-nowrap">Reorder Min</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center whitespace-nowrap">Damaged</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center whitespace-nowrap">Status</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap">Last Updated</th>
+              <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -180,21 +179,25 @@ function StockTable({
                 const st = deriveStatus(item.quantity, item.reorder_level);
                 return (
                   <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                    <td className="py-3.5 px-5">
+                    <td className="py-3.5 px-5 whitespace-nowrap">
                       <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
                         {item.barcode}
                       </span>
                     </td>
                     <td className="py-3.5 px-5">
-                      <p className="font-bold text-slate-900 text-sm">{item.product_name}</p>
+                      <p className="font-bold text-slate-900 text-sm leading-snug">{item.product_name}</p>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">{item.supplier || "—"}</p>
                     </td>
-                    <td className="py-3.5 px-5">
-                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
-                        {item.category || "—"}
-                      </span>
+                    <td className="py-3.5 px-5 whitespace-nowrap">
+                      {item.category ? (
+                        <span className="inline-flex items-center text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md whitespace-nowrap">
+                          {item.category}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-medium">—</span>
+                      )}
                     </td>
-                    <td className="py-3.5 px-5 text-center">
+                    <td className="py-3.5 px-5 text-center whitespace-nowrap">
                       {(() => {
                         const parts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
                         return (
@@ -208,15 +211,15 @@ function StockTable({
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-5 text-center text-sm font-mono text-slate-500">{item.reorder_level}</td>
-                    <td className="py-3.5 px-5 text-center">
+                    <td className="py-3.5 px-5 text-center text-sm font-mono text-slate-500 whitespace-nowrap">{item.reorder_level}</td>
+                    <td className="py-3.5 px-5 text-center whitespace-nowrap">
                       <span className={`text-sm font-semibold font-mono tabular-nums ${item.damaged_stock > 0 ? "text-red-500 font-bold" : "text-slate-300"}`}>
                         {item.damaged_stock}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 text-center">{statusBadge(st)}</td>
-                    <td className="py-3.5 px-5 text-xs text-slate-500">{fmtRelative(item.updated_at)}</td>
-                    <td className="py-3.5 px-5">
+                    <td className="py-3.5 px-5 text-center whitespace-nowrap">{statusBadge(st)}</td>
+                    <td className="py-3.5 px-5 text-xs text-slate-500 whitespace-nowrap">{fmtRelative(item.updated_at)}</td>
+                    <td className="py-3.5 px-5 whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => onViewDetails(item)}
@@ -257,23 +260,33 @@ function ProductDetailsModal({ item, onClose }: {
   item: InventoryItem | null;
   onClose: () => void;
 }) {
-  if (!item) return null;
+  const [activeItem, setActiveItem] = useState<InventoryItem | null>(null);
 
-  const status = deriveStatus(item.quantity, item.reorder_level);
-  const quantityParts = formatQuantityParts(item.quantity, item.unit_abbreviation, item.quantity_type, item.unit_allow_decimal);
+  // Keep track of the last non-null item to avoid unmounting content while exit animations are playing
+  useEffect(() => {
+    if (item) {
+      setActiveItem(item);
+    }
+  }, [item]);
+
+  const displayItem = item || activeItem;
+  if (!displayItem) return null;
+
+  const status = deriveStatus(displayItem.quantity, displayItem.reorder_level);
+  const quantityParts = formatQuantityParts(displayItem.quantity, displayItem.unit_abbreviation, displayItem.quantity_type, displayItem.unit_allow_decimal);
 
   return (
-    <Dialog open={!!item} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Product Details - {item.product_name}</DialogTitle>
+    <Sheet open={!!item} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Product Details - {displayItem.product_name}</SheetTitle>
 
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 rounded-t-lg shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-500 shrink-0">
           <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Package className="h-5 w-5 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-white truncate">{item.product_name}</h2>
+          <div className="flex-1 min-w-0 pr-8">
+            <h2 className="text-lg font-bold text-white truncate">{displayItem.product_name}</h2>
             <p className="text-xs text-blue-100 mt-0.5">Complete Product Information</p>
           </div>
         </div>
@@ -290,7 +303,7 @@ function ProductDetailsModal({ item, onClose }: {
               <div>
                 <p className="text-xs text-gray-500 font-medium mb-1">Barcode</p>
                 <p className="text-sm font-mono font-semibold text-gray-900 bg-white px-3 py-2 rounded border border-gray-200">
-                  {item.barcode}
+                  {displayItem.barcode}
                 </p>
               </div>
             </div>
@@ -307,32 +320,32 @@ function ProductDetailsModal({ item, onClose }: {
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Category</p>
                   <span className="inline-block text-xs font-semibold text-gray-700 bg-white px-3 py-1.5 rounded-full border border-gray-200">
-                    {item.category}
+                    {displayItem.category || "—"}
                   </span>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Supplier</p>
-                  <p className="text-sm font-medium text-gray-900">{item.supplier || "—"}</p>
+                  <p className="text-sm font-medium text-gray-900">{displayItem.supplier || "—"}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Unit</p>
                   <p className="text-sm font-medium text-gray-900">
-                    {item.unit} ({item.unit_abbreviation})
+                    {displayItem.unit} ({displayItem.unit_abbreviation})
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Unit Type</p>
                   <p className="text-sm font-medium text-gray-900">
-                    {item.unit_type || "Other"}
+                    {displayItem.unit_type || "Other"}
                   </p>
                 </div>
               </div>
               <div>
                 <p className="text-xs text-gray-500 font-medium mb-1">Quantity Type</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {item.quantity_type === "WEIGHTED" ? "Weighted (Variable)" : "Whole Unit"}
+                  {displayItem.quantity_type === "WEIGHTED" ? "Weighted (Variable)" : "Whole Unit"}
                 </p>
               </div>
             </div>
@@ -345,7 +358,7 @@ function ProductDetailsModal({ item, onClose }: {
               <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Pricing Information</h3>
             </div>
             <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-              {item.pricing_type === "MARKET_BASED" ? (
+              {displayItem.pricing_type === "MARKET_BASED" ? (
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-2">Pricing Type</p>
                   <span className="inline-block text-sm font-semibold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
@@ -360,20 +373,20 @@ function ProductDetailsModal({ item, onClose }: {
                   <div>
                     <p className="text-xs text-gray-500 font-medium mb-1">Cost Price</p>
                     <p className="text-base font-bold text-gray-900 tabular-nums">
-                      ₱{Number(item.cost_price).toFixed(2)}
+                      ₱{Number(displayItem.cost_price).toFixed(2)}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 font-medium mb-1">Selling Price</p>
                     <p className="text-base font-bold text-emerald-600 tabular-nums">
-                      ₱{Number(item.selling_price).toFixed(2)}
+                      ₱{Number(displayItem.selling_price).toFixed(2)}
                     </p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-xs text-gray-500 font-medium mb-1">Markup</p>
                     <p className="text-sm font-semibold text-blue-600 tabular-nums">
-                      {Number(item.cost_price) > 0
-                        ? `${(((Number(item.selling_price) - Number(item.cost_price)) / Number(item.cost_price)) * 100).toFixed(2)}%`
+                      {Number(displayItem.cost_price) > 0
+                        ? `${(((Number(displayItem.selling_price) - Number(displayItem.cost_price)) / Number(displayItem.cost_price)) * 100).toFixed(2)}%`
                         : "—"}
                     </p>
                   </div>
@@ -394,8 +407,8 @@ function ProductDetailsModal({ item, onClose }: {
                   <p className="text-xs text-gray-500 font-medium mb-1">Current Stock</p>
                   <div className="flex items-baseline gap-1">
                     <p className={`text-2xl font-bold tabular-nums ${
-                      item.quantity === 0 ? "text-red-600" :
-                      item.quantity <= item.reorder_level ? "text-amber-600" : "text-gray-900"
+                      displayItem.quantity === 0 ? "text-red-600" :
+                      displayItem.quantity <= displayItem.reorder_level ? "text-amber-600" : "text-gray-900"
                     }`}>
                       {quantityParts.number}
                     </p>
@@ -406,14 +419,14 @@ function ProductDetailsModal({ item, onClose }: {
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-gray-200">
                   <p className="text-xs text-gray-500 font-medium mb-1">Reorder Level</p>
-                  <p className="text-2xl font-bold text-gray-700 tabular-nums">{item.reorder_level}</p>
+                  <p className="text-2xl font-bold text-gray-700 tabular-nums">{displayItem.reorder_level}</p>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-gray-200">
                   <p className="text-xs text-gray-500 font-medium mb-1">Damaged Stock</p>
                   <p className={`text-2xl font-bold tabular-nums ${
-                    item.damaged_stock > 0 ? "text-red-600" : "text-gray-300"
+                    displayItem.damaged_stock > 0 ? "text-red-600" : "text-gray-300"
                   }`}>
-                    {item.damaged_stock}
+                    {displayItem.damaged_stock}
                   </p>
                 </div>
               </div>
@@ -425,7 +438,7 @@ function ProductDetailsModal({ item, onClose }: {
           </div>
 
           {/* Value Information */}
-          {item.pricing_type !== "MARKET_BASED" && (
+          {displayItem.pricing_type !== "MARKET_BASED" && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="h-4 w-1 bg-blue-600 rounded-full" />
@@ -435,13 +448,13 @@ function ProductDetailsModal({ item, onClose }: {
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Total Cost Value</p>
                   <p className="text-lg font-bold text-gray-900 tabular-nums">
-                    ₱{(item.quantity * Number(item.cost_price)).toFixed(2)}
+                    ₱{(displayItem.quantity * Number(displayItem.cost_price)).toFixed(2)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">Total Retail Value</p>
                   <p className="text-lg font-bold text-emerald-600 tabular-nums">
-                    ₱{(item.quantity * Number(item.selling_price)).toFixed(2)}
+                    ₱{(displayItem.quantity * Number(displayItem.selling_price)).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -449,15 +462,15 @@ function ProductDetailsModal({ item, onClose }: {
           )}
 
           {/* Timestamps Section */}
-          {item.updated_at && (
+          {displayItem.updated_at && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="h-4 w-1 bg-blue-600 rounded-full" />
                 <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Last Updated</h3>
               </div>
               <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                <p className="text-sm text-gray-700">{fmtDate(item.updated_at)}</p>
-                <p className="text-xs text-gray-500 mt-1">{fmtRelative(item.updated_at)}</p>
+                <p className="text-sm text-gray-700">{fmtDate(displayItem.updated_at)}</p>
+                <p className="text-xs text-gray-500 mt-1">{fmtRelative(displayItem.updated_at)}</p>
               </div>
             </div>
           )}
@@ -469,8 +482,8 @@ function ProductDetailsModal({ item, onClose }: {
             Close
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

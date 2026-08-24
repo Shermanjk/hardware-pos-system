@@ -55,7 +55,7 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push("        SALES RETURN RECEIPT");
   lines.push("----------------------------------------");
   lines.push(`Return No: ${data.return_number}`);
-  lines.push(`Original Invoice: ${data.invoice_number}`);
+  lines.push(`Original Invoice: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}`);
   lines.push(`Date: ${dateStr} ${timeStr}`);
   lines.push(`Processed By: ${data.processed_by_name}`);
   lines.push(`Customer: ${data.customer_name}`);
@@ -222,7 +222,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="divider"></div>
     <div class="center bold">SALES RETURN RECEIPT</div>
     <div class="row"><span>Return No:</span><span>${data.return_number}</span></div>
-    <div class="row"><span>Original Invoice:</span><span>${data.invoice_number}</span></div>
+    <div class="row"><span>Original Invoice:</span><span>${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}</span></div>
     <div class="row"><span>Date:</span><span>${dateStr}</span></div>
     <div class="row"><span>Time:</span><span>${timeStr}</span></div>
     <div class="divider"></div>

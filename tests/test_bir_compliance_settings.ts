@@ -29,12 +29,14 @@ async function runTests() {
 
   // ─── Test 1: Database Schema & Default Values ──────────────────────────────
   const [rows] = await pool.execute<any[]>(
-    "SELECT tin, branch_code, ptu_or_accn_no, pos_min, pos_serial FROM system_settings WHERE id = 1"
+    "SELECT tin, branch_code, ptu_or_accn_no, ptu_date_issued, accreditation_no, accreditation_date_issued, pos_min, pos_serial FROM system_settings WHERE id = 1"
   );
   const dbSettings = rows[0] || {};
   assert(dbSettings.tin !== undefined, "system_settings has 'tin' column");
   assert(dbSettings.branch_code !== undefined, "system_settings has 'branch_code' column");
   assert(dbSettings.ptu_or_accn_no !== undefined, "system_settings has 'ptu_or_accn_no' column");
+  assert(dbSettings.ptu_date_issued !== undefined, "system_settings has 'ptu_date_issued' column");
+  assert(dbSettings.accreditation_no !== undefined, "system_settings has 'accreditation_no' column");
   assert(dbSettings.branch_code === "00000" || /^\d{3,5}$/.test(dbSettings.branch_code), "Default branch_code is valid (00000)");
 
   // ─── Test 2: Formatter TIN Concatenation ───────────────────────────────────
@@ -60,6 +62,9 @@ async function runTests() {
     pos_min: "MIN-000123456789",
     pos_serial: "SN-2026-9999",
     ptu_or_accn_no: "PTU-2026-BIR-0012345",
+    ptu_date_issued: "2026-01-15",
+    accreditation_no: "ACC-2026-BIR-000999",
+    accreditation_date_issued: "2026-01-15",
   };
 
   const formattedTIN = formatStoreTIN(mockSettings);
@@ -69,8 +74,8 @@ async function runTests() {
   const headerLines = buildStoreHeaderLines(mockSettings);
   const headerJoined = headerLines.join("\n");
   assert(headerJoined.includes("TIN: 766-490-574-00000"), "Header includes TIN: 766-490-574-00000");
-  assert(headerJoined.includes("MIN: MIN-000123456789 | S/N: SN-2026-9999"), "Header includes MIN and S/N");
-  assert(headerJoined.includes("PTU / ACCN: PTU-2026-BIR-0012345"), "Header includes PTU / ACCN number below MIN & S/N");
+  assert(headerJoined.includes("PTU / ACCN: PTU-2026-BIR-0012345"), "Header includes PTU / ACCN number");
+  assert(headerJoined.includes("Date Issued: 2026-01-15"), "Header includes Date Issued");
 
   // ─── Test 4: Sales Invoice Strict 4-Line Tax Breakdown ─────────────────────
   const invoiceText = formatSalesInvoiceText({

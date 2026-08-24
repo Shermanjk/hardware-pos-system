@@ -72,7 +72,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
   };
 
   const handleVoidApproved = () => {
-    toast.success(`Sale ${sale?.invoice_number ?? ""} has been voided successfully.`);
+    toast.success(`Sale ${sale?.invoice_number ? sale.invoice_number.replace(/^INV-?/i, "") : ""} has been voided successfully.`);
     setShowAuthModal(false);
     handleClose();
   };
@@ -96,7 +96,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
                   value={invoiceInput}
                   onChange={(e) => { setInvoiceInput(e.target.value); setSale(null); setLookupError(null); }}
                   onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
-                  placeholder="e.g. INV-20250120-0001"
+                  placeholder="e.g. 000142..."
                   className="h-9 text-sm font-mono"
                   disabled={submitLoading}
                 />
@@ -127,7 +127,7 @@ export default function VoidSaleDialog({ open, onClose }: Props) {
               <div className="p-3 bg-gray-50 border-2 border-gray-300 rounded-lg space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Invoice</span>
-                  <span className="font-mono font-semibold text-gray-900">{sale.invoice_number}</span>
+                  <span className="font-mono font-semibold text-gray-900">{sale.invoice_number ? sale.invoice_number.replace(/^INV-?/i, "") : ""}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Customer</span>

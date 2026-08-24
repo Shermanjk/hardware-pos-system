@@ -128,17 +128,18 @@ router.get(
       );
       const returnSummary = returnRows[0];
 
-      // 5. Query voided transactions in this cutoff window
+      // 5. Query voided transactions resolved in this cutoff window
       const [voidRows] = await pool.execute<any[]>(
         `SELECT
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
            COALESCE(SUM(s.total_amount), 0) AS total_voids
-         FROM sales s
-         WHERE s.created_at > ?
-           AND s.created_at <= ?
-           AND s.void_status = 'voided'`,
+         FROM sale_voids sv
+         JOIN sales s ON s.id = sv.sale_id
+         WHERE sv.resolved_at > ?
+           AND sv.resolved_at <= ?
+           AND sv.status = 'approved'`,
         [startTime, endTime]
       );
       const voidSummary = voidRows[0];
@@ -307,17 +308,18 @@ router.post(
       );
       const returnSummary = returnRows[0];
 
-      // 5. Query voided transactions in this cutoff window
+      // 5. Query voided transactions resolved in this cutoff window
       const [voidRows] = await conn.execute<any[]>(
         `SELECT
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
            COALESCE(SUM(s.total_amount), 0) AS total_voids
-         FROM sales s
-         WHERE s.created_at > ?
-           AND s.created_at <= ?
-           AND s.void_status = 'voided'`,
+         FROM sale_voids sv
+         JOIN sales s ON s.id = sv.sale_id
+         WHERE sv.resolved_at > ?
+           AND sv.resolved_at <= ?
+           AND sv.status = 'approved'`,
         [startTime, endTime]
       );
       const voidSummary = voidRows[0];

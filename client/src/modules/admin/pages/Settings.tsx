@@ -13,8 +13,7 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { saveToken } from "@/shared/utils/auth";
 import axios from "axios";
-import { webSerialPrinter, type SerialPrinterState } from "@/shared/services/escpos/webSerialPrinter";
-import { AlertCircle, Check, CheckCircle2, DollarSign, Eye, EyeOff, Pencil, Printer, RefreshCw, X, Zap } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BackupSettings from "./BackupSettings";
 import SystemUpdate from "./SystemUpdate";
@@ -175,337 +174,13 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
   );
 }
 
-import { localPrintAgent, type AgentStatus, type WindowsPrinterInfo } from "@/shared/services/escpos/localPrintAgent";
-import { toast } from "sonner";
-
-function LocalPrintAgentCard() {
-  const [status, setStatus] = useState<AgentStatus>({ online: false });
-  const [printers, setPrinters] = useState<WindowsPrinterInfo[]>([]);
-  const [selectedPrinter, setSelectedPrinter] = useState<string>(
-    localStorage.getItem("pos_selected_printer") || ""
-  );
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const refreshStatus = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await localPrintAgent.checkHealth();
-      setStatus(res);
-      if (res.online) {
-        const list = await localPrintAgent.getPrinters();
-        setPrinters(list);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshStatus();
-    const interval = setInterval(refreshStatus, 6000);
-    return () => clearInterval(interval);
-  }, [refreshStatus]);
-
-  const handlePrinterChange = (printerName: string) => {
-    setSelectedPrinter(printerName);
-    if (printerName) {
-      localStorage.setItem("pos_selected_printer", printerName);
-      toast.success(`Target thermal printer set to: ${printerName}`);
-    } else {
-      localStorage.removeItem("pos_selected_printer");
-      toast.success("Target set to Windows Default Printer");
-    }
-  };
-
-  const handleTestPrint = async () => {
-    setActionLoading("test-print");
-    try {
-      const ok = await localPrintAgent.sendTestPrint(selectedPrinter || undefined);
-      if (ok) {
-        toast.success("Test receipt sent directly to Windows thermal printer!");
-      } else {
-        toast.error("Failed to send test print. Ensure Print Agent is running.");
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleOpenDrawer = async () => {
-    setActionLoading("open-drawer");
-    try {
-      const ok = await localPrintAgent.openCashDrawer(selectedPrinter || undefined);
-      if (ok) {
-        toast.success("Cash drawer kick command sent!");
-      } else {
-        toast.error("Failed to trigger cash drawer. Check printer connection.");
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
-            <Printer className="h-5 w-5 text-blue-600" />
-            Local Hardware Print Agent (100% Zero-Flash Printing)
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Streams raw ESC/POS binary directly to your Windows Thermal Printer with 0% browser flash or dialogs.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            {status.online ? (
-              <>
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </>
-            ) : (
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-300"></span>
-            )}
-          </span>
-          <span className={`text-xs font-bold uppercase ${status.online ? "text-emerald-700" : "text-slate-500"}`}>
-            {loading ? "Checking..." : status.online ? `Agent Active :${status.port || 18181} (0% Flash)` : "Agent Offline"}
-          </span>
-        </div>
-      </div>
-
-      {status.online ? (
-        <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-2">
-              <div>
-                <Label className="text-xs font-semibold text-emerald-950 block mb-1">Select Windows Thermal Printer</Label>
-                <select
-                  value={selectedPrinter}
-                  onChange={(e) => handlePrinterChange(e.target.value)}
-                  className="h-9 px-3 text-xs border border-emerald-300 rounded-md bg-white font-mono min-w-[280px]"
-                >
-                  <option value="">(Auto: Windows Default — {status.defaultPrinter || "None"})</option>
-                  {printers.map((p) => (
-                    <option key={p.Name} value={p.Name}>
-                      {p.Name} {p.Default ? "(Default)" : ""} {p.PortName ? `[${p.PortName}]` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-[11px] text-emerald-700 font-mono">
-                Agent URL: http://127.0.0.1:{status.port || 18181} (Connected)
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleTestPrint}
-                disabled={actionLoading !== null}
-                className="text-xs h-9 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                {actionLoading === "test-print" ? "Printing..." : "Send Test Receipt"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleOpenDrawer}
-                disabled={actionLoading !== null}
-                className="text-xs h-9 bg-white border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-semibold gap-1.5 shadow-sm"
-              >
-                <DollarSign className="h-3.5 w-3.5" />
-                {actionLoading === "open-drawer" ? "Opening..." : "Test Cash Drawer"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={refreshStatus}
-                disabled={loading}
-                className="text-xs h-9 px-2 text-emerald-700 hover:text-emerald-900"
-                title="Refresh Status"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-800">
-                Print Agent Not Detected on this PC (Using Standard Browser Printing)
-              </p>
-              <p className="text-xs text-slate-600">
-                To enable <strong>100% Zero-Flash hardware printing</strong> on this Cashier terminal:
-              </p>
-              <ol className="text-xs text-slate-600 list-decimal list-inside space-y-0.5">
-                <li>Copy the <code className="bg-slate-200 px-1 rounded">print-agent</code> folder to this PC.</li>
-                <li>Double-click <code className="bg-slate-200 px-1 rounded">Install_Startup.bat</code> once to start it automatically on Windows boot.</li>
-              </ol>
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={refreshStatus}
-              disabled={loading}
-              className="text-xs h-8 gap-1.5 font-semibold"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              Check Connection Again
-            </Button>
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function DirectThermalPrinterSettingsCard({ storeName = "ISRA HARDWARE POS" }: { storeName?: string }) {
-  const [state, setState] = useState<SerialPrinterState>(webSerialPrinter.getState());
-
-  useEffect(() => {
-    const unsub = webSerialPrinter.subscribe((s) => setState(s));
-    return () => unsub();
-  }, []);
-
-  if (!state.isSupported) {
-    return (
-      <Card className="p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <Zap className="h-5 w-5 text-slate-400" />
-          <h2 className="text-lg font-display font-bold text-gray-900">
-            Direct USB Serial Port (COM / Web Serial)
-          </h2>
-        </div>
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-          <p className="text-xs text-slate-600">
-            Web Serial API is available on <code className="bg-slate-200 px-1 rounded">http://localhost</code> or via the Local Print Agent above for LAN connections.
-          </p>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-display font-bold text-gray-900 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-blue-600" />
-            Direct USB Thermal Receipt Printer (0% Flash ESC/POS)
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Bypass browser print dialogs completely by streaming raw ESC/POS commands directly over USB.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            {state.isConnected ? (
-              <>
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </>
-            ) : (
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-300"></span>
-            )}
-          </span>
-          <span className={`text-xs font-bold uppercase ${state.isConnected ? "text-emerald-700" : "text-slate-500"}`}>
-            {state.isConnected ? "Direct USB Connected" : "Not Paired / Offline"}
-          </span>
-        </div>
-      </div>
-
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <Label className="text-xs font-semibold text-slate-700 block mb-1">Printer Serial Baud Rate</Label>
-            <select
-              value={state.baudRate}
-              onChange={(e) => webSerialPrinter.setBaudRate(Number(e.target.value))}
-              className="h-9 px-3 text-xs border border-slate-300 rounded-md bg-white font-mono"
-            >
-              <option value={9600}>9600 bps (Standard Xprinter / POS-80)</option>
-              <option value={19200}>19200 bps</option>
-              <option value={38400}>38400 bps (High Speed)</option>
-              <option value={115200}>115200 bps (Ultra High Speed)</option>
-            </select>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!state.isConnected ? (
-              <Button
-                type="button"
-                onClick={() => webSerialPrinter.requestAndConnect()}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold gap-1.5 shadow-sm"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Pair / Connect Thermal Printer
-              </Button>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => webSerialPrinter.printTestReceipt(storeName)}
-                  className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 text-xs h-9 font-semibold gap-1.5"
-                >
-                  <Printer className="h-3.5 w-3.5 text-slate-500" />
-                  Test Print (0% Flash)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => webSerialPrinter.openCashDrawer()}
-                  className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 text-xs h-9 font-semibold gap-1.5"
-                >
-                  <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                  Kick Cash Drawer
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => webSerialPrinter.disconnect()}
-                  className="bg-white border-red-200 text-red-600 hover:bg-red-50 text-xs h-9 font-semibold gap-1.5"
-                >
-                  Disconnect
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="text-[11px] text-slate-500 border-t border-slate-200 pt-3">
-          💡 <strong>Tip</strong>: When paired once, Chrome remembers the connection permission and auto-reconnects every time the POS Kiosk is launched.
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 // ─── Business Tab ─────────────────────────────────────────────────────────────
 
 function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
     proprietor: "", registered_taxpayer_name: "", tin: "", branch_code: "00000",
     business_license: "", document_type: "", pos_min: "", pos_serial: "", ptu_or_accn_no: "",
+    ptu_date_issued: "", accreditation_no: "", accreditation_date_issued: "",
   });
   const [vatEnabled, setVatEnabled] = useState(false);
   const [vatSaving, setVatSaving] = useState(false);
@@ -513,15 +188,18 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
   useEffect(() => {
     if (initial) {
       setSaved({
-        proprietor:               initial.proprietor               ?? "",
-        registered_taxpayer_name: initial.registered_taxpayer_name ?? "",
-        tin:                      initial.tin                      ?? "",
-        branch_code:              initial.branch_code              ?? "00000",
-        business_license:         initial.business_license         ?? "",
-        document_type:            initial.document_type            ?? "SALES INVOICE",
-        pos_min:                  initial.pos_min                  ?? "",
-        pos_serial:               initial.pos_serial               ?? "",
-        ptu_or_accn_no:           initial.ptu_or_accn_no           ?? "",
+        proprietor:                initial.proprietor                ?? "",
+        registered_taxpayer_name:  initial.registered_taxpayer_name  ?? "",
+        tin:                       initial.tin                       ?? "",
+        branch_code:               initial.branch_code               ?? "00000",
+        business_license:          initial.business_license          ?? "",
+        document_type:             initial.document_type             ?? "SALES INVOICE",
+        pos_min:                   initial.pos_min                   ?? "",
+        pos_serial:                initial.pos_serial                ?? "",
+        ptu_or_accn_no:            initial.ptu_or_accn_no            ?? "",
+        ptu_date_issued:           initial.ptu_date_issued           ?? "",
+        accreditation_no:          initial.accreditation_no          ?? "000-000000000-000000",
+        accreditation_date_issued: initial.accreditation_date_issued ?? "",
       });
       setVatEnabled(initial.vat_enabled ?? false);
     }
@@ -634,7 +312,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
           onSave={handleSave}
         />
 
-        <div className="border-t border-gray-100 pt-4">
+        <div className="border-t border-gray-100 pt-4 space-y-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">POS Machine Registration & Accreditation</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <EditableField
@@ -652,7 +330,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               onSave={handleSave}
             />
           </div>
-          <div className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <EditableField
               label="PTU / ACCN Number"
               fieldKey="ptu_or_accn_no"
@@ -660,8 +338,31 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               placeholder="e.g. PTU-2026-000123 or ACCN No."
               onSave={handleSave}
             />
+            <EditableField
+              label="PTU / ACCN Date Issued"
+              fieldKey="ptu_date_issued"
+              savedValue={saved.ptu_date_issued}
+              placeholder="YYYY-MM-DD (e.g. 2026-01-15)"
+              onSave={handleSave}
+            />
           </div>
-          <p className="mt-2 text-xs text-gray-400">These identifiers will be printed on every official receipt and Z-reading.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <EditableField
+              label="Software Accreditation No."
+              fieldKey="accreditation_no"
+              savedValue={saved.accreditation_no}
+              placeholder="e.g. 000-000000000-000000"
+              onSave={handleSave}
+            />
+            <EditableField
+              label="Accreditation Date Issued"
+              fieldKey="accreditation_date_issued"
+              savedValue={saved.accreditation_date_issued}
+              placeholder="YYYY-MM-DD (e.g. 2026-01-15)"
+              onSave={handleSave}
+            />
+          </div>
+          <p className="mt-2 text-xs text-gray-400">These identifiers will be printed on every official receipt and Z-reading in compliance with BIR regulations.</p>
         </div>
       </div>
     </Card>
@@ -865,10 +566,9 @@ export default function Settings() {
         </Card>
       ) : (
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="business">Business</TabsTrigger>
-            <TabsTrigger value="printers">Printer / Hardware</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="system-update">System Update</TabsTrigger>
             <TabsTrigger value="backup-settings">Backup Settings</TabsTrigger>
@@ -876,10 +576,6 @@ export default function Settings() {
 
           <TabsContent value="general"  className="space-y-6"><GeneralTab  initial={settings} onSettingsChange={setSettings} /></TabsContent>
           <TabsContent value="business" className="space-y-6"><BusinessTab initial={settings} onSettingsChange={setSettings} /></TabsContent>
-          <TabsContent value="printers" className="space-y-6">
-            <LocalPrintAgentCard />
-            <DirectThermalPrinterSettingsCard storeName={settings?.store_name} />
-          </TabsContent>
           <TabsContent value="security" className="space-y-6"><SecurityTab /></TabsContent>
           <TabsContent value="system-update" className="space-y-6"><SystemUpdate /></TabsContent>
           <TabsContent value="backup-settings" className="space-y-6"><BackupSettings onUnsavedChange={setHasUnsavedBackupChanges} /></TabsContent>

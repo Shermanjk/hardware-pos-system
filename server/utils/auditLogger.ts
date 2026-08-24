@@ -9,6 +9,9 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_ROLE_CHANGED"
+  | "USER_LOGIN"
+  | "USER_LOGOUT"
+  | "USER_LOGIN_FAILED"
   // ── Sales ───────────────────────────────────────────────────────────────────
   | "SALE_CREATED"
   | "SALE_COMPLETED"

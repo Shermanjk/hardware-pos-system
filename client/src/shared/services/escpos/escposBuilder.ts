@@ -209,6 +209,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
   const ptuNo = settings.ptu_or_accn_no || "";
+  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const docType = settings.document_type || "SALES INVOICE";
 
   const now = new Date();
@@ -235,7 +236,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
     b.center(`MIN: ${posMin || "N/A"} | S/N: ${posSerial || "N/A"}`);
   }
   if (ptuNo) {
-    b.center(`PTU / ACCN: ${ptuNo}`);
+    b.center(`PTU / ACCN: ${ptuNo}${ptuDate}`);
   }
   if (settings.facebook || settings.contact_number) {
     b.center(`Fb: ${settings.facebook || "N/A"} | Tel: ${settings.contact_number || "N/A"}`);
@@ -246,7 +247,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.doubleDivider();
 
   // Transaction Meta
-  b.row("Invoice No:", invoiceNumber);
+  b.row("SI No:", (invoiceNumber || "").replace(/^INV-?/i, "").trim());
   b.row("Date:", dateStr);
   b.row("Time:", timeStr);
   b.divider();
@@ -350,8 +351,10 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.divider();
   b.row("CASHIER:", cashierName);
   b.divider();
-  b.center("POS Software: Antigravity POS v2.0");
-  b.center("Accreditation No: 000-000000000-000000");
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  b.center("POS Software: ISRA POS System v1.0");
+  b.center(`Accreditation No: ${accNo}${accDate}`);
   b.divider();
 
   if (posMin) {
@@ -434,7 +437,7 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   b.doubleDivider();
 
   b.row("Return Slip No:", data.return_number);
-  b.row("Original Invoice:", data.invoice_number);
+  b.row("Original Invoice:", (data.invoice_number || "").replace(/^INV-?/i, "").trim());
   b.row("Date & Time:", `${dateStr} ${timeStr}`);
   b.row("Customer:", data.customer_name);
   b.divider();

@@ -22,9 +22,12 @@ export interface StoreSettings {
   printer_name:             string | null; // new field
   cash_drawer_enabled:      boolean; // new field
   // POS machine & Accreditation
-  pos_min:                  string | undefined;
-  pos_serial:               string | undefined;
+  pos_min:                   string | undefined;
+  pos_serial:                string | undefined;
   ptu_or_accn_no?:          string | null;
+  ptu_date_issued?:          string | null;
+  accreditation_no?:         string | null;
+  accreditation_date_issued?: string | null;
 }
 
 export async function getSettings(): Promise<StoreSettings> {

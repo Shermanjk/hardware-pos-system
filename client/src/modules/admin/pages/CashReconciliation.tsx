@@ -325,7 +325,7 @@ function SalesTab({ sales }: { sales: CashSession["sales"] }) {
             const cashCollected = isCredit ? downPmt : s.total_amount;
             return (
               <tr key={s.id} className="hover:bg-gray-50">
-                <td className="px-3 py-2 font-mono text-xs text-blue-700">{s.invoice_number}</td>
+                <td className="px-3 py-2 font-mono text-xs text-blue-700">{s.invoice_number ? s.invoice_number.replace(/^INV-?/i, "") : "—"}</td>
                 <td className="px-3 py-2 text-gray-800 truncate max-w-[130px]">{s.customer_name}</td>
                 <td className="px-3 py-2 text-xs">
                   {isCredit ? (
@@ -428,7 +428,7 @@ function RefundsTab({ refunds }: { refunds: CashSession["refunds"] }) {
           {refunds.map((r) => (
             <tr key={r.id} className="hover:bg-gray-50">
               <td className="px-3 py-2 font-mono text-xs text-purple-700">{r.return_number}</td>
-              <td className="px-3 py-2 font-mono text-xs text-blue-700">{r.invoice_number}</td>
+              <td className="px-3 py-2 font-mono text-xs text-blue-700">{r.invoice_number ? r.invoice_number.replace(/^INV-?/i, "") : "—"}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums text-red-600">{fmt(r.refund_amount)}</td>
               <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
                 {new Date(r.created_at).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
