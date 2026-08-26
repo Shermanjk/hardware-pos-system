@@ -15,7 +15,7 @@ export interface BarcodePrinterConfig {
   printerName:      string;
 
   /** Printing engine type — determines which engine class is used. */
-  printerType:      "windows_driver";   // extend union when new engines are added
+  printerType:      "windows_driver" | "tspl" | "agent";
 
   // ── Label physical dimensions ──────────────────────────────────────────────
   labelWidthMm:     number;   // e.g. 30, 50, 60, 100

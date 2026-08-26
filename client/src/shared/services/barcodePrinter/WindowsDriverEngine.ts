@@ -192,44 +192,66 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
         margin: 0mm;
       }
       html, body {
-        width:  ${label_width_mm}mm !important;
-        height: ${label_height_mm}mm !important;
+        width:  100% !important;
+        height: auto !important;
         margin: 0mm !important;
         padding: 0mm !important;
+        background: #fff !important;
+        overflow: visible !important;
+      }
+      .label {
+        width:  ${label_width_mm}mm !important;
+        height: ${label_height_mm}mm !important;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+        break-after: page !important;
+        break-inside: avoid !important;
+      }
+      .label:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
       }
     }
 
     html, body {
-      width:  ${label_width_mm}mm;
-      height: ${label_height_mm}mm;
+      width:  100%;
+      height: auto;
       background: #fff;
-      overflow: hidden;
+      margin: 0;
+      padding: 0;
     }
 
     /* ── One label = one page ── */
     .label {
-      width:  ${label_width_mm}mm;
-      height: ${label_height_mm}mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      page-break-after: always;
-      page-break-inside: avoid;
-      overflow: hidden;
-      box-sizing: border-box;
+      display: block !important;
+      width:  ${label_width_mm}mm !important;
+      height: ${label_height_mm}mm !important;
+      page-break-after: always !important;
+      page-break-inside: avoid !important;
+      break-after: page !important;
+      break-inside: avoid !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
     }
-    .label:last-child { page-break-after: auto; }
+    .label:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
 
     /* ── Printable inner area (respects margins) ── */
     .label-inner {
-      width:   ${printW}mm;
-      height:  ${printH}mm;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      overflow: hidden;
-      box-sizing: border-box;
+      width:   100% !important;
+      height:  100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      padding-top:    ${margin_top_mm}mm !important;
+      padding-bottom: ${margin_bottom_mm}mm !important;
+      padding-left:   ${margin_left_mm}mm !important;
+      padding-right:  ${margin_right_mm}mm !important;
     }
 
     /* ── Store name — pinned to top, dynamic font size ── */
@@ -312,12 +334,18 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       });
     }
 
-    window.addEventListener('load', function() {
+    function doPrint() {
       fitTextElements();
       setTimeout(function() {
         window.print();
-      }, 50);
-    });
+      }, 80);
+    }
+
+    if (document.readyState === 'complete') {
+      doPrint();
+    } else {
+      window.addEventListener('load', doPrint);
+    }
 
     window.addEventListener('afterprint', function() {
       window.close();

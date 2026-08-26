@@ -14,6 +14,7 @@
  */
 
 import type { BarcodePrinterConfig } from "./config";
+import { LocalAgentBarcodeEngine } from "./LocalAgentBarcodeEngine";
 import type { BarcodePrinterEngine } from "./types";
 import { WindowsDriverEngine } from "./WindowsDriverEngine";
 
@@ -32,16 +33,9 @@ export function getPrinterEngine(config: BarcodePrinterConfig): BarcodePrinterEn
 
   switch (printerType) {
     case "windows_driver":
-      engine = new WindowsDriverEngine();
-      break;
-
-    // ── Future engines ────────────────────────────────────────────────────────
-    // case "zpl":   engine = new ZplEngine();   break;
-    // case "tspl":  engine = new TsplEngine();  break;
-    // case "network": engine = new NetworkPrinterEngine(); break;
-
     default:
       engine = new WindowsDriverEngine();
+      break;
   }
 
   engineCache.set(printerType, engine);
