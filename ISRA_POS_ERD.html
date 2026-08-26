@@ -2884,64 +2884,79 @@
       }, { passive: false });
 
       // Zoom Controls Buttons
-      document.getElementById("btn-zoom-in").addEventListener("click", () => {
-        state.scale = Math.min(state.scale * 1.2, 2.5);
-        updateTransform();
-      });
-      document.getElementById("btn-zoom-out").addEventListener("click", () => {
-        state.scale = Math.max(state.scale / 1.2, 0.15);
-        updateTransform();
-      });
-      document.getElementById("btn-zoom-reset").addEventListener("click", fitView);
-      document.getElementById("btn-fit").addEventListener("click", fitView);
-      document.getElementById("btn-reset-layout").addEventListener("click", resetLayout);
+      const btnZoomIn = document.getElementById("btn-zoom-in");
+      if (btnZoomIn) {
+        btnZoomIn.addEventListener("click", () => {
+          state.scale = Math.min(state.scale * 1.2, 2.5);
+          updateTransform();
+        });
+      }
+
+      const btnZoomOut = document.getElementById("btn-zoom-out");
+      if (btnZoomOut) {
+        btnZoomOut.addEventListener("click", () => {
+          state.scale = Math.max(state.scale / 1.2, 0.15);
+          updateTransform();
+        });
+      }
+
+      const btnZoomReset = document.getElementById("btn-zoom-reset");
+      if (btnZoomReset) btnZoomReset.addEventListener("click", fitView);
+
+      const btnFit = document.getElementById("btn-fit");
+      if (btnFit) btnFit.addEventListener("click", fitView);
+
+      const btnResetLayout = document.getElementById("btn-reset-layout");
+      if (btnResetLayout) btnResetLayout.addEventListener("click", resetLayout);
 
       // Line Mode Toggle
       const lineBtn = document.getElementById("btn-line-mode");
-      lineBtn.addEventListener("click", () => {
-        state.lineMode = state.lineMode === "focus" ? "all" : "focus";
-        lineBtn.textContent = state.lineMode === "focus" ? "Lines: Focus" : "Lines: All";
-        lineBtn.classList.toggle("active", state.lineMode === "all");
-        renderRelationships();
-      });
+      if (lineBtn) {
+        lineBtn.addEventListener("click", () => {
+          state.lineMode = state.lineMode === "focus" ? "all" : "focus";
+          lineBtn.textContent = state.lineMode === "focus" ? "Lines: Focus" : "Lines: All";
+          lineBtn.classList.toggle("active", state.lineMode === "all");
+          renderRelationships();
+        });
+      }
 
       // Mode Toggle (Overview vs Detailed)
       const modeBtn = document.getElementById("btn-mode-toggle");
-      modeBtn.addEventListener("click", () => {
-        state.viewMode = state.viewMode === "detailed" ? "overview" : "detailed";
-        modeBtn.textContent = state.viewMode === "detailed" ? "Detailed" : "Overview";
-        modeBtn.classList.toggle("active", state.viewMode === "overview");
-        renderTables();
-        renderRelationships();
-        if (state.selectedTableId) selectTable(state.selectedTableId);
-      });
+      if (modeBtn) {
+        modeBtn.addEventListener("click", () => {
+          state.viewMode = state.viewMode === "detailed" ? "overview" : "detailed";
+          modeBtn.textContent = state.viewMode === "detailed" ? "Detailed" : "Overview";
+          modeBtn.classList.toggle("active", state.viewMode === "overview");
+          renderTables();
+          renderRelationships();
+          if (state.selectedTableId) selectTable(state.selectedTableId);
+        });
+      }
 
       // BIR Fiscal Toggle
       const birBtn = document.getElementById("btn-bir-toggle");
-      birBtn.addEventListener("click", () => {
-        state.birHighlight = !state.birHighlight;
-        birBtn.classList.toggle("active", state.birHighlight);
+      if (birBtn) {
+        birBtn.addEventListener("click", () => {
+          state.birHighlight = !state.birHighlight;
+          birBtn.classList.toggle("active", state.birHighlight);
 
-        document.querySelectorAll(".table-node").forEach(node => {
-          const tId = node.id.replace("node-", "");
-          const table = TABLES.find(t => t.id === tId);
-          const isBir = table && (table.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(tId));
-          if (state.birHighlight) {
-            node.classList.toggle("highlighted", isBir);
-            node.classList.toggle("dimmed", !isBir);
-          } else {
-            node.classList.remove("highlighted", "dimmed");
-          }
+          document.querySelectorAll(".table-node").forEach(node => {
+            const tId = node.id.replace("node-", "");
+            const table = TABLES.find(t => t.id === tId);
+            const isBir = table && (table.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(tId));
+            if (state.birHighlight) {
+              node.classList.toggle("highlighted", isBir);
+              node.classList.toggle("dimmed", !isBir);
+            } else {
+              node.classList.remove("highlighted", "dimmed");
+            }
+          });
         });
-      });
-
-      // Export / Print
-      document.getElementById("btn-print").addEventListener("click", () => {
-        window.print();
-      });
+      }
 
       // Inspector Close
-      document.getElementById("insp-close").addEventListener("click", clearSelection);
+      const inspClose = document.getElementById("insp-close");
+      if (inspClose) inspClose.addEventListener("click", clearSelection);
 
       // Domain Filter Chips
       document.querySelectorAll(".filter-chip").forEach((chip) => {
