@@ -1,0 +1,3457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ISRA Hardware POS & Inventory Management System - Entity Relationship Diagram</title>
+  <style>
+    :root {
+      --bg-canvas: #090d16;
+      --bg-grid: #131d2e;
+      --bg-card: #151f32;
+      --bg-card-header: #1e2d48;
+      --border-color: #2b3d5c;
+      --border-highlight: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-pk: #facc15;
+      --text-fk: #38bdf8;
+      --text-field: #e2e8f0;
+      
+      /* Domain Colors */
+      --dom-security: #818cf8;
+      --dom-product: #34d399;
+      --dom-sales: #f43f5e;
+      --dom-customer: #fbbf24;
+      --dom-purchasing: #a78bfa;
+      --dom-cashier: #2dd4bf;
+      --dom-audit: #fb7185;
+
+      --panel-bg: rgba(13, 20, 36, 0.95);
+      --line-default: rgba(100, 116, 139, 0.65);
+      --line-active: #38bdf8;
+      --line-bir: rgba(244, 63, 94, 0.85);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: geometricPrecision;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: geometricPrecision;
+    }
+
+    /* ─── Top Control Bar ────────────────────────────────────────────── */
+    #topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 100;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #fff;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+    }
+
+    .brand-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-top: 1px;
+    }
+
+    .stats-badge-group {
+      display: flex;
+      gap: 6px;
+      margin-left: 14px;
+    }
+
+    .stat-badge {
+      background: #111a2e;
+      border: 1px solid #243552;
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .stat-badge span {
+      color: #38bdf8;
+      font-weight: 800;
+    }
+
+    /* ─── Search & Actions ─────────────────────────────────────────── */
+    .controls-section {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .search-wrapper {
+      position: relative;
+      width: 250px;
+    }
+
+    .search-input {
+      width: 100%;
+      height: 36px;
+      background: #090d16;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0 12px 0 34px;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--border-highlight);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .btn {
+      height: 36px;
+      padding: 0 11px;
+      background: #151f32;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      background: #243552;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .btn.active {
+      background: #0369a1;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .btn-bir {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: rgba(244, 63, 94, 0.4);
+      color: #fca5a5;
+    }
+    .btn-bir:hover {
+      background: rgba(244, 63, 94, 0.3);
+      border-color: #f43f5e;
+      color: #fff;
+    }
+
+    /* ─── Domain Filter Strip ────────────────────────────────────────── */
+    #filter-bar {
+      position: absolute;
+      top: 60px;
+      left: 0;
+      right: 0;
+      height: 42px;
+      background: rgba(9, 13, 22, 0.9);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid #1c2a42;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 18px;
+      z-index: 90;
+      overflow-x: auto;
+    }
+
+    .filter-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+
+    .filter-chip:hover {
+      background: #151f32;
+      color: #fff;
+    }
+
+    .filter-chip.active {
+      background: #243552;
+      color: #fff;
+      border-color: #38bdf8;
+    }
+
+    .chip-security.active { border-color: var(--dom-security); color: var(--dom-security); }
+    .chip-product.active { border-color: var(--dom-product); color: var(--dom-product); }
+    .chip-sales.active { border-color: var(--dom-sales); color: var(--dom-sales); }
+    .chip-customer.active { border-color: var(--dom-customer); color: var(--dom-customer); }
+    .chip-purchasing.active { border-color: var(--dom-purchasing); color: var(--dom-purchasing); }
+    .chip-cashier.active { border-color: var(--dom-cashier); color: var(--dom-cashier); }
+    .chip-audit.active { border-color: var(--dom-audit); color: var(--dom-audit); }
+
+    /* ─── Main Viewport Canvas ───────────────────────────────────────── */
+    #viewport {
+      position: absolute;
+      top: 102px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      cursor: grab;
+      background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.04) 0%, transparent 80%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    #viewport.dragging {
+      cursor: grabbing;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      /* Removed will-change: transform to prevent GPU texture raster downscaling blur */
+    }
+
+    /* ─── Domain Backdrop Zone Containers ────────────────────────────── */
+    .domain-zone-card {
+      position: absolute;
+      border-radius: 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      background: rgba(21, 31, 50, 0.25);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .domain-zone-header {
+      position: absolute;
+      top: 12px;
+      left: 16px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* ─── SVG Connector Layer ────────────────────────────────────────── */
+    #svg-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 8000px;
+      height: 6000px;
+      pointer-events: none;
+      z-index: 10;
+      shape-rendering: geometricPrecision;
+      text-rendering: geometricPrecision;
+    }
+
+    .rel-line {
+      stroke: var(--line-default);
+      stroke-width: 1.6;
+      fill: none;
+      transition: stroke 0.15s, stroke-width 0.15s, opacity 0.2s;
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+
+    .rel-line:hover {
+      stroke: var(--line-active) !important;
+      stroke-width: 3.5 !important;
+    }
+
+    .rel-line.active {
+      stroke: var(--line-active) !important;
+      stroke-width: 3.5 !important;
+      filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.7));
+    }
+
+    .rel-line.dimmed {
+      opacity: 0.08 !important;
+    }
+
+    .rel-line.bir-line {
+      stroke: var(--line-bir);
+    }
+
+    .rel-line.bir-line.active {
+      stroke: #f43f5e !important;
+      filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.8));
+    }
+
+    .cardinality-label {
+      font-size: 11px;
+      font-weight: 800;
+      fill: #f8fafc;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      pointer-events: none;
+      paint-order: stroke;
+      stroke: #090d16;
+      stroke-width: 4px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .rel-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      fill: #94a3b8;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      pointer-events: none;
+      paint-order: stroke;
+      stroke: #090d16;
+      stroke-width: 3px;
+    }
+
+    /* ─── Table Cards ────────────────────────────────────────────────── */
+    .table-node {
+      position: absolute;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      width: 320px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      z-index: 20;
+      transition: box-shadow 0.15s, border-color 0.15s, opacity 0.2s;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+
+    .table-node:hover {
+      box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.6);
+      border-color: #94a3b8;
+      z-index: 30;
+    }
+
+    .table-node.selected {
+      border-color: var(--border-highlight) !important;
+      box-shadow: 0 0 0 2px var(--border-highlight), 0 20px 30px -10px rgba(56, 189, 248, 0.5);
+      z-index: 40;
+    }
+
+    .table-node.highlighted {
+      border-color: #38bdf8 !important;
+      box-shadow: 0 0 0 1.5px #38bdf8;
+      z-index: 35;
+    }
+
+    .table-node.dimmed {
+      opacity: 0.2;
+    }
+
+    .table-header {
+      padding: 8px 12px;
+      border-top-left-radius: 7px;
+      border-top-right-radius: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: move;
+    }
+
+    .table-header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .table-name {
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: #fff;
+      word-break: break-word;
+    }
+
+    .table-domain-tag {
+      font-size: 8.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .table-desc {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.35;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    .table-body {
+      padding: 6px 0;
+      font-family: "JetBrains Mono", Consolas, "Fira Code", monospace;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .col-row {
+      padding: 3.5px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .col-row:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .col-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+
+    .col-badge {
+      font-size: 8.5px;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+    }
+
+    .badge-pk {
+      background: rgba(250, 204, 21, 0.2);
+      color: var(--text-pk);
+      border: 1px solid rgba(250, 204, 21, 0.4);
+    }
+
+    .badge-fk {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--text-fk);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .badge-bir {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+
+    .col-name {
+      color: var(--text-field);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+    }
+
+    .col-type {
+      color: var(--text-muted);
+      font-size: 9.5px;
+      flex-shrink: 0;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .col-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.06);
+      margin: 4px 0;
+    }
+
+    /* Domain Colors for Table Headers */
+    .dom-security .table-header { background: #312e81; border-top: 3px solid var(--dom-security); }
+    .dom-product .table-header  { background: #064e3b; border-top: 3px solid var(--dom-product); }
+    .dom-sales .table-header    { background: #881337; border-top: 3px solid var(--dom-sales); }
+    .dom-customer .table-header { background: #78350f; border-top: 3px solid var(--dom-customer); }
+    .dom-purchasing .table-header { background: #4c1d95; border-top: 3px solid var(--dom-purchasing); }
+    .dom-cashier .table-header  { background: #134e4a; border-top: 3px solid var(--dom-cashier); }
+    .dom-audit .table-header    { background: #4c0519; border-top: 3px solid var(--dom-audit); }
+
+    /* ─── Inspector Detail Sidebar ───────────────────────────────────── */
+    #inspector {
+      position: absolute;
+      top: 102px;
+      right: -420px;
+      width: 400px;
+      bottom: 20px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+      z-index: 80;
+      transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #inspector.open {
+      right: 20px;
+    }
+
+    .inspector-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .inspector-title-group h3 {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .inspector-title-group p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .inspector-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    .inspector-close:hover {
+      color: #fff;
+    }
+
+    .inspector-content {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .insp-section-title {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .insp-box {
+      background: #090d16;
+      border: 1px solid #243552;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #cbd5e1;
+    }
+
+    .insp-bir-box {
+      background: rgba(244, 63, 94, 0.08);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #fecdd3;
+      line-height: 1.55;
+    }
+
+    .insp-cols-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      max-height: 240px;
+      overflow-y: auto;
+      background: #090d16;
+      border: 1px solid #243552;
+      border-radius: 6px;
+      padding: 6px;
+    }
+
+    .insp-col-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      gap: 8px;
+    }
+
+    .insp-col-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .insp-col-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .insp-col-name {
+      color: var(--text-field);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .insp-col-type {
+      color: var(--text-muted);
+      font-size: 9.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .rel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rel-item {
+      padding: 8px 10px;
+      background: #090d16;
+      border: 1px solid #243552;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.15s;
+    }
+
+    .rel-item:hover {
+      border-color: var(--border-highlight);
+    }
+
+    .rel-item-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rel-card-badge {
+      font-size: 9px;
+      font-weight: 700;
+      font-family: monospace;
+      padding: 2px 5px;
+      background: #151f32;
+      border-radius: 4px;
+      color: #38bdf8;
+    }
+
+    /* ─── Legend Footer ──────────────────────────────────────────────── */
+    #legend-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 20px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 11px;
+      z-index: 50;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .legend-line {
+      width: 24px;
+      height: 2px;
+      background: var(--line-default);
+    }
+
+    /* ─── Nav / Zoom Floating Widget ─────────────────────────────────── */
+    #nav-controls {
+      position: absolute;
+      bottom: 16px;
+      right: 20px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 50;
+    }
+
+    .nav-btn {
+      width: 36px;
+      height: 36px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #243552;
+      color: #e2e8f0;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .nav-btn:last-child {
+      border-bottom: none;
+    }
+
+    .nav-btn:hover {
+      background: #243552;
+      color: #fff;
+    }
+
+    /* ─── Hardcopy Printable Data Dictionary Document Container ──────── */
+    #print-doc-container {
+      display: none;
+    }
+
+    /* ─── Print Mode Stylesheet ──────────────────────────────────────── */
+    @media print {
+      @page {
+        margin: 8mm 10mm;
+        size: auto;
+      }
+
+      #topbar, #filter-bar, #inspector, #legend-bar, #nav-controls, #print-modal {
+        display: none !important;
+      }
+
+      html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* ── Default Print: Multi-Page BIR Data Dictionary Report ── */
+      #viewport {
+        display: none !important;
+      }
+
+      #print-doc-container {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* ── Explicit Diagram Print Mode ── */
+      body.print-mode-diagram #print-doc-container {
+        display: none !important;
+      }
+
+      body.print-mode-diagram #viewport {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #ffffff !important;
+      }
+
+      body.print-mode-diagram #canvas {
+        transform: scale(0.33) !important;
+        transform-origin: top left !important;
+        background: #ffffff !important;
+      }
+
+      body.print-mode-diagram .domain-zone-card {
+        border: 1.5px dashed #94a3b8 !important;
+        background: #fafafa !important;
+      }
+
+      body.print-mode-diagram .domain-zone-header {
+        background: #f1f5f9 !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+
+      body.print-mode-diagram .table-node {
+        background: #ffffff !important;
+        border: 1.5px solid #0f172a !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+
+      body.print-mode-diagram .table-header {
+        background: #f1f5f9 !important;
+        color: #000000 !important;
+        border-bottom: 1.5px solid #0f172a !important;
+      }
+
+      body.print-mode-diagram .table-name { color: #000000 !important; font-weight: 800 !important; }
+      body.print-mode-diagram .table-desc { color: #334155 !important; }
+      body.print-mode-diagram .col-name { color: #000000 !important; }
+      body.print-mode-diagram .col-type { color: #475569 !important; }
+      body.print-mode-diagram .badge-pk { background: #fef08a !important; color: #854d0e !important; border: 1px solid #ca8a04 !important; }
+      body.print-mode-diagram .badge-fk { background: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #0284c7 !important; }
+      body.print-mode-diagram .badge-bir { background: #ffe4e6 !important; color: #9f1239 !important; border: 1px solid #f43f5e !important; }
+      body.print-mode-diagram .rel-line { stroke: #1e293b !important; stroke-width: 1.5px !important; }
+      body.print-mode-diagram .rel-line.bir-line { stroke: #dc2626 !important; stroke-width: 2px !important; }
+      body.print-mode-diagram .cardinality-label { fill: #000000 !important; stroke: #ffffff !important; stroke-width: 2px !important; font-weight: 800 !important; }
+
+      /* Data Dictionary Print Styles */
+      .doc-cover {
+        text-align: center;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #0f172a;
+        margin-bottom: 20px;
+      }
+
+      .doc-org-name {
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #475569;
+      }
+
+      .doc-main-title {
+        font-size: 20px;
+        font-weight: 900;
+        margin: 6px 0;
+        color: #0f172a;
+      }
+
+      .doc-sub-title {
+        font-size: 11.5px;
+        color: #334155;
+      }
+
+      .doc-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        padding: 10px 14px;
+        margin: 14px 0 20px;
+        font-size: 10.5px;
+      }
+
+      .doc-meta-grid div strong {
+        display: block;
+        color: #64748b;
+        font-size: 9px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+
+      .doc-domain-section {
+        margin-bottom: 24px;
+      }
+
+      .doc-domain-heading {
+        font-size: 14px;
+        font-weight: 800;
+        border-bottom: 2px solid #0f172a;
+        padding-bottom: 4px;
+        margin-bottom: 14px;
+        color: #0f172a;
+      }
+
+      .doc-table-card {
+        border: 1px solid #94a3b8;
+        border-radius: 4px;
+        margin-bottom: 16px;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        background: #ffffff;
+      }
+
+      .doc-table-header {
+        background: #f1f5f9;
+        border-bottom: 1px solid #94a3b8;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .doc-table-name {
+        font-size: 13px;
+        font-weight: 800;
+        font-family: monospace;
+        color: #0f172a;
+      }
+
+      .doc-table-info {
+        padding: 8px 12px;
+        font-size: 11px;
+        line-height: 1.45;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .doc-bir-badge {
+        display: inline-block;
+        background: #ffe4e6;
+        color: #9f1239;
+        font-size: 9px;
+        font-weight: 800;
+        padding: 1px 5px;
+        border-radius: 3px;
+        border: 1px solid #fecdd3;
+        margin-right: 4px;
+      }
+
+      .doc-grid-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.5px;
+      }
+
+      .doc-grid-table th {
+        background: #f8fafc;
+        border-bottom: 1px solid #cbd5e1;
+        padding: 5px 8px;
+        text-align: left;
+        font-weight: 700;
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #475569;
+      }
+
+      .doc-grid-table td {
+        border-bottom: 1px solid #f1f5f9;
+        padding: 4.5px 8px;
+        vertical-align: middle;
+      }
+
+      .doc-rel-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.5px;
+        margin-top: 10px;
+      }
+
+      .doc-rel-table th {
+        background: #f8fafc;
+        border-bottom: 1.5px solid #0f172a;
+        padding: 6px 8px;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 700;
+        color: #475569;
+      }
+
+      .doc-rel-table td {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 5px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Topbar ───────────────────────────────────────────────────────── -->
+  <header id="topbar">
+    <div class="brand-section">
+      <div class="brand-logo">ISRA</div>
+      <div>
+        <div class="brand-title">ISRA POS & INVENTORY</div>
+        <div class="brand-subtitle">Entity Relationship Diagram</div>
+      </div>
+      <div class="stats-badge-group">
+        <div class="stat-badge"><span id="stat-tables">37</span> Tables</div>
+        <div class="stat-badge"><span id="stat-rels">66</span> Relationships</div>
+      </div>
+    </div>
+
+    <div class="controls-section">
+      <div class="search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="Search table, column, or FK..." autocomplete="off">
+      </div>
+      <button class="btn" id="btn-line-mode" title="Toggle Line Density">Lines: Focus</button>
+      <button class="btn" id="btn-mode-toggle" title="Toggle Detailed vs Overview View">Detailed</button>
+      <button class="btn btn-bir" id="btn-bir-toggle" title="Highlight BIR fiscal entities">BIR Fiscal</button>
+      <button class="btn" id="btn-reset-layout" title="Reset table layout">Reset</button>
+      <button class="btn" id="btn-fit" title="Fit to Screen (0)">Fit View</button>
+    </div>
+  </header>
+
+  <!-- ─── Filter Bar ───────────────────────────────────────────────────── -->
+  <nav id="filter-bar">
+    <button class="filter-chip active" data-domain="all">All Domains (37)</button>
+    <button class="filter-chip chip-security" data-domain="security">1. Security & Users (2)</button>
+    <button class="filter-chip chip-product" data-domain="product">2. Product & Inventory (7)</button>
+    <button class="filter-chip chip-sales" data-domain="sales">3. Sales & Fiscal Core (11)</button>
+    <button class="filter-chip chip-customer" data-domain="customer">4. Customer & Credit (4)</button>
+    <button class="filter-chip chip-purchasing" data-domain="purchasing">5. Purchasing (5)</button>
+    <button class="filter-chip chip-cashier" data-domain="cashier">6. Cashiering & Z-Reading (3)</button>
+    <button class="filter-chip chip-audit" data-domain="audit">7. Audit & Configuration (5)</button>
+  </nav>
+
+  <!-- ─── Canvas Viewport ──────────────────────────────────────────────── -->
+  <main id="viewport">
+    <div id="canvas">
+      <!-- Domain Zone Backdrops -->
+      <div id="domain-zones"></div>
+      
+      <!-- SVG Connector Layer -->
+      <svg id="svg-layer">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+          </marker>
+        </defs>
+      </svg>
+      
+      <!-- Nodes Layer -->
+      <div id="nodes-layer"></div>
+    </div>
+  </main>
+
+  <!-- ─── Inspector Side Panel ─────────────────────────────────────────── -->
+  <aside id="inspector">
+    <div class="inspector-header">
+      <div class="inspector-title-group">
+        <h3 id="insp-title">TABLE_NAME</h3>
+        <p id="insp-domain">Domain Classification</p>
+      </div>
+      <button class="inspector-close" id="insp-close" title="Close Panel (ESC)">&times;</button>
+    </div>
+    <div class="inspector-content">
+      <div>
+        <div class="insp-section-title">Table Purpose & Business Role</div>
+        <div class="insp-box" id="insp-purpose">Description</div>
+      </div>
+
+      <div id="insp-bir-section">
+        <div class="insp-section-title" style="color: #fda4af;">★ BIR & Fiscal Relevance</div>
+        <div class="insp-box insp-bir-box" id="insp-bir">BIR Notes</div>
+      </div>
+
+      <div>
+        <div class="insp-section-title">Keys & Structure</div>
+        <div class="insp-box" id="insp-keys">Keys</div>
+      </div>
+
+      <div>
+        <div class="insp-section-title">Column Dictionary (<span id="insp-col-count">0</span>)</div>
+        <div class="insp-cols-list" id="insp-cols"></div>
+      </div>
+
+      <div>
+        <div class="insp-section-title">Relationships (<span id="insp-rel-count">0</span>)</div>
+        <div class="rel-list" id="insp-rels"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Legend ───────────────────────────────────────────────────────── -->
+  <div id="legend-bar">
+    <div class="legend-item"><span class="col-badge badge-pk">PK</span> Primary Key</div>
+    <div class="legend-item"><span class="col-badge badge-fk">FK</span> Foreign Key</div>
+    <div class="legend-item"><span class="col-badge badge-bir">BIR</span> Regulated Fiscal Field</div>
+    <div class="legend-item">
+      <div class="legend-line"></div>
+      <span>1 ─────────&lt; N (One-to-Many Relationship)</span>
+    </div>
+    <div class="legend-item" style="color:#38bdf8;">
+      <span>💡 Tip: Drag any table header to rearrange</span>
+    </div>
+  </div>
+
+  <!-- ─── Print Mode Selector Modal ────────────────────────────────────── -->
+  <div id="print-modal">
+    <div class="print-modal-card">
+      <div class="print-modal-header">
+        <h3>Export / Print Options</h3>
+        <button class="inspector-close" id="btn-print-modal-close" title="Close">&times;</button>
+      </div>
+      <div class="print-modal-body">
+        <div class="print-option-card" id="btn-opt-print-doc">
+          <div>
+            <div class="print-option-title">📄 Official BIR Data Dictionary Report</div>
+            <div class="print-option-desc">Complete multi-page hardcopy specification detailing all 37 tables, column definitions, data types, PK/FK/BIR tags, and the 66-relationship matrix. Formatted specifically for BIR accreditation.</div>
+          </div>
+          <span class="print-option-badge">Recommended</span>
+        </div>
+
+        <div class="print-option-card" id="btn-opt-print-diagram">
+          <div>
+            <div class="print-option-title">🗺️ Visual ERD Diagram (Landscape)</div>
+            <div class="print-option-desc">Scaled 2D architectural diagram with domain grouping, entity cards, and vector connection lines formatted for landscape printing.</div>
+          </div>
+          <span class="print-option-badge">Visual Chart</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Hardcopy Printable Data Dictionary Report Container ─────────── -->
+  <div id="print-doc-container"></div>
+
+  <!-- ─── Embedded Data & Visualizer Logic ─────────────────────────────── -->
+  <script>
+    /* =========================================================================
+       1. AUTHORITATIVE AUDITED SCHEMA DATA (37 Tables, 66 Relationships)
+       Arranged in clean 2D spatial zones without overlapping connections
+       ========================================================================= */
+    const DOMAIN_ZONES = [
+      { id: "security", title: "1. Security & Master Directory", x: 40, y: 40, width: 380, height: 1850, color: "var(--dom-security)" },
+      { id: "product", title: "2. Product Catalog & Inventory Hub", x: 460, y: 40, width: 380, height: 2600, color: "var(--dom-product)" },
+      { id: "sales", title: "3. Sales & Fiscal Core (Invoices)", x: 880, y: 40, width: 380, height: 2950, color: "var(--dom-sales)" },
+      { id: "returns_cashier", title: "4. Returns, Voids & Cash Drawer", x: 1300, y: 40, width: 380, height: 2750, color: "var(--dom-sales)" },
+      { id: "customer", title: "5. Customer Accounts Receivable (Utang)", x: 1720, y: 40, width: 380, height: 1750, color: "var(--dom-customer)" },
+      { id: "purchasing", title: "6. Purchasing & External Processing", x: 2140, y: 40, width: 380, height: 2250, color: "var(--dom-purchasing)" },
+      { id: "audit_config", title: "7. BIR Accumulators & System Admin", x: 2560, y: 40, width: 380, height: 3600, color: "var(--dom-audit)" }
+    ];
+
+    const INITIAL_TABLES = [
+      // ─── Zone 1: Security & Master Directory ────────────────────────────────
+      {
+        id: "users",
+        name: "users",
+        domain: "security",
+        domainLabel: "Security & Users",
+        desc: "User master accounts, authentication credentials & RBAC roles",
+        bir: "Identifies cashier on official invoices and admin authorizers on voids/discounts/Z-readings.",
+        x: 80, y: 100,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "employee_id", type: "varchar(20) UK" },
+          { name: "full_name", type: "varchar(150)" },
+          { name: "username", type: "varchar(50) UK" },
+          { name: "password_hash", type: "varchar(255)" },
+          { name: "role", type: "enum(role)" },
+          { name: "contact_number", type: "varchar(20)" },
+          { name: "email", type: "varchar(100)" },
+          { name: "status", type: "enum(status)" },
+          { name: "must_change_password", type: "tinyint(1)" },
+          { name: "password_changed_at", type: "datetime" },
+          { name: "created_at", type: "timestamp" },
+          { name: "updated_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "audit_logs",
+        name: "audit_logs",
+        domain: "security",
+        domainLabel: "Security & Users",
+        desc: "Centralized append-only audit trail for administrative and system events",
+        bir: "Mandatory BIR audit trail capturing manager overrides, setting changes, logins, and adjustments.",
+        x: 80, y: 550,
+        pk: ["id"],
+        fks: ["performed_by_id", "target_user_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "action", type: "varchar(64)" },
+          { name: "performed_by_id", type: "int FK" },
+          { name: "performed_by_username", type: "varchar(255)" },
+          { name: "target_user_id", type: "int FK" },
+          { name: "target_username", type: "varchar(255)" },
+          { name: "entity_type", type: "varchar(64)" },
+          { name: "entity_id", type: "int" },
+          { name: "previous_values", type: "json" },
+          { name: "new_values", type: "json" },
+          { name: "reason", type: "varchar(500)" },
+          { name: "metadata", type: "json" },
+          { name: "created_at", type: "datetime", isBir: true }
+        ]
+      },
+      {
+        id: "categories",
+        name: "categories",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Classification hierarchy for hardware merchandise",
+        bir: "Product category reporting and tax category segmentation.",
+        x: 80, y: 1000,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "category_name", type: "varchar(100)" },
+          { name: "description", type: "text" },
+          { name: "created_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "units",
+        name: "units",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Units of measurement with decimal/fractional permission flags",
+        bir: "Unit abbreviations printed on official BIR sales invoices.",
+        x: 80, y: 1220,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "unit_name", type: "varchar(50)" },
+          { name: "abbreviation", type: "varchar(30)" },
+          { name: "unit_type", type: "enum(unit_type)" },
+          { name: "allow_decimal", type: "tinyint(1)" },
+          { name: "description", type: "varchar(255)" },
+          { name: "status", type: "enum(status)" }
+        ]
+      },
+      {
+        id: "suppliers",
+        name: "suppliers",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Vendor directory for inventory purchasing and commodity sourcing",
+        bir: "Supplier TIN and contact profiling for purchasing records.",
+        x: 80, y: 1510,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "supplier_name", type: "varchar(150)" },
+          { name: "contact_person", type: "varchar(150)" },
+          { name: "contact_number", type: "varchar(20)" },
+          { name: "email", type: "varchar(100)" },
+          { name: "address", type: "text" },
+          { name: "status", type: "enum(status)" },
+          { name: "created_at", type: "timestamp" }
+        ]
+      },
+
+      // ─── Zone 2: Product Catalog & Inventory Hub ────────────────────────────
+      {
+        id: "products",
+        name: "products",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Master product catalog containing prices, tax types & stock levels",
+        bir: "Authoritative tax type classification (VATable, Exempt, Zero-Rated) and selling price determination.",
+        x: 500, y: 100,
+        pk: ["id"],
+        fks: ["category_id", "unit_id", "supplier_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "barcode", type: "varchar(50) UK" },
+          { name: "barcode_source", type: "enum(barcode_src)" },
+          { name: "supplier_barcode", type: "varchar(50)" },
+          { name: "product_name", type: "varchar(150)" },
+          { name: "description", type: "text" },
+          { name: "category_id", type: "int FK" },
+          { name: "supplier_id", type: "int FK" },
+          { name: "unit_id", type: "int FK" },
+          { name: "cost_price", type: "decimal(10,2)" },
+          { name: "selling_price", type: "decimal(10,2)" },
+          { name: "quantity", type: "decimal(12,3)" },
+          { name: "reorder_level", type: "int" },
+          { name: "image", type: "varchar(255)" },
+          { name: "status", type: "enum(status)" },
+          { name: "is_returnable", type: "tinyint(1)" },
+          { name: "damaged_stock", type: "decimal(12,3)" },
+          { name: "tax_type", type: "enum(tax_type)", isBir: true },
+          { name: "pricing_type", type: "enum(pricing_type)" },
+          { name: "product_usage", type: "enum(usage_type)" },
+          { name: "quantity_type", type: "enum(qty_type)" },
+          { name: "created_at", type: "timestamp" },
+          { name: "updated_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "inventory_logs",
+        name: "inventory_logs",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Append-only stock card ledger tracking all physical stock movements",
+        bir: "Provides stock audit card traceability required for inventory valuation inspection.",
+        x: 500, y: 780,
+        pk: ["id"],
+        fks: ["product_id", "user_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "product_id", type: "int FK" },
+          { name: "user_id", type: "int FK" },
+          { name: "transaction_type", type: "enum(trans_type)" },
+          { name: "quantity_change", type: "decimal(12,3)" },
+          { name: "quantity", type: "decimal(12,3)" },
+          { name: "remaining_stock", type: "decimal(12,3)" },
+          { name: "reference", type: "varchar(50)" },
+          { name: "action", type: "varchar(50)" },
+          { name: "notes", type: "text" },
+          { name: "commodity_purchase_id", type: "int" },
+          { name: "created_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "stock_count_adjustment_requests",
+        name: "stock_count_adjustment_requests",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Physical count variance adjustment approvals for standard products",
+        bir: "Supervisor-authorized stock variance write-offs and adjustment logging.",
+        x: 500, y: 1220,
+        pk: ["id"],
+        fks: ["product_id", "prepared_by", "approved_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "product_id", type: "int FK" },
+          { name: "system_quantity", type: "int" },
+          { name: "physical_quantity", type: "int" },
+          { name: "difference", type: "int (stored)" },
+          { name: "reason", type: "enum(loss_reason)" },
+          { name: "remarks", type: "varchar(500)" },
+          { name: "prepared_by", type: "int FK" },
+          { name: "prepared_at", type: "datetime" },
+          { name: "status", type: "enum(status)" },
+          { name: "approved_by", type: "int FK" },
+          { name: "approved_at", type: "datetime" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "reference", type: "varchar(50) UK" }
+        ]
+      },
+      {
+        id: "market_based_adjustment_requests",
+        name: "market_based_adjustment_requests",
+        domain: "product",
+        domainLabel: "Product & Inventory",
+        desc: "Shrinkage, drying & loss adjustment approvals for raw commodities",
+        bir: "Loss/shrinkage justification documentation for tax-deductible agricultural loss.",
+        x: 500, y: 1720,
+        pk: ["id"],
+        fks: ["product_id", "prepared_by", "approved_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "product_id", type: "int FK" },
+          { name: "system_quantity", type: "decimal(12,3)" },
+          { name: "physical_quantity", type: "decimal(12,3)" },
+          { name: "difference", type: "decimal(12,3) (stored)" },
+          { name: "reason", type: "enum(loss_reason)" },
+          { name: "remarks", type: "varchar(500)" },
+          { name: "prepared_by", type: "int FK" },
+          { name: "prepared_at", type: "datetime" },
+          { name: "status", type: "enum(status)" },
+          { name: "approved_by", type: "int FK" },
+          { name: "approved_at", type: "datetime" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "reference", type: "varchar(50) UK" }
+        ]
+      },
+      {
+        id: "commodity_prices",
+        name: "commodity_prices",
+        domain: "purchasing",
+        domainLabel: "Purchasing",
+        desc: "Daily benchmark pricing ledger for raw agricultural commodities",
+        bir: "Audit proof of market price determinations for raw material procurement.",
+        x: 500, y: 2220,
+        pk: ["id"],
+        fks: ["product_id", "changed_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "product_id", type: "int FK" },
+          { name: "price_per_unit", type: "decimal(10,4)" },
+          { name: "effective_from", type: "datetime" },
+          { name: "changed_by", type: "int FK" },
+          { name: "reason", type: "varchar(500)" }
+        ]
+      },
+
+      // ─── Zone 3: Sales & Fiscal Core ────────────────────────────────────────
+      {
+        id: "discounts",
+        name: "discounts",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Discount master catalog (Percentage/Fixed, SC/PWD flags)",
+        bir: "Defines statutory 20% discount rules for Senior Citizen (RA 9994) and PWD (RA 10754).",
+        x: 920, y: 100,
+        pk: ["id"],
+        fks: ["created_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "discount_name", type: "varchar(100)" },
+          { name: "discount_type", type: "enum('Percentage','Fixed')" },
+          { name: "value", type: "decimal(10,2)" },
+          { name: "status", type: "enum(status)" },
+          { name: "requires_admin_approval", type: "tinyint(1)" },
+          { name: "is_sc_pwd", type: "tinyint(1)", isBir: true },
+          { name: "created_by", type: "int FK" },
+          { name: "created_at", type: "timestamp" },
+          { name: "updated_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "discount_requests",
+        name: "discount_requests",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Cashier requests for manager approval on price reductions",
+        bir: "Supervisor authorization audit record for applied non-standard discounts.",
+        x: 920, y: 480,
+        pk: ["id"],
+        fks: ["sale_id", "discount_id", "cashier_id", "approved_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "discount_id", type: "int FK" },
+          { name: "cashier_id", type: "int FK" },
+          { name: "requested_percentage", type: "decimal(5,2)" },
+          { name: "discount_amount", type: "decimal(10,2)" },
+          { name: "reason", type: "varchar(500)" },
+          { name: "status", type: "enum(status)" },
+          { name: "approved_by", type: "int FK" },
+          { name: "approved_at", type: "datetime" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "created_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "payment_methods",
+        name: "payment_methods",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Accepted payment tender types (Cash, Credit / Utang, etc.)",
+        bir: "Payment breakdown printed on official sales receipts.",
+        x: 920, y: 920,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "method_name", type: "varchar(50)" },
+          { name: "is_active", type: "tinyint(1)" },
+          { name: "requires_reference", type: "tinyint(1)" },
+          { name: "created_at", type: "timestamp" }
+        ]
+      },
+      {
+        id: "sales",
+        name: "sales",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Primary transaction header for finalized Sales Invoices",
+        bir: "Official Sales Invoice master record, gapless numbering, tax base, 12% output VAT, SC/PWD exemption. Protected by delete & immutability triggers.",
+        x: 920, y: 1180,
+        pk: ["id"],
+        fks: ["cashier_id", "customer_id", "discount_id", "payment_method_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "invoice_number", type: "varchar(30) UK", isBir: true },
+          { name: "cashier_id", type: "int FK" },
+          { name: "customer_id", type: "int FK" },
+          { name: "customer_name", type: "varchar(150)" },
+          { name: "customer_address", type: "text", isBir: true },
+          { name: "customer_tin", type: "varchar(30)", isBir: true },
+          { name: "business_style", type: "varchar(100)", isBir: true },
+          { name: "subtotal", type: "decimal(10,2)", isBir: true },
+          { name: "discount", type: "decimal(10,2)", isBir: true },
+          { name: "discount_id", type: "int FK" },
+          { name: "sc_pwd_type", type: "enum(sc_pwd_type)", isBir: true },
+          { name: "sc_pwd_id", type: "varchar(50)", isBir: true },
+          { name: "vat_sales", type: "decimal(10,2)", isBir: true },
+          { name: "vat_amount", type: "decimal(10,2)", isBir: true },
+          { name: "vat_exempt_amount", type: "decimal(10,2)", isBir: true },
+          { name: "total_amount", type: "decimal(10,2)", isBir: true },
+          { name: "cash_tendered", type: "decimal(10,2)" },
+          { name: "change_amount", type: "decimal(10,2)" },
+          { name: "payment_method_id", type: "int FK" },
+          { name: "payment_type", type: "enum('CASH','CREDIT')" },
+          { name: "amount_paid_at_sale", type: "decimal(12,2)" },
+          { name: "credit_balance", type: "decimal(12,2)" },
+          { name: "transaction_status", type: "enum(trans_status)" },
+          { name: "void_status", type: "enum(void_status)" },
+          { name: "receipt_printed", type: "tinyint(1)" },
+          { name: "client_transaction_id", type: "varchar(100)" },
+          { name: "payment_status", type: "enum(pay_status)" },
+          { name: "created_at", type: "timestamp", isBir: true }
+        ]
+      },
+      {
+        id: "sale_items",
+        name: "sale_items",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Itemized line items snapshotting pricing & line VAT at checkout",
+        bir: "Line-item VAT calculation (taxable_amount, vat_amount, tax_rate 12.00). Protected by delete trigger.",
+        x: 920, y: 2060,
+        pk: ["id"],
+        fks: ["sale_id", "product_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "product_id", type: "int FK" },
+          { name: "quantity", type: "decimal(12,3)" },
+          { name: "selling_price", type: "decimal(10,2)" },
+          { name: "unit_price", type: "decimal(10,2)" },
+          { name: "subtotal", type: "decimal(10,2)", isBir: true },
+          { name: "tax_type", type: "enum(tax_type)", isBir: true },
+          { name: "tax_rate", type: "decimal(5,2)", isBir: true },
+          { name: "taxable_amount", type: "decimal(10,2)", isBir: true },
+          { name: "vat_amount", type: "decimal(10,2)", isBir: true }
+        ]
+      },
+      {
+        id: "suspended_sales",
+        name: "suspended_sales",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Parked cashier carts holding transaction state in JSON",
+        bir: "Temporary pre-sale state; does not affect fiscal accumulators or consume invoice numbers.",
+        x: 920, y: 2480,
+        pk: ["id"],
+        fks: ["cashier_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "suspended_order_id", type: "varchar(50) UK" },
+          { name: "cashier_id", type: "int FK" },
+          { name: "customer_name", type: "varchar(255)" },
+          { name: "customer_address", type: "varchar(255)" },
+          { name: "customer_tin", type: "varchar(50)" },
+          { name: "cart_data", type: "json" },
+          { name: "status", type: "enum(status)" },
+          { name: "label", type: "varchar(255)" },
+          { name: "created_at", type: "timestamp" },
+          { name: "updated_at", type: "timestamp" }
+        ]
+      },
+
+      // ─── Zone 4: Returns, Voids & Cash Drawer ───────────────────────────────
+      {
+        id: "returns",
+        name: "returns",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Return/refund header tracking merchandise intake & resolution",
+        bir: "Generates sequential Return / Credit Note (RTN-XXXXXX) and updates Z-reading return accumulators.",
+        x: 1340, y: 100,
+        pk: ["id"],
+        fks: ["sale_id", "processed_by", "approved_by", "resolved_by", "exchange_product_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "return_number", type: "varchar(20) UK", isBir: true },
+          { name: "sale_id", type: "int FK" },
+          { name: "processed_by", type: "int FK" },
+          { name: "approved_by", type: "int FK" },
+          { name: "resolved_by", type: "int FK" },
+          { name: "status", type: "enum(return_status)" },
+          { name: "resolution", type: "enum(resolution_type)" },
+          { name: "item_condition", type: "enum(condition_type)" },
+          { name: "return_reason", type: "varchar(500)" },
+          { name: "refund_amount", type: "decimal(10,2)", isBir: true },
+          { name: "credit_refund_amount", type: "decimal(12,2)" },
+          { name: "cash_refund_amount", type: "decimal(12,2)" },
+          { name: "exchange_product_id", type: "int FK" },
+          { name: "exchange_quantity", type: "int" },
+          { name: "additional_payment", type: "decimal(10,2)" },
+          { name: "refund_difference", type: "decimal(10,2)" },
+          { name: "receipt_printed", type: "tinyint(1)" },
+          { name: "created_at", type: "datetime" },
+          { name: "resolved_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "return_items",
+        name: "return_items",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Itemized line items returned with effective discounted unit prices",
+        bir: "Reconciles returned tax base and credit amount against original sale invoice.",
+        x: 1340, y: 720,
+        pk: ["id"],
+        fks: ["return_id", "sale_item_id", "product_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "return_id", type: "int FK" },
+          { name: "sale_item_id", type: "int FK" },
+          { name: "product_id", type: "int FK" },
+          { name: "quantity_returned", type: "int" },
+          { name: "unit_price", type: "decimal(10,2)" },
+          { name: "effective_unit_price", type: "decimal(12,2)", isBir: true }
+        ]
+      },
+      {
+        id: "customer_store_credit",
+        name: "customer_store_credit",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Store credit balances issued from return resolutions",
+        bir: "Non-cash refund liability accounting.",
+        x: 1340, y: 1000,
+        pk: ["id"],
+        fks: ["customer_id", "return_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "customer_id", type: "int FK" },
+          { name: "customer_name", type: "varchar(255)" },
+          { name: "credit_amount", type: "decimal(10,2)" },
+          { name: "remaining_balance", type: "decimal(10,2)" },
+          { name: "issued_date", type: "datetime" },
+          { name: "expiration_date", type: "datetime" },
+          { name: "status", type: "enum(status)" },
+          { name: "return_id", type: "int FK" }
+        ]
+      },
+      {
+        id: "sale_voids",
+        name: "sale_voids",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Void request and supervisor approval tracking for sales invoices",
+        bir: "Void audit trail. Sales invoices are never deleted; voided status preserves sequence in Z-reading.",
+        x: 1340, y: 1340,
+        pk: ["id"],
+        fks: ["sale_id", "requested_by", "approved_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "requested_by", type: "int FK" },
+          { name: "approved_by", type: "int FK" },
+          { name: "status", type: "enum(status)" },
+          { name: "reason", type: "varchar(500)" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "created_at", type: "datetime" },
+          { name: "resolved_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "receipt_reprint_log",
+        name: "receipt_reprint_log",
+        domain: "sales",
+        domainLabel: "Sales & Fiscal",
+        desc: "Audit log of duplicate sales receipts and return vouchers",
+        bir: "Mandatory BIR log tracking duplicate receipt issuances and cashier justification.",
+        x: 1340, y: 1680,
+        pk: ["id"],
+        fks: ["sale_id", "return_id", "purchase_id", "reprinted_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "return_id", type: "int FK" },
+          { name: "purchase_id", type: "int FK" },
+          { name: "reprinted_by", type: "int FK" },
+          { name: "reason", type: "varchar(200)" },
+          { name: "created_at", type: "datetime", isBir: true }
+        ]
+      },
+      {
+        id: "cash_sessions",
+        name: "cash_sessions",
+        domain: "cashier",
+        domainLabel: "Cashiering",
+        desc: "Shift cash drawer reconciliation (opening float, sales, variance)",
+        bir: "Shift cash drawer reconciliation tracking over/short variances and cash movements.",
+        x: 1340, y: 1980,
+        pk: ["id"],
+        fks: ["cashier_id", "reviewed_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "cashier_id", type: "int FK" },
+          { name: "shift_date", type: "date" },
+          { name: "shift_label", type: "varchar(50)" },
+          { name: "opened_at", type: "datetime" },
+          { name: "opening_cash", type: "decimal(12,2)" },
+          { name: "closed_at", type: "datetime" },
+          { name: "actual_cash", type: "decimal(12,2)" },
+          { name: "cash_sales", type: "decimal(12,2)" },
+          { name: "cash_refunds", type: "decimal(12,2)" },
+          { name: "cash_paid_out", type: "decimal(12,2)" },
+          { name: "expected_cash", type: "decimal(12,2)" },
+          { name: "variance", type: "decimal(12,2)" },
+          { name: "status", type: "enum('Balanced','Short','Over')" },
+          { name: "reviewed_by", type: "int FK" },
+          { name: "reviewed_at", type: "datetime" },
+          { name: "review_notes", type: "text" },
+          { name: "session_status", type: "enum('open','closed')" },
+          { name: "created_at", type: "datetime" },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+
+      // ─── Zone 5: Customer Accounts Receivable (Utang) ───────────────────────
+      {
+        id: "customers",
+        name: "customers",
+        domain: "customer",
+        domainLabel: "Customer & Credit",
+        desc: "Customer master with credit limits, current balance & tax credentials",
+        bir: "Stores registered Customer TIN, Business Style, and Address for commercial sales invoices.",
+        x: 1760, y: 100,
+        pk: ["id"],
+        fks: ["created_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "customer_code", type: "varchar(30) UK" },
+          { name: "full_name", type: "varchar(150)" },
+          { name: "address", type: "text", isBir: true },
+          { name: "contact_number", type: "varchar(30)" },
+          { name: "tin", type: "varchar(30)", isBir: true },
+          { name: "business_style", type: "varchar(100)", isBir: true },
+          { name: "credit_limit", type: "decimal(12,2)" },
+          { name: "current_balance", type: "decimal(12,2)" },
+          { name: "is_credit_enabled", type: "tinyint(1)" },
+          { name: "status", type: "enum(status)" },
+          { name: "created_by", type: "int FK" },
+          { name: "created_at", type: "datetime" },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "credit_ledger",
+        name: "credit_ledger",
+        domain: "customer",
+        domainLabel: "Customer & Credit",
+        desc: "Append-only Accounts Receivable ledger for debt creation & payment",
+        bir: "Auditable sub-ledger tracking non-cash debt and payment liquidation.",
+        x: 1760, y: 560,
+        pk: ["id"],
+        fks: ["customer_id", "sale_id", "recorded_by", "authorized_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "customer_id", type: "int FK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "entry_type", type: "enum(entry_type)" },
+          { name: "amount", type: "decimal(12,2)" },
+          { name: "reference", type: "varchar(100)" },
+          { name: "notes", type: "varchar(500)" },
+          { name: "recorded_by", type: "int FK" },
+          { name: "authorized_by", type: "int FK" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "credit_allocations",
+        name: "credit_allocations",
+        domain: "customer",
+        domainLabel: "Customer & Credit",
+        desc: "FIFO payment liquidation mapping payments to specific credit sales",
+        bir: "Matches debt settlement directly to original sales invoice debt.",
+        x: 1760, y: 940,
+        pk: ["id"],
+        fks: ["payment_ledger_id", "sale_ledger_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "payment_ledger_id", type: "int FK" },
+          { name: "sale_ledger_id", type: "int FK" },
+          { name: "amount_applied", type: "decimal(12,2)" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "credit_limit_overrides",
+        name: "credit_limit_overrides",
+        domain: "customer",
+        domainLabel: "Customer & Credit",
+        desc: "Supervisor override authorizations for credit sales exceeding limits",
+        bir: "Credit authorization audit trail.",
+        x: 1760, y: 1180,
+        pk: ["id"],
+        fks: ["customer_id", "sale_id", "requested_by", "authorized_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "customer_id", type: "int FK" },
+          { name: "sale_id", type: "int FK" },
+          { name: "requested_by", type: "int FK" },
+          { name: "authorized_by", type: "int FK" },
+          { name: "status", type: "enum(status)" },
+          { name: "requested_amount", type: "decimal(12,2)" },
+          { name: "current_limit", type: "decimal(12,2)" },
+          { name: "current_balance", type: "decimal(12,2)" },
+          { name: "reason", type: "varchar(500)" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "created_at", type: "datetime" },
+          { name: "resolved_at", type: "datetime" }
+        ]
+      },
+
+      // ─── Zone 6: Purchasing & External Processing ───────────────────────────
+      {
+        id: "commodity_purchases",
+        name: "commodity_purchases",
+        domain: "purchasing",
+        domainLabel: "Purchasing",
+        desc: "Procurement records with dirt/moisture deductions & seller payout",
+        bir: "Purchase voucher documentation and raw commodity inventory valuation.",
+        x: 2180, y: 100,
+        pk: ["id"],
+        fks: ["product_id", "supplier_id", "unit_id", "prepared_by", "approved_by", "recorded_by", "paid_by", "rejected_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "status", type: "enum(status)" },
+          { name: "prepared_by", type: "int FK" },
+          { name: "product_id", type: "int FK" },
+          { name: "supplier_id", type: "int FK" },
+          { name: "seller_name", type: "varchar(150)" },
+          { name: "seller_address", type: "varchar(500)" },
+          { name: "seller_contact", type: "varchar(50)" },
+          { name: "quantity", type: "decimal(10,4)" },
+          { name: "deducted_quantity", type: "decimal(10,4)" },
+          { name: "payable_quantity", type: "decimal(10,4)" },
+          { name: "deduction_amount", type: "decimal(12,4)" },
+          { name: "unit_id", type: "int FK" },
+          { name: "unit_name", type: "varchar(50)" },
+          { name: "reference_price", type: "decimal(10,4)" },
+          { name: "deduction_per_unit", type: "decimal(10,4)" },
+          { name: "final_unit_price", type: "decimal(10,4)" },
+          { name: "gross_amount", type: "decimal(12,4)" },
+          { name: "total_deduction", type: "decimal(12,4)" },
+          { name: "final_amount", type: "decimal(12,4)" },
+          { name: "remarks", type: "varchar(500)" },
+          { name: "recorded_by", type: "int FK" },
+          { name: "transaction_date", type: "date" },
+          { name: "created_at", type: "datetime" },
+          { name: "payment_status", type: "enum(pay_status)" },
+          { name: "amount_paid", type: "decimal(12,4)" },
+          { name: "payment_method", type: "varchar(50)" },
+          { name: "paid_at", type: "datetime" },
+          { name: "paid_by", type: "int FK" },
+          { name: "payment_reference", type: "varchar(100)" },
+          { name: "approved_by", type: "int FK" },
+          { name: "approved_at", type: "datetime" },
+          { name: "rejected_by", type: "int FK" },
+          { name: "rejected_at", type: "datetime" },
+          { name: "rejection_reason", type: "varchar(500)" },
+          { name: "receipt_printed", type: "tinyint(1)" }
+        ]
+      },
+      {
+        id: "commodity_purchase_payments",
+        name: "commodity_purchase_payments",
+        domain: "purchasing",
+        domainLabel: "Purchasing",
+        desc: "Append-only disbursement payments made to commodity sellers",
+        bir: "Cash outflow documentation for procurement auditing.",
+        x: 2180, y: 1160,
+        pk: ["id"],
+        fks: ["commodity_purchase_id", "recorded_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "commodity_purchase_id", type: "int FK" },
+          { name: "amount", type: "decimal(12,4)" },
+          { name: "payment_method", type: "varchar(50)" },
+          { name: "payment_reference", type: "varchar(100)" },
+          { name: "notes", type: "varchar(500)" },
+          { name: "recorded_by", type: "int FK" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "external_processing_companies",
+        name: "external_processing_companies",
+        domain: "purchasing",
+        domainLabel: "Purchasing",
+        desc: "Directory of third-party milling and processing facilities",
+        bir: "External processing vendor directory.",
+        x: 2180, y: 1480,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "name", type: "varchar(200) UK" },
+          { name: "address", type: "varchar(500)" },
+          { name: "contact", type: "varchar(100)" },
+          { name: "is_active", type: "tinyint(1)" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "external_processing_deliveries",
+        name: "external_processing_deliveries",
+        domain: "purchasing",
+        domainLabel: "Purchasing",
+        desc: "Dispatch tracking of raw stock delivered to external mills",
+        bir: "Materials-in-transit inventory accounting records.",
+        x: 2180, y: 1760,
+        pk: ["id"],
+        fks: ["company_id", "product_id", "recorded_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "delivery_reference", type: "varchar(50) UK" },
+          { name: "product_id", type: "int FK" },
+          { name: "quantity", type: "decimal(12,3)" },
+          { name: "company_id", type: "int FK" },
+          { name: "delivery_date", type: "date" },
+          { name: "delivered_by", type: "varchar(200)" },
+          { name: "remarks", type: "varchar(500)" },
+          { name: "recorded_by", type: "int FK" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+
+      // ─── Zone 7: BIR Accumulators & System Admin ────────────────────────────
+      {
+        id: "z_readings",
+        name: "z_readings",
+        domain: "cashier",
+        domainLabel: "Cashiering",
+        desc: "Non-resettable daily fiscal closure records & grand total accumulators",
+        bir: "Official BIR daily Z-Reading cutoff, 4-digit z_counter (0001-9999), non-resettable accumulating grand totals, complete VAT breakdown.",
+        x: 2600, y: 100,
+        pk: ["id"],
+        fks: ["generated_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "z_counter_no", type: "int unsigned", isBir: true },
+          { name: "reset_counter_no", type: "int unsigned", isBir: true },
+          { name: "reading_date", type: "date", isBir: true },
+          { name: "opened_at", type: "datetime", isBir: true },
+          { name: "closed_at", type: "datetime", isBir: true },
+          { name: "generated_by", type: "int FK" },
+          { name: "beg_invoice_no", type: "varchar(50)", isBir: true },
+          { name: "end_invoice_no", type: "varchar(50)", isBir: true },
+          { name: "beg_void_no", type: "varchar(50)" },
+          { name: "end_void_no", type: "varchar(50)" },
+          { name: "beg_return_no", type: "varchar(50)" },
+          { name: "end_return_no", type: "varchar(50)" },
+          { name: "old_grand_total", type: "decimal(14,2)", isBir: true },
+          { name: "daily_gross_sales", type: "decimal(12,2)", isBir: true },
+          { name: "new_grand_total", type: "decimal(14,2)", isBir: true },
+          { name: "vatable_sales", type: "decimal(12,2)", isBir: true },
+          { name: "vat_amount", type: "decimal(12,2)", isBir: true },
+          { name: "vat_exempt_sales", type: "decimal(12,2)", isBir: true },
+          { name: "zero_rated_sales", type: "decimal(12,2)", isBir: true },
+          { name: "non_vat_sales", type: "decimal(12,2)", isBir: true },
+          { name: "sc_discount", type: "decimal(12,2)", isBir: true },
+          { name: "pwd_discount", type: "decimal(12,2)", isBir: true },
+          { name: "regular_discount", type: "decimal(12,2)", isBir: true },
+          { name: "total_discounts", type: "decimal(12,2)", isBir: true },
+          { name: "total_returns", type: "decimal(12,2)", isBir: true },
+          { name: "total_voids", type: "decimal(12,2)", isBir: true },
+          { name: "net_sales", type: "decimal(12,2)", isBir: true },
+          { name: "cash_sales", type: "decimal(12,2)" },
+          { name: "credit_sales", type: "decimal(12,2)" },
+          { name: "transaction_count", type: "int unsigned", isBir: true },
+          { name: "void_count", type: "int unsigned" },
+          { name: "return_count", type: "int unsigned" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "invoice_sequences",
+        name: "invoice_sequences",
+        domain: "cashier",
+        domainLabel: "Cashiering",
+        desc: "Row-locked sequential counter table guaranteeing gapless document numbers",
+        bir: "Guarantees gapless sequential numbering required by BIR for all sales invoices and credit notes.",
+        x: 2600, y: 1120,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "document_type", type: "varchar(60)" },
+          { name: "prefix", type: "varchar(10) UK", isBir: true },
+          { name: "current_number", type: "int unsigned", isBir: true },
+          { name: "created_at", type: "datetime" },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "system_settings",
+        name: "system_settings",
+        domain: "audit",
+        domainLabel: "System Configuration",
+        desc: "Singleton enterprise configuration holding TIN, Branch, MIN & Accreditation",
+        bir: "Primary repository for BIR Permit to Use (PTU), MIN, POS Serial, 9-digit TIN, Branch Code, and Software Accreditation Number.",
+        x: 2600, y: 1380,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "store_name", type: "varchar(150)" },
+          { name: "proprietor", type: "varchar(150)" },
+          { name: "tin", type: "varchar(30)", isBir: true },
+          { name: "branch_code", type: "varchar(10)", isBir: true },
+          { name: "address", type: "text" },
+          { name: "contact_number", type: "varchar(20)" },
+          { name: "facebook", type: "varchar(100)" },
+          { name: "store_phone", type: "varchar(50)" },
+          { name: "store_address", type: "text" },
+          { name: "currency", type: "varchar(10)" },
+          { name: "vat_enabled", type: "tinyint(1)", isBir: true },
+          { name: "vat_rate", type: "decimal(5,2)", isBir: true },
+          { name: "pricing_type", type: "enum(pricing_type)" },
+          { name: "receipt_footer", type: "text" },
+          { name: "printer_name", type: "varchar(150)" },
+          { name: "cash_drawer_enabled", type: "tinyint(1)" },
+          { name: "business_license", type: "varchar(100)" },
+          { name: "pos_min", type: "varchar(30)", isBir: true },
+          { name: "pos_serial", type: "varchar(30)", isBir: true },
+          { name: "ptu_or_accn_no", type: "varchar(100)", isBir: true },
+          { name: "ptu_date_issued", type: "date", isBir: true },
+          { name: "accreditation_no", type: "varchar(100)", isBir: true },
+          { name: "accreditation_date_issued", type: "date", isBir: true },
+          { name: "registered_taxpayer_name", type: "varchar(200)", isBir: true },
+          { name: "document_type", type: "varchar(60)", isBir: true },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "system_version",
+        name: "system_version",
+        domain: "audit",
+        domainLabel: "System Configuration",
+        desc: "Singleton table tracking installed application and database version",
+        bir: "Software version control documentation.",
+        x: 2600, y: 2200,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "application_version", type: "varchar(20)" },
+          { name: "database_version", type: "varchar(10)" },
+          { name: "installed_at", type: "datetime" },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "backup_metadata",
+        name: "backup_metadata",
+        domain: "audit",
+        domainLabel: "System Configuration",
+        desc: "Catalog of local and Google Drive database backup archives",
+        bir: "Compliance with BIR accounting data preservation and disaster recovery rules.",
+        x: 2600, y: 2420,
+        pk: ["id"],
+        fks: ["created_by"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "filename", type: "varchar(255)" },
+          { name: "file_path", type: "varchar(500)" },
+          { name: "file_size", type: "bigint" },
+          { name: "application_version", type: "varchar(20)" },
+          { name: "database_version", type: "varchar(10)" },
+          { name: "backup_type", type: "enum(backup_type)" },
+          { name: "local_status", type: "enum(status)" },
+          { name: "google_drive_status", type: "enum(status)" },
+          { name: "google_drive_file_id", type: "varchar(255)" },
+          { name: "created_by", type: "int FK" },
+          { name: "created_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "backup_settings",
+        name: "backup_settings",
+        domain: "audit",
+        domainLabel: "System Configuration",
+        desc: "Configuration for automated backup schedules and storage locations",
+        bir: "Backup automation configuration.",
+        x: 2600, y: 2840,
+        pk: ["id"],
+        fks: [],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "backup_reminder_time", type: "time" },
+          { name: "backup_reminder_enabled", type: "boolean" },
+          { name: "local_backup_directory", type: "varchar(500)" },
+          { name: "google_drive_folder_url", type: "varchar(500)" },
+          { name: "google_drive_folder_id", type: "varchar(255)" },
+          { name: "max_local_backups", type: "int" },
+          { name: "automatic_cleanup_enabled", type: "boolean" },
+          { name: "updated_at", type: "datetime" }
+        ]
+      },
+      {
+        id: "migration_history",
+        name: "migration_history",
+        domain: "audit",
+        domainLabel: "System Configuration",
+        desc: "Audit log of executed database schema migration scripts",
+        bir: "Technical schema version audit trail.",
+        x: 2600, y: 3180,
+        pk: ["id"],
+        fks: ["executed_by", "backup_id"],
+        fields: [
+          { name: "id", type: "int PK" },
+          { name: "migration_number", type: "varchar(10)" },
+          { name: "description", type: "varchar(255)" },
+          { name: "execution_time", type: "datetime" },
+          { name: "applied_date", type: "datetime" },
+          { name: "status", type: "enum(status)" },
+          { name: "executed_by", type: "int FK" },
+          { name: "backup_id", type: "int FK" }
+        ]
+      }
+    ];
+
+    // Deep clone for active session
+    let TABLES = JSON.parse(JSON.stringify(INITIAL_TABLES));
+
+    /* =========================================================================
+       2. AUTHORITATIVE RELATIONSHIP MATRIX (66 Relationships)
+       ========================================================================= */
+    const RELATIONSHIPS = [
+      // Security & Users (2)
+      { id: "rel_1", from: "users", to: "audit_logs", fromCol: "id", toCol: "performed_by_id", card: "1 ──── N", isBir: true, meaning: "User who performed the logged audit event." },
+      { id: "rel_2", from: "users", to: "audit_logs", fromCol: "id", toCol: "target_user_id", card: "1 ──── N", isBir: false, meaning: "Target user affected by administrative action." },
+
+      // Product & Inventory (11)
+      { id: "rel_3", from: "categories", to: "products", fromCol: "id", toCol: "category_id", card: "1 ──── N", isBir: false, meaning: "Category classification for product." },
+      { id: "rel_4", from: "units", to: "products", fromCol: "id", toCol: "unit_id", card: "1 ──── N", isBir: true, meaning: "Unit of measurement governing decimal support." },
+      { id: "rel_5", from: "suppliers", to: "products", fromCol: "id", toCol: "supplier_id", card: "1 ──── N", isBir: false, meaning: "Primary supplier supplying product." },
+      { id: "rel_6", from: "products", to: "inventory_logs", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: true, meaning: "Product whose inventory balance changed." },
+      { id: "rel_7", from: "users", to: "inventory_logs", fromCol: "id", toCol: "user_id", card: "1 ──── N", isBir: true, meaning: "User responsible for inventory movement." },
+      { id: "rel_8", from: "products", to: "stock_count_adjustment_requests", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: false, meaning: "Product subject to count adjustment." },
+      { id: "rel_9", from: "users", to: "stock_count_adjustment_requests", fromCol: "id", toCol: "prepared_by", card: "1 ──── N", isBir: false, meaning: "Clerk who submitted physical count variance." },
+      { id: "rel_10", from: "users", to: "stock_count_adjustment_requests", fromCol: "id", toCol: "approved_by", card: "1 ──── N", isBir: false, meaning: "Admin who approved stock count adjustment." },
+      { id: "rel_11", from: "products", to: "market_based_adjustment_requests", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: false, meaning: "Commodity product subject to shrinkage adjustment." },
+      { id: "rel_12", from: "users", to: "market_based_adjustment_requests", fromCol: "id", toCol: "prepared_by", card: "1 ──── N", isBir: false, meaning: "Clerk who submitted commodity shrinkage variance." },
+      { id: "rel_13", from: "users", to: "market_based_adjustment_requests", fromCol: "id", toCol: "approved_by", card: "1 ──── N", isBir: false, meaning: "Admin who approved commodity shrinkage adjustment." },
+
+      // Sales & Fiscal Core (26)
+      { id: "rel_14", from: "users", to: "sales", fromCol: "id", toCol: "cashier_id", card: "1 ──── N", isBir: true, meaning: "Cashier who processed the official sales invoice." },
+      { id: "rel_15", from: "customers", to: "sales", fromCol: "id", toCol: "customer_id", card: "1 ──── N", isBir: true, meaning: "Registered customer linked to sales transaction." },
+      { id: "rel_16", from: "discounts", to: "sales", fromCol: "id", toCol: "discount_id", card: "1 ──── N", isBir: true, meaning: "Statutory or trade discount applied to sale." },
+      { id: "rel_17", from: "payment_methods", to: "sales", fromCol: "id", toCol: "payment_method_id", card: "1 ──── N", isBir: true, meaning: "Tender method used for sale settlement." },
+      { id: "rel_18", from: "sales", to: "sale_items", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Itemized line items belonging to sales invoice." },
+      { id: "rel_19", from: "products", to: "sale_items", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: true, meaning: "Product sold on sales invoice line item." },
+      { id: "rel_20", from: "sales", to: "sale_voids", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Void cancellation request for sales transaction." },
+      { id: "rel_21", from: "users", to: "sale_voids", fromCol: "id", toCol: "requested_by", card: "1 ──── N", isBir: true, meaning: "Cashier requesting transaction void." },
+      { id: "rel_22", from: "users", to: "sale_voids", fromCol: "id", toCol: "approved_by", card: "1 ──── N", isBir: true, meaning: "Admin approving transaction void." },
+      { id: "rel_23", from: "sales", to: "returns", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Original sale invoice being returned." },
+      { id: "rel_24", from: "users", to: "returns", fromCol: "id", toCol: "processed_by", card: "1 ──── N", isBir: true, meaning: "Cashier who inspected return merchandise." },
+      { id: "rel_25", from: "users", to: "returns", fromCol: "id", toCol: "approved_by", card: "1 ──── N", isBir: true, meaning: "Admin who approved return resolution." },
+      { id: "rel_26", from: "users", to: "returns", fromCol: "id", toCol: "resolved_by", card: "1 ──── N", isBir: true, meaning: "Cashier who finalized refund/exchange execution." },
+      { id: "rel_27", from: "returns", to: "return_items", fromCol: "id", toCol: "return_id", card: "1 ──── N", isBir: true, meaning: "Line items included in return document." },
+      { id: "rel_28", from: "sale_items", to: "return_items", fromCol: "id", toCol: "sale_item_id", card: "1 ──── N", isBir: true, meaning: "Original sale line item returned." },
+      { id: "rel_29", from: "products", to: "return_items", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: true, meaning: "Product returned." },
+      { id: "rel_30", from: "returns", to: "customer_store_credit", fromCol: "id", toCol: "return_id", card: "1 ──── N", isBir: false, meaning: "Store credit issued as return settlement." },
+      { id: "rel_31", from: "customers", to: "customer_store_credit", fromCol: "id", toCol: "customer_id", card: "1 ──── N", isBir: false, meaning: "Customer holding store credit balance." },
+      { id: "rel_32", from: "discounts", to: "discount_requests", fromCol: "id", toCol: "discount_id", card: "1 ──── N", isBir: true, meaning: "Discount requiring manager authorization." },
+      { id: "rel_33", from: "sales", to: "discount_requests", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Sale transaction linked to discount request." },
+      { id: "rel_34", from: "users", to: "discount_requests", fromCol: "id", toCol: "cashier_id", card: "1 ──── N", isBir: true, meaning: "Cashier submitting discount request." },
+      { id: "rel_35", from: "users", to: "discount_requests", fromCol: "id", toCol: "approved_by", card: "1 ──── N", isBir: true, meaning: "Admin approving discount request." },
+      { id: "rel_36", from: "users", to: "suspended_sales", fromCol: "id", toCol: "cashier_id", card: "1 ──── N", isBir: false, meaning: "Cashier who parked the checkout session." },
+      { id: "rel_37", from: "sales", to: "receipt_reprint_log", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Sales invoice reprinted." },
+      { id: "rel_38", from: "returns", to: "receipt_reprint_log", fromCol: "id", toCol: "return_id", card: "1 ──── N", isBir: true, meaning: "Return voucher reprinted." },
+      { id: "rel_39", from: "users", to: "receipt_reprint_log", fromCol: "id", toCol: "reprinted_by", card: "1 ──── N", isBir: true, meaning: "User who authorized duplicate receipt reprint." },
+
+      // Customer & Credit / Utang (10)
+      { id: "rel_40", from: "customers", to: "credit_ledger", fromCol: "id", toCol: "customer_id", card: "1 ──── N", isBir: true, meaning: "Customer AR ledger transactions." },
+      { id: "rel_41", from: "sales", to: "credit_ledger", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: true, meaning: "Credit sale invoice generating AR debt." },
+      { id: "rel_42", from: "users", to: "credit_ledger", fromCol: "id", toCol: "recorded_by", card: "1 ──── N", isBir: true, meaning: "User recording credit debt or payment." },
+      { id: "rel_43", from: "users", to: "credit_ledger", fromCol: "id", toCol: "authorized_by", card: "1 ──── N", isBir: true, meaning: "Admin authorizing credit override/adjustment." },
+      { id: "rel_44", from: "credit_ledger", to: "credit_allocations", fromCol: "id", toCol: "payment_ledger_id", card: "1 ──── N", isBir: true, meaning: "Payment entry liquidating debt." },
+      { id: "rel_45", from: "credit_ledger", to: "credit_allocations", fromCol: "id", toCol: "sale_ledger_id", card: "1 ──── N", isBir: true, meaning: "Sale entry debt being liquidated." },
+      { id: "rel_46", from: "customers", to: "credit_limit_overrides", fromCol: "id", toCol: "customer_id", card: "1 ──── N", isBir: false, meaning: "Customer requesting credit limit override." },
+      { id: "rel_47", from: "sales", to: "credit_limit_overrides", fromCol: "id", toCol: "sale_id", card: "1 ──── N", isBir: false, meaning: "Sale completed under approved limit override." },
+      { id: "rel_48", from: "users", to: "credit_limit_overrides", fromCol: "id", toCol: "requested_by", card: "1 ──── N", isBir: false, meaning: "Cashier requesting credit limit override." },
+      { id: "rel_49", from: "users", to: "credit_limit_overrides", fromCol: "id", toCol: "authorized_by", card: "1 ──── N", isBir: false, meaning: "Admin approving credit limit override." },
+
+      // Purchasing (11)
+      { id: "rel_50", from: "products", to: "commodity_prices", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: false, meaning: "Commodity product daily reference price." },
+      { id: "rel_51", from: "users", to: "commodity_prices", fromCol: "id", toCol: "changed_by", card: "1 ──── N", isBir: false, meaning: "Admin updating commodity benchmark price." },
+      { id: "rel_52", from: "products", to: "commodity_purchases", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: true, meaning: "Commodity product procured." },
+      { id: "rel_53", from: "suppliers", to: "commodity_purchases", fromCol: "id", toCol: "supplier_id", card: "1 ──── N", isBir: false, meaning: "Supplier providing commodity intake." },
+      { id: "rel_54", from: "units", to: "commodity_purchases", fromCol: "id", toCol: "unit_id", card: "1 ──── N", isBir: false, meaning: "Measurement unit for commodity purchase." },
+      { id: "rel_55", from: "users", to: "commodity_purchases", fromCol: "id", toCol: "recorded_by", card: "1 ──── N", isBir: false, meaning: "User who recorded commodity intake." },
+      { id: "rel_56", from: "commodity_purchases", to: "commodity_purchase_payments", fromCol: "id", toCol: "commodity_purchase_id", card: "1 ──── N", isBir: true, meaning: "Disbursement payment towards commodity purchase." },
+      { id: "rel_57", from: "users", to: "commodity_purchase_payments", fromCol: "id", toCol: "recorded_by", card: "1 ──── N", isBir: false, meaning: "User who recorded disbursement payout." },
+      { id: "rel_58", from: "external_processing_companies", to: "external_processing_deliveries", fromCol: "id", toCol: "company_id", card: "1 ──── N", isBir: false, meaning: "Processing company receiving material dispatch." },
+      { id: "rel_59", from: "products", to: "external_processing_deliveries", fromCol: "id", toCol: "product_id", card: "1 ──── N", isBir: false, meaning: "Product delivered for external milling." },
+      { id: "rel_60", from: "users", to: "external_processing_deliveries", fromCol: "id", toCol: "recorded_by", card: "1 ──── N", isBir: false, meaning: "Admin who dispatched material delivery." },
+
+      // Cashiering & Z-Reading (3)
+      { id: "rel_61", from: "users", to: "cash_sessions", fromCol: "id", toCol: "cashier_id", card: "1 ──── N", isBir: true, meaning: "Cashier operating cash drawer shift." },
+      { id: "rel_62", from: "users", to: "cash_sessions", fromCol: "id", toCol: "reviewed_by", card: "1 ──── N", isBir: true, meaning: "Admin reviewing shift cash reconciliation." },
+      { id: "rel_63", from: "users", to: "z_readings", fromCol: "id", toCol: "generated_by", card: "1 ──── N", isBir: true, meaning: "User who generated the non-resettable daily Z-reading." },
+
+      // Audit & Configuration (3)
+      { id: "rel_64", from: "users", to: "backup_metadata", fromCol: "id", toCol: "created_by", card: "1 ──── N", isBir: false, meaning: "User who initiated database backup archive." },
+      { id: "rel_65", from: "users", to: "migration_history", fromCol: "id", toCol: "executed_by", card: "1 ──── N", isBir: false, meaning: "User who executed schema migration." },
+      { id: "rel_66", from: "backup_metadata", to: "migration_history", fromCol: "id", toCol: "backup_id", card: "1 ──── N", isBir: false, meaning: "Pre-migration backup record." }
+    ];
+
+    /* =========================================================================
+       3. INTERACTIVE VISUALIZER LOGIC & SMART EDGE ROUTING
+       ========================================================================= */
+    const state = {
+      scale: 0.58,
+      panX: 30,
+      panY: 20,
+      isDraggingCanvas: false,
+      isDraggingNode: false,
+      draggedNodeId: null,
+      nodeDragOffsetX: 0,
+      nodeDragOffsetY: 0,
+      startX: 0,
+      startY: 0,
+      selectedTableId: null,
+      hoveredTableId: null,
+      activeDomain: "all",
+      viewMode: "detailed", // "overview" | "detailed"
+      lineMode: "focus",    // "focus" | "all"
+      birHighlight: false,
+      searchQuery: ""
+    };
+
+    const viewport = document.getElementById("viewport");
+    const canvas = document.getElementById("canvas");
+    const domainZonesLayer = document.getElementById("domain-zones");
+    const svgLayer = document.getElementById("svg-layer");
+    const nodesLayer = document.getElementById("nodes-layer");
+    const inspector = document.getElementById("inspector");
+
+    // Initialize Canvas
+    function init() {
+      renderDomainZones();
+      renderTables();
+      renderRelationships();
+      generatePrintDocument();
+      setupEventListeners();
+      updateTransform();
+    }
+
+    function renderDomainZones() {
+      domainZonesLayer.innerHTML = "";
+      DOMAIN_ZONES.forEach(zone => {
+        const div = document.createElement("div");
+        div.className = "domain-zone-card";
+        div.style.left = `${zone.x}px`;
+        div.style.top = `${zone.y}px`;
+        div.style.width = `${zone.width}px`;
+        div.style.height = `${zone.height}px`;
+
+        div.innerHTML = `
+          <div class="domain-zone-header" style="color: ${zone.color};">
+            ${zone.title}
+          </div>
+        `;
+        domainZonesLayer.appendChild(div);
+      });
+    }
+
+    function renderTables() {
+      nodesLayer.innerHTML = "";
+      TABLES.forEach((table) => {
+        const node = document.createElement("div");
+        node.className = `table-node dom-${table.domain}`;
+        node.id = `node-${table.id}`;
+        node.style.left = `${table.x}px`;
+        node.style.top = `${table.y}px`;
+
+        const isBirTable = table.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(table.id);
+
+        let fieldsHtml = "";
+        if (state.viewMode === "detailed") {
+          // Render ALL fields without any slicing or truncation
+          table.fields.forEach((f) => {
+            const isPk = table.pk.includes(f.name);
+            const isFk = table.fks.includes(f.name);
+            
+            let badgeHtml = "";
+            let nameStyle = "";
+            if (isPk) {
+              badgeHtml = '<span class="col-badge badge-pk">PK</span>';
+              nameStyle = 'style="font-weight:700; color:#facc15;"';
+            } else if (isFk) {
+              badgeHtml = '<span class="col-badge badge-fk">FK</span>';
+              nameStyle = 'style="color:#38bdf8;"';
+            } else if (f.isBir) {
+              badgeHtml = '<span class="col-badge badge-bir">BIR</span>';
+              nameStyle = 'style="font-weight:600; color:#fff;"';
+            }
+
+            fieldsHtml += `
+              <div class="col-row" title="${f.name} : ${f.type}">
+                <div class="col-left">
+                  ${badgeHtml}
+                  <span class="col-name" ${nameStyle}>${f.name}</span>
+                </div>
+                <div class="col-type">${f.type}</div>
+              </div>
+            `;
+          });
+        } else {
+          // Overview Mode
+          fieldsHtml = `
+            <div class="col-row" style="color:var(--text-muted); font-size:10px;">
+              <span>PK: ${table.pk.join(", ")}</span>
+              <span>${table.fields.length} columns</span>
+            </div>
+          `;
+        }
+
+        node.innerHTML = `
+          <div class="table-header" id="header-${table.id}">
+            <div class="table-header-top">
+              <span class="table-name">${table.name}</span>
+              <span class="table-domain-tag">${isBirTable ? '★ ' : ''}${table.domain}</span>
+            </div>
+            <div class="table-desc">${table.desc}</div>
+          </div>
+          <div class="table-body">
+            ${fieldsHtml}
+          </div>
+        `;
+
+        // Card Dragging Handler
+        const header = node.querySelector(".table-header");
+        header.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+          state.isDraggingNode = true;
+          state.draggedNodeId = table.id;
+          state.nodeDragOffsetX = (e.clientX / state.scale) - table.x;
+          state.nodeDragOffsetY = (e.clientY / state.scale) - table.y;
+          node.style.zIndex = "100";
+        });
+
+        // Hover & Select Handlers
+        node.addEventListener("mouseenter", () => {
+          if (!state.isDraggingNode) {
+            state.hoveredTableId = table.id;
+            if (!state.selectedTableId && state.lineMode === "focus") {
+              highlightTableLines(table.id);
+            }
+          }
+        });
+
+        node.addEventListener("mouseleave", () => {
+          if (!state.isDraggingNode) {
+            state.hoveredTableId = null;
+            if (!state.selectedTableId && state.lineMode === "focus") {
+              clearLineHighlights();
+            }
+          }
+        });
+
+        node.addEventListener("click", (e) => {
+          e.stopPropagation();
+          selectTable(table.id);
+        });
+
+        nodesLayer.appendChild(node);
+      });
+    }
+
+    // ─── Smart Edge Port Routing Algorithm (Prevents Lines from Crossing Boxes) ───
+    function getBestPortConnection(fromTable, toTable, fromNode, toNode) {
+      const w1 = fromNode.offsetWidth || 320;
+      const h1 = fromNode.offsetHeight || 180;
+      const x1 = fromTable.x;
+      const y1 = fromTable.y;
+
+      const w2 = toNode.offsetWidth || 320;
+      const h2 = toNode.offsetHeight || 180;
+      const x2 = toTable.x;
+      const y2 = toTable.y;
+
+      // 4 Connection Ports on From Box
+      const p1 = {
+        right:  { x: x1 + w1, y: y1 + Math.min(50, h1/2), dir: "E" },
+        left:   { x: x1,      y: y1 + Math.min(50, h1/2), dir: "W" },
+        bottom: { x: x1 + w1/2, y: y1 + h1,               dir: "S" },
+        top:    { x: x1 + w1/2, y: y1,                    dir: "N" }
+      };
+
+      // 4 Connection Ports on To Box
+      const p2 = {
+        left:   { x: x2,      y: y2 + Math.min(50, h2/2), dir: "W" },
+        right:  { x: x2 + w2, y: y2 + Math.min(50, h2/2), dir: "E" },
+        top:    { x: x2 + w2/2, y: y2,                    dir: "N" },
+        bottom: { x: x2 + w2/2, y: y2 + h2,               dir: "S" }
+      };
+
+      // Best Port Pairing Logic
+      let start, end;
+
+      if (x1 + w1 + 30 <= x2) {
+        // From is strictly Left of To
+        start = p1.right;
+        end = p2.left;
+      } else if (x2 + w2 + 30 <= x1) {
+        // From is strictly Right of To
+        start = p1.left;
+        end = p2.right;
+      } else if (y1 + h1 <= y2) {
+        // Vertically Stacked: From Above To
+        start = p1.bottom;
+        end = p2.top;
+      } else if (y2 + h2 <= y1) {
+        // Vertically Stacked: To Above From
+        start = p1.top;
+        end = p2.bottom;
+      } else {
+        // Diagonal or overlapping horizontally
+        if (x1 <= x2) {
+          start = p1.right;
+          end = p2.left;
+        } else {
+          start = p1.left;
+          end = p2.right;
+        }
+      }
+
+      return { start, end };
+    }
+
+    function renderRelationships() {
+      const defs = svgLayer.querySelector("defs");
+      svgLayer.innerHTML = "";
+      svgLayer.appendChild(defs);
+
+      const activeFocusId = state.selectedTableId || state.hoveredTableId;
+
+      RELATIONSHIPS.forEach((rel) => {
+        const fromTable = TABLES.find((t) => t.id === rel.from);
+        const toTable = TABLES.find((t) => t.id === rel.to);
+        if (!fromTable || !toTable) return;
+
+        const fromNode = document.getElementById(`node-${fromTable.id}`);
+        const toNode = document.getElementById(`node-${toTable.id}`);
+        if (!fromNode || !toNode) return;
+
+        // Skip rendering if table is hidden by domain filter
+        if (fromNode.style.display === "none" || toNode.style.display === "none") return;
+
+        const { start, end } = getBestPortConnection(fromTable, toTable, fromNode, toNode);
+
+        // Compute smooth orthogonal / curved Bezier path
+        let cp1x = start.x, cp1y = start.y;
+        let cp2x = end.x, cp2y = end.y;
+
+        const dist = Math.hypot(end.x - start.x, end.y - start.y) * 0.45;
+
+        if (start.dir === "E") cp1x += dist;
+        else if (start.dir === "W") cp1x -= dist;
+        else if (start.dir === "S") cp1y += dist;
+        else if (start.dir === "N") cp1y -= dist;
+
+        if (end.dir === "W") cp2x -= dist;
+        else if (end.dir === "E") cp2x += dist;
+        else if (end.dir === "N") cp2y -= dist;
+        else if (end.dir === "S") cp2y += dist;
+
+        const pathData = `M ${start.x} ${start.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${end.x} ${end.y}`;
+
+        const isAttached = activeFocusId && (rel.from === activeFocusId || rel.to === activeFocusId);
+        const isDimmed = activeFocusId && !isAttached && state.lineMode === "focus";
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", pathData);
+        path.setAttribute("class", `rel-line ${rel.isBir ? 'bir-line' : ''} ${isAttached ? 'active' : ''} ${isDimmed ? 'dimmed' : ''}`);
+        path.setAttribute("id", `line-${rel.id}`);
+        path.setAttribute("data-from", rel.from);
+        path.setAttribute("data-to", rel.to);
+
+        // Click line to inspect
+        path.addEventListener("click", (e) => {
+          e.stopPropagation();
+          inspectRelationship(rel);
+        });
+
+        svgLayer.appendChild(path);
+
+        // Cardinality label "1" at source
+        const text1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const off1X = start.x + (start.dir === "E" ? 10 : (start.dir === "W" ? -18 : 6));
+        const off1Y = start.y + (start.dir === "S" ? 14 : (start.dir === "N" ? -8 : -5));
+        text1.setAttribute("x", off1X);
+        text1.setAttribute("y", off1Y);
+        text1.setAttribute("class", `cardinality-label ${isDimmed ? 'dimmed' : ''}`);
+        text1.textContent = "1";
+        svgLayer.appendChild(text1);
+
+        // Cardinality label "< N" at target (Crow's foot)
+        const textN = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const offNX = end.x + (end.dir === "W" ? -26 : (end.dir === "E" ? 10 : -8));
+        const offNY = end.y + (end.dir === "N" ? -8 : (end.dir === "S" ? 16 : -5));
+        textN.setAttribute("x", offNX);
+        textN.setAttribute("y", offNY);
+        textN.setAttribute("class", `cardinality-label ${isDimmed ? 'dimmed' : ''}`);
+        textN.textContent = "< N";
+        svgLayer.appendChild(textN);
+
+        // Relationship FK label at center (Show only when active or in All mode)
+        if (state.lineMode === "all" || isAttached) {
+          const midX = (start.x + end.x) / 2;
+          const midY = (start.y + end.y) / 2;
+          const textTag = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          textTag.setAttribute("x", midX);
+          textTag.setAttribute("y", midY - 6);
+          textTag.setAttribute("class", "rel-tag");
+          textTag.setAttribute("text-anchor", "middle");
+          textTag.textContent = rel.toCol;
+          svgLayer.appendChild(textTag);
+        }
+      });
+    }
+
+    function highlightTableLines(tableId) {
+      document.querySelectorAll(".rel-line").forEach((l) => {
+        const from = l.getAttribute("data-from");
+        const to = l.getAttribute("data-to");
+        if (from === tableId || to === tableId) {
+          l.classList.add("active");
+          l.classList.remove("dimmed");
+        } else {
+          l.classList.remove("active");
+          l.classList.add("dimmed");
+        }
+      });
+    }
+
+    function clearLineHighlights() {
+      document.querySelectorAll(".rel-line").forEach((l) => {
+        l.classList.remove("active", "dimmed");
+      });
+    }
+
+    function selectTable(tableId) {
+      state.selectedTableId = tableId;
+      const table = TABLES.find((t) => t.id === tableId);
+      if (!table) return;
+
+      // Update Card Visuals
+      document.querySelectorAll(".table-node").forEach((n) => {
+        n.classList.remove("selected", "highlighted", "dimmed");
+      });
+
+      const selectedNode = document.getElementById(`node-${tableId}`);
+      if (selectedNode) selectedNode.classList.add("selected");
+
+      // Find connected relationships
+      const connectedRels = RELATIONSHIPS.filter(
+        (r) => r.from === tableId || r.to === tableId
+      );
+      const connectedTableIds = new Set();
+
+      connectedRels.forEach((r) => {
+        const otherId = r.from === tableId ? r.to : r.from;
+        connectedTableIds.add(otherId);
+        const otherNode = document.getElementById(`node-${otherId}`);
+        if (otherNode) otherNode.classList.add("highlighted");
+      });
+
+      // Dim non-connected tables
+      document.querySelectorAll(".table-node").forEach((n) => {
+        const id = n.id.replace("node-", "");
+        if (id !== tableId && !connectedTableIds.has(id)) {
+          n.classList.add("dimmed");
+        }
+      });
+
+      renderRelationships();
+
+      // Populate Inspector
+      populateInspector(table, connectedRels);
+      inspector.classList.add("open");
+    }
+
+    function populateInspector(table, rels) {
+      document.getElementById("insp-title").textContent = table.name.toUpperCase();
+      document.getElementById("insp-domain").textContent = `${table.domainLabel} Domain`;
+      document.getElementById("insp-purpose").textContent = table.desc;
+
+      const birSection = document.getElementById("insp-bir-section");
+      if (table.bir) {
+        birSection.style.display = "block";
+        document.getElementById("insp-bir").textContent = table.bir;
+      } else {
+        birSection.style.display = "none";
+      }
+
+      document.getElementById("insp-keys").innerHTML = `
+        <div style="margin-bottom:5px;"><strong>Primary Key:</strong> <span style="color:#facc15; font-weight:700;">${table.pk.join(", ")}</span></div>
+        <div style="margin-bottom:5px;"><strong>Foreign Keys:</strong> ${table.fks.length > 0 ? table.fks.map(f => `<span style="color:#38bdf8;">${f}</span>`).join(", ") : '<span style="color:var(--text-muted)">None</span>'}</div>
+        <div><strong>Total Columns:</strong> <span style="color:#fff;">${table.fields.length}</span></div>
+      `;
+
+      // Column Dictionary
+      document.getElementById("insp-col-count").textContent = `${table.fields.length} columns`;
+      const colsContainer = document.getElementById("insp-cols");
+      colsContainer.innerHTML = "";
+      table.fields.forEach((f) => {
+        const isPk = table.pk.includes(f.name);
+        const isFk = table.fks.includes(f.name);
+
+        let badgeHtml = "";
+        let nameStyle = "";
+        if (isPk) {
+          badgeHtml = '<span class="col-badge badge-pk">PK</span>';
+          nameStyle = 'style="font-weight:700; color:#facc15;"';
+        } else if (isFk) {
+          badgeHtml = '<span class="col-badge badge-fk">FK</span>';
+          nameStyle = 'style="color:#38bdf8;"';
+        } else if (f.isBir) {
+          badgeHtml = '<span class="col-badge badge-bir">BIR</span>';
+          nameStyle = 'style="font-weight:600; color:#fff;"';
+        }
+
+        const colDiv = document.createElement("div");
+        colDiv.className = "insp-col-item";
+        colDiv.title = `${f.name} : ${f.type}`;
+        colDiv.innerHTML = `
+          <div class="insp-col-left">
+            ${badgeHtml}
+            <span class="insp-col-name" ${nameStyle}>${f.name}</span>
+          </div>
+          <span class="insp-col-type">${f.type}</span>
+        `;
+        colsContainer.appendChild(colDiv);
+      });
+
+      document.getElementById("insp-rel-count").textContent = rels.length;
+      const relsContainer = document.getElementById("insp-rels");
+      relsContainer.innerHTML = "";
+
+      if (rels.length === 0) {
+        relsContainer.innerHTML = '<div style="font-size:11px; color:var(--text-muted);">No direct foreign key relationships.</div>';
+      } else {
+        rels.forEach((r) => {
+          const isOutgoing = r.from === table.id;
+          const targetTable = isOutgoing ? r.to : r.from;
+          const item = document.createElement("div");
+          item.className = "rel-item";
+          item.innerHTML = `
+            <div class="rel-item-left">
+              <span class="rel-card-badge">${isOutgoing ? '1 ────< N' : 'N &gt;──── 1'}</span>
+              <span><strong>${isOutgoing ? '→ ' + r.to : '← ' + r.from}</strong> <span style="color:var(--text-muted);">(${r.toCol})</span></span>
+            </div>
+            <span style="color:var(--text-muted); font-size:10px;">View →</span>
+          `;
+          item.addEventListener("click", () => {
+            selectTable(targetTable);
+            centerOnTable(targetTable);
+          });
+          relsContainer.appendChild(item);
+        });
+      }
+    }
+
+    function inspectRelationship(rel) {
+      const fromT = TABLES.find(t => t.id === rel.from);
+      const toT = TABLES.find(t => t.id === rel.to);
+      if (!fromT || !toT) return;
+
+      document.getElementById("insp-title").textContent = `${rel.from} ────< ${rel.to}`;
+      document.getElementById("insp-domain").textContent = `Relationship Inspector (Cardinality: ${rel.card})`;
+      document.getElementById("insp-purpose").textContent = rel.meaning;
+
+      document.getElementById("insp-bir-section").style.display = rel.isBir ? "block" : "none";
+      if (rel.isBir) {
+        document.getElementById("insp-bir").textContent = `Official Fiscal Linkage: ${rel.to}.${rel.toCol} enforces referential consistency with ${rel.from}.${rel.fromCol}.`;
+      }
+
+      document.getElementById("insp-keys").innerHTML = `
+        <div><strong>Source Table:</strong> ${rel.from} (<span style="color:#facc15;">${rel.fromCol}</span>)</div>
+        <div style="margin-top:4px;"><strong>Target Table:</strong> ${rel.to} (<span style="color:#38bdf8;">${rel.toCol}</span>)</div>
+        <div style="margin-top:4px;"><strong>Cardinality:</strong> 1 record in ${rel.from} relates to many records in ${rel.to}</div>
+      `;
+
+      document.getElementById("insp-rel-count").textContent = "2 Entities";
+      document.getElementById("insp-rels").innerHTML = `
+        <div class="rel-item" onclick="selectTable('${rel.from}'); centerOnTable('${rel.from}');">
+          <span>Go to Source: <strong>${rel.from}</strong></span>
+          <span>→</span>
+        </div>
+        <div class="rel-item" onclick="selectTable('${rel.to}'); centerOnTable('${rel.to}');">
+          <span>Go to Target: <strong>${rel.to}</strong></span>
+          <span>→</span>
+        </div>
+      `;
+
+      inspector.classList.add("open");
+    }
+
+    function clearSelection() {
+      state.selectedTableId = null;
+      document.querySelectorAll(".table-node").forEach((n) => {
+        n.classList.remove("selected", "highlighted", "dimmed");
+      });
+      renderRelationships();
+      inspector.classList.remove("open");
+    }
+
+    function centerOnTable(tableId) {
+      const table = TABLES.find(t => t.id === tableId);
+      if (!table) return;
+
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
+
+      state.panX = vpW / 2 - (table.x + 140) * state.scale;
+      state.panY = vpH / 2 - (table.y + 100) * state.scale;
+      updateTransform();
+    }
+
+    function fitView() {
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      TABLES.forEach(t => {
+        const node = document.getElementById(`node-${t.id}`);
+        const h = node ? node.offsetHeight : (t.fields ? t.fields.length * 24 + 70 : 300);
+        if (t.x < minX) minX = t.x;
+        if (t.y < minY) minY = t.y;
+        if (t.x + 320 > maxX) maxX = t.x + 320;
+        if (t.y + h > maxY) maxY = t.y + h;
+      });
+
+      const totalW = maxX - minX;
+      const totalH = maxY - minY;
+
+      const scaleX = (vpW - 120) / totalW;
+      const scaleY = (vpH - 120) / totalH;
+      state.scale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.18), 0.85);
+
+      state.panX = (vpW - totalW * state.scale) / 2 - minX * state.scale;
+      state.panY = (vpH - totalH * state.scale) / 2 - minY * state.scale;
+      updateTransform();
+    }
+
+    function updateTransform() {
+      canvas.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+    }
+
+    function resetLayout() {
+      TABLES = JSON.parse(JSON.stringify(INITIAL_TABLES));
+      renderTables();
+      renderRelationships();
+      fitView();
+    }
+
+    function setupEventListeners() {
+      // Canvas Pan & Drag
+      viewport.addEventListener("mousedown", (e) => {
+        if (e.target === viewport || e.target.id === "svg-layer" || e.target.id === "canvas" || e.target.classList.contains("domain-zone-card")) {
+          state.isDraggingCanvas = true;
+          state.startX = e.clientX - state.panX;
+          state.startY = e.clientY - state.panY;
+          viewport.classList.add("dragging");
+          clearSelection();
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        // Canvas Dragging
+        if (state.isDraggingCanvas) {
+          state.panX = e.clientX - state.startX;
+          state.panY = e.clientY - state.startY;
+          updateTransform();
+        }
+
+        // Table Node Dragging
+        if (state.isDraggingNode && state.draggedNodeId) {
+          const table = TABLES.find(t => t.id === state.draggedNodeId);
+          if (table) {
+            table.x = (e.clientX / state.scale) - state.nodeDragOffsetX;
+            table.y = (e.clientY / state.scale) - state.nodeDragOffsetY;
+
+            const node = document.getElementById(`node-${table.id}`);
+            if (node) {
+              node.style.left = `${table.x}px`;
+              node.style.top = `${table.y}px`;
+            }
+            renderRelationships();
+          }
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (state.isDraggingCanvas) {
+          state.isDraggingCanvas = false;
+          viewport.classList.remove("dragging");
+        }
+        if (state.isDraggingNode) {
+          state.isDraggingNode = false;
+          const node = document.getElementById(`node-${state.draggedNodeId}`);
+          if (node) node.style.zIndex = "20";
+          state.draggedNodeId = null;
+        }
+      });
+
+      // Zoom via Mouse Wheel
+      viewport.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const zoomFactor = 1.08;
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+
+        const oldScale = state.scale;
+        let newScale = e.deltaY < 0 ? oldScale * zoomFactor : oldScale / zoomFactor;
+        newScale = Math.min(Math.max(newScale, 0.15), 2.5);
+
+        state.panX = mouseX - (mouseX - state.panX) * (newScale / oldScale);
+        state.panY = mouseY - (mouseY - state.panY) * (newScale / oldScale);
+        state.scale = newScale;
+        updateTransform();
+      }, { passive: false });
+
+      // Zoom Controls Buttons
+      document.getElementById("btn-zoom-in").addEventListener("click", () => {
+        state.scale = Math.min(state.scale * 1.2, 2.5);
+        updateTransform();
+      });
+      document.getElementById("btn-zoom-out").addEventListener("click", () => {
+        state.scale = Math.max(state.scale / 1.2, 0.15);
+        updateTransform();
+      });
+      document.getElementById("btn-zoom-reset").addEventListener("click", fitView);
+      document.getElementById("btn-fit").addEventListener("click", fitView);
+      document.getElementById("btn-reset-layout").addEventListener("click", resetLayout);
+
+      // Line Mode Toggle
+      const lineBtn = document.getElementById("btn-line-mode");
+      lineBtn.addEventListener("click", () => {
+        state.lineMode = state.lineMode === "focus" ? "all" : "focus";
+        lineBtn.textContent = state.lineMode === "focus" ? "Lines: Focus" : "Lines: All";
+        lineBtn.classList.toggle("active", state.lineMode === "all");
+        renderRelationships();
+      });
+
+      // Mode Toggle (Overview vs Detailed)
+      const modeBtn = document.getElementById("btn-mode-toggle");
+      modeBtn.addEventListener("click", () => {
+        state.viewMode = state.viewMode === "detailed" ? "overview" : "detailed";
+        modeBtn.textContent = state.viewMode === "detailed" ? "Detailed" : "Overview";
+        modeBtn.classList.toggle("active", state.viewMode === "overview");
+        renderTables();
+        renderRelationships();
+        if (state.selectedTableId) selectTable(state.selectedTableId);
+      });
+
+      // BIR Fiscal Toggle
+      const birBtn = document.getElementById("btn-bir-toggle");
+      birBtn.addEventListener("click", () => {
+        state.birHighlight = !state.birHighlight;
+        birBtn.classList.toggle("active", state.birHighlight);
+
+        document.querySelectorAll(".table-node").forEach(node => {
+          const tId = node.id.replace("node-", "");
+          const table = TABLES.find(t => t.id === tId);
+          const isBir = table && (table.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(tId));
+          if (state.birHighlight) {
+            node.classList.toggle("highlighted", isBir);
+            node.classList.toggle("dimmed", !isBir);
+          } else {
+            node.classList.remove("highlighted", "dimmed");
+          }
+        });
+      });
+
+      // Export / Print
+      document.getElementById("btn-print").addEventListener("click", () => {
+        window.print();
+      });
+
+      // Inspector Close
+      document.getElementById("insp-close").addEventListener("click", clearSelection);
+
+      // Domain Filter Chips
+      document.querySelectorAll(".filter-chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+          chip.classList.add("active");
+          const domain = chip.getAttribute("data-domain");
+          state.activeDomain = domain;
+
+          document.querySelectorAll(".table-node").forEach(node => {
+            const tId = node.id.replace("node-", "");
+            const table = TABLES.find(t => t.id === tId);
+            if (domain === "all" || table.domain === domain) {
+              node.style.display = "block";
+            } else {
+              node.style.display = "none";
+            }
+          });
+
+          renderRelationships();
+        });
+      });
+
+      // Search Box Filter
+      const searchInput = document.getElementById("search-input");
+      searchInput.addEventListener("input", (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        state.searchQuery = q;
+
+        if (!q) {
+          document.querySelectorAll(".table-node").forEach(n => {
+            n.classList.remove("highlighted", "dimmed");
+          });
+          renderRelationships();
+          return;
+        }
+
+        let firstMatchId = null;
+        TABLES.forEach(table => {
+          const node = document.getElementById(`node-${table.id}`);
+          const matchTable = table.name.toLowerCase().includes(q);
+          const matchField = table.fields.some(f => f.name.toLowerCase().includes(q));
+          const matchFk = table.fks.some(fk => fk.toLowerCase().includes(q));
+
+          if (matchTable || matchField || matchFk) {
+            node.classList.add("highlighted");
+            node.classList.remove("dimmed");
+            if (!firstMatchId) firstMatchId = table.id;
+          } else {
+            node.classList.remove("highlighted");
+            node.classList.add("dimmed");
+          }
+        });
+
+        if (firstMatchId) {
+          centerOnTable(firstMatchId);
+          highlightTableLines(firstMatchId);
+        }
+      });
+
+      // Keyboard Shortcuts
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          clearSelection();
+        }
+        if (e.key === "+" || e.key === "=") {
+          state.scale = Math.min(state.scale * 1.2, 2.5);
+          updateTransform();
+        }
+        if (e.key === "-" || e.key === "_") {
+          state.scale = Math.max(state.scale / 1.2, 0.15);
+          updateTransform();
+        }
+        if (e.key === "0") fitView();
+      });
+    }
+
+    // ─── Open Printable BIR Report in Clean Dedicated Window ───────────────
+    function openPrintableReport() {
+      const printWin = window.open("", "_blank");
+      if (!printWin) {
+        // If popup blocked, fallback to standard print
+        generatePrintDocument();
+        window.print();
+        return;
+      }
+
+      const domainGroups = [
+        { id: "security", title: "1. Security & Master Directory" },
+        { id: "product", title: "2. Product Catalog & Inventory Hub" },
+        { id: "sales", title: "3. Sales & Fiscal Core (Invoices)" },
+        { id: "returns_cashier", title: "4. Returns, Voids & Cash Drawer" },
+        { id: "customer", title: "5. Customer Accounts Receivable (Utang)" },
+        { id: "purchasing", title: "6. Purchasing & External Processing" },
+        { id: "audit_config", title: "7. BIR Accumulators & System Configuration" }
+      ];
+
+      let tablesHtml = "";
+      domainGroups.forEach(domain => {
+        const domainTables = TABLES.filter(t => {
+          if (domain.id === "returns_cashier") {
+            return ["returns", "return_items", "customer_store_credit", "sale_voids", "receipt_reprint_log", "cash_sessions"].includes(t.id);
+          }
+          if (domain.id === "audit_config") {
+            return ["z_readings", "invoice_sequences", "system_settings", "system_version", "backup_metadata", "backup_settings", "migration_history"].includes(t.id);
+          }
+          if (domain.id === "sales") {
+            return ["discounts", "discount_requests", "payment_methods", "sales", "sale_items", "suspended_sales"].includes(t.id);
+          }
+          return t.domain === domain.id;
+        });
+
+        if (domainTables.length === 0) return;
+
+        tablesHtml += `
+          <div class="domain-section">
+            <h2 class="domain-heading">${domain.title} (${domainTables.length} Tables)</h2>
+        `;
+
+        domainTables.forEach(t => {
+          const isBir = t.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(t.id);
+
+          tablesHtml += `
+            <div class="table-card">
+              <div class="table-header">
+                <div>
+                  <span class="table-name">${t.name}</span>
+                  ${isBir ? '<span class="badge-bir">★ BIR Regulated</span>' : ''}
+                </div>
+                <div style="font-size:11px; color:#475569;">PK: <strong>${t.pk.join(", ")}</strong> | ${t.fields.length} columns</div>
+              </div>
+              <div class="table-info">
+                <div><strong>Business Role:</strong> ${t.desc}</div>
+                ${t.bir ? `<div style="margin-top:4px; color:#9f1239;"><strong>BIR Fiscal Compliance:</strong> ${t.bir}</div>` : ''}
+              </div>
+              <table class="grid-table">
+                <thead>
+                  <tr>
+                    <th style="width:25%;">Column Name</th>
+                    <th style="width:25%;">Data Type</th>
+                    <th style="width:15%;">Key / Constraint</th>
+                    <th style="width:35%;">Fiscal / Business Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          t.fields.forEach(f => {
+            const isPk = t.pk.includes(f.name);
+            const isFk = t.fks.includes(f.name);
+            let tag = '<span style="color:#94a3b8;">-</span>';
+            if (isPk) tag = '<span class="badge-pk">PK</span>';
+            else if (isFk) tag = '<span class="badge-fk">FK</span>';
+            else if (f.isBir) tag = '<span class="badge-bir">BIR</span>';
+
+            tablesHtml += `
+              <tr>
+                <td><strong>${f.name}</strong></td>
+                <td><code>${f.type}</code></td>
+                <td>${tag}</td>
+                <td>${f.isBir ? 'Statutory fiscal field for BIR audit trail' : (isPk ? 'Unique primary identifier' : (isFk ? 'Referential foreign key link' : 'Standard entity attribute'))}</td>
+              </tr>
+            `;
+          });
+
+          tablesHtml += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+
+        tablesHtml += `</div>`;
+      });
+
+      let relsHtml = "";
+      RELATIONSHIPS.forEach((r, idx) => {
+        relsHtml += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td><strong>${r.from}</strong> (${r.fromCol})</td>
+            <td style="font-family:monospace; font-weight:700; color:#0369a1;">1 ────&lt; N</td>
+            <td><strong>${r.to}</strong></td>
+            <td><code>${r.to}.${r.toCol}</code> — ${r.meaning}</td>
+          </tr>
+        `;
+      });
+
+      const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ISRA POS - Database Architecture &amp; Data Dictionary</title>
+  <style>
+    @page { margin: 10mm 12mm; size: A4 portrait; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #ffffff;
+      color: #0f172a;
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .action-bar {
+      position: sticky;
+      top: 0;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 8px;
+      margin-bottom: 25px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+      z-index: 1000;
+    }
+    .action-bar button {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .action-bar button:hover { background: #0369a1; }
+    .doc-cover {
+      text-align: center;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #0f172a;
+      margin-bottom: 20px;
+    }
+    .doc-org-name {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #475569;
+    }
+    .doc-main-title {
+      font-size: 20px;
+      font-weight: 900;
+      margin: 6px 0;
+      color: #0f172a;
+    }
+    .doc-sub-title {
+      font-size: 12px;
+      color: #334155;
+    }
+    .doc-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 10px 14px;
+      margin: 14px 0 20px;
+      font-size: 11px;
+    }
+    .doc-meta-grid div strong {
+      display: block;
+      color: #64748b;
+      font-size: 9px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .domain-section { margin-bottom: 24px; }
+    .domain-heading {
+      font-size: 14px;
+      font-weight: 800;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 4px;
+      margin-bottom: 14px;
+      color: #0f172a;
+    }
+    .table-card {
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      page-break-inside: avoid;
+      background: #ffffff;
+    }
+    .table-header {
+      background: #f1f5f9;
+      border-bottom: 1px solid #94a3b8;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .table-name { font-size: 13px; font-weight: 800; font-family: monospace; color: #0f172a; }
+    .table-info { padding: 8px 12px; font-size: 11px; line-height: 1.45; border-bottom: 1px solid #e2e8f0; }
+    .badge-pk { background: #fef08a; color: #854d0e; border: 1px solid #ca8a04; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+    .badge-fk { background: #e0f2fe; color: #0369a1; border: 1px solid #0284c7; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+    .badge-bir { background: #ffe4e6; color: #9f1239; border: 1px solid #f43f5e; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+    .grid-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .grid-table th { background: #f8fafc; border-bottom: 1px solid #cbd5e1; padding: 5px 8px; text-align: left; font-weight: 700; font-size: 10px; text-transform: uppercase; color: #475569; }
+    .grid-table td { border-bottom: 1px solid #f1f5f9; padding: 4.5px 8px; vertical-align: middle; }
+    .grid-table code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 10px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+    .rel-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+    .rel-table th { background: #f8fafc; border-bottom: 1.5px solid #0f172a; padding: 6px 8px; text-align: left; font-size: 10px; font-weight: 700; color: #475569; }
+    .rel-table td { border-bottom: 1px solid #e2e8f0; padding: 5px 8px; }
+    @media print {
+      .action-bar { display: none !important; }
+      body { padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="action-bar">
+    <div><strong>ISRA POS</strong> — Database Architecture &amp; Data Dictionary (37 Tables, 66 Relationships)</div>
+    <div style="display:flex; gap:10px;">
+      <button onclick="window.print();">🖨️ Print / Save as PDF</button>
+      <button onclick="window.close();" style="background:#475569;">Close Window</button>
+    </div>
+  </div>
+
+  <div class="doc-cover">
+    <div class="doc-org-name">ISRA Hardware POS &amp; Inventory Management System</div>
+    <h1 class="doc-main-title">DATABASE ARCHITECTURE &amp; DATA DICTIONARY</h1>
+    
+    <div class="doc-meta-grid">
+      <div><strong>Total Tables</strong>37 Verified Tables</div>
+      <div><strong>Total Relationships</strong>66 Foreign Key Mappings</div>
+      <div><strong>Database Engine</strong>MySQL InnoDB (utf8mb4)</div>
+      <div><strong>Audit Status</strong>100% Implementation Verified</div>
+    </div>
+  </div>
+
+  ${tablesHtml}
+
+  <div class="domain-section" style="page-break-before: always;">
+    <h2 class="domain-heading">8. Official Entity Relationship Matrix (66 Relationships)</h2>
+    <p style="font-size:11px; color:#475569; margin-bottom:12px;">Authoritative cardinality and referential integrity bindings governing transactional consistency.</p>
+    <table class="rel-table">
+      <thead>
+        <tr>
+          <th style="width:5%;">#</th>
+          <th style="width:25%;">Source Table (Parent)</th>
+          <th style="width:15%;">Cardinality</th>
+          <th style="width:25%;">Target Table (Child)</th>
+          <th style="width:30%;">Foreign Key &amp; Business Linkage</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${relsHtml}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+
+      printWin.document.open();
+      printWin.document.write(fullHtml);
+      printWin.document.close();
+    }
+
+    // ─── Generate Hardcopy Printable Data Dictionary Report for In-Page ─────
+    function generatePrintDocument() {
+      const container = document.getElementById("print-doc-container");
+      if (!container) return;
+
+      const domainGroups = [
+        { id: "security", title: "1. Security & Master Directory" },
+        { id: "product", title: "2. Product Catalog & Inventory Hub" },
+        { id: "sales", title: "3. Sales & Fiscal Core (Invoices)" },
+        { id: "returns_cashier", title: "4. Returns, Voids & Cash Drawer" },
+        { id: "customer", title: "5. Customer Accounts Receivable (Utang)" },
+        { id: "purchasing", title: "6. Purchasing & External Processing" },
+        { id: "audit_config", title: "7. BIR Accumulators & System Configuration" }
+      ];
+
+      let html = `
+        <div class="doc-cover">
+          <div class="doc-org-name">ISRA Hardware POS &amp; Inventory Management System</div>
+          <h1 class="doc-main-title">DATABASE ARCHITECTURE &amp; DATA DICTIONARY</h1>
+          
+          <div class="doc-meta-grid">
+            <div><strong>Total Tables</strong>37 Verified Tables</div>
+            <div><strong>Total Relationships</strong>66 Foreign Key Mappings</div>
+            <div><strong>Database Engine</strong>MySQL InnoDB (utf8mb4)</div>
+            <div><strong>Audit Status</strong>100% Implementation Verified</div>
+          </div>
+        </div>
+      `;
+
+      domainGroups.forEach(domain => {
+        const domainTables = TABLES.filter(t => {
+          if (domain.id === "returns_cashier") {
+            return ["returns", "return_items", "customer_store_credit", "sale_voids", "receipt_reprint_log", "cash_sessions"].includes(t.id);
+          }
+          if (domain.id === "audit_config") {
+            return ["z_readings", "invoice_sequences", "system_settings", "system_version", "backup_metadata", "backup_settings", "migration_history"].includes(t.id);
+          }
+          if (domain.id === "sales") {
+            return ["discounts", "discount_requests", "payment_methods", "sales", "sale_items", "suspended_sales"].includes(t.id);
+          }
+          return t.domain === domain.id;
+        });
+
+        if (domainTables.length === 0) return;
+
+        html += `
+          <div class="doc-domain-section">
+            <h2 class="doc-domain-heading">${domain.title} (${domainTables.length} Tables)</h2>
+        `;
+
+        domainTables.forEach(t => {
+          const isBir = t.fields.some(f => f.isBir) || ["sales", "sale_items", "z_readings", "system_settings", "returns", "invoice_sequences", "audit_logs"].includes(t.id);
+
+          html += `
+            <div class="doc-table-card">
+              <div class="doc-table-header">
+                <div>
+                  <span class="doc-table-name">${t.name}</span>
+                  ${isBir ? '<span class="doc-bir-badge">★ BIR Regulated</span>' : ''}
+                </div>
+                <div style="font-size:10px; color:#475569;">PK: <strong>${t.pk.join(", ")}</strong> | ${t.fields.length} columns</div>
+              </div>
+              <div class="doc-table-info">
+                <div><strong>Business Role:</strong> ${t.desc}</div>
+                ${t.bir ? `<div style="margin-top:4px; color:#9f1239;"><strong>BIR Fiscal Compliance:</strong> ${t.bir}</div>` : ''}
+              </div>
+              <table class="doc-grid-table">
+                <thead>
+                  <tr>
+                    <th style="width:25%;">Column Name</th>
+                    <th style="width:25%;">Data Type</th>
+                    <th style="width:15%;">Key / Constraint</th>
+                    <th style="width:35%;">Fiscal / Business Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          t.fields.forEach(f => {
+            const isPk = t.pk.includes(f.name);
+            const isFk = t.fks.includes(f.name);
+            let tag = '<span style="color:#94a3b8;">-</span>';
+            if (isPk) tag = '<span class="badge-pk">PK</span>';
+            else if (isFk) tag = '<span class="badge-fk">FK</span>';
+            else if (f.isBir) tag = '<span class="badge-bir">BIR</span>';
+
+            html += `
+              <tr>
+                <td><strong>${f.name}</strong></td>
+                <td><code>${f.type}</code></td>
+                <td>${tag}</td>
+                <td>${f.isBir ? 'Statutory fiscal field for BIR audit trail' : (isPk ? 'Unique primary identifier' : (isFk ? 'Referential foreign key link' : 'Standard entity attribute'))}</td>
+              </tr>
+            `;
+          });
+
+          html += `
+                </tbody>
+              </table>
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+      });
+
+      // Relationship Matrix Section
+      html += `
+        <div class="doc-domain-section" style="page-break-before: always;">
+          <h2 class="doc-domain-heading">8. Official Entity Relationship Matrix (66 Relationships)</h2>
+          <p style="font-size:11px; color:#475569; margin-bottom:12px;">Authoritative cardinality and referential integrity bindings governing transactional consistency.</p>
+          <table class="doc-rel-table">
+            <thead>
+              <tr>
+                <th style="width:5%;">#</th>
+                <th style="width:25%;">Source Table (Parent)</th>
+                <th style="width:15%;">Cardinality</th>
+                <th style="width:25%;">Target Table (Child)</th>
+                <th style="width:30%;">Foreign Key &amp; Business Linkage</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      RELATIONSHIPS.forEach((r, idx) => {
+        html += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td><strong>${r.from}</strong> (${r.fromCol})</td>
+            <td style="font-family:monospace; font-weight:700; color:#0369a1;">1 ────&lt; N</td>
+            <td><strong>${r.to}</strong></td>
+            <td><code>${r.to}.${r.toCol}</code> — ${r.meaning}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    // Run on startup
+    window.addEventListener("DOMContentLoaded", () => {
+      init();
+      setTimeout(fitView, 120);
+    });
+  </script>
+</body>
+</html>
