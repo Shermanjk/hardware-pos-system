@@ -6,6 +6,8 @@ import PageTransition from "@/shared/components/PageTransition";
 import BackToTop from "@/shared/components/BackToTop";
 import { useClerkAuth } from "@/shared/contexts/ClerkAuthContext";
 import { ServerStatusBanner } from "@/shared/components/ServerStatusBanner";
+import PreventCloseModal from "@/shared/components/PreventCloseModal";
+import { usePreventAccidentalClose, hasAnyActiveDraft } from "@/shared/hooks/usePreventAccidentalClose";
 
 interface ClerkLayoutProps {
   children: React.ReactNode;
@@ -26,6 +28,25 @@ function ProtectedClerkRoute({ children }: { children: React.ReactNode }) {
 export default function ClerkLayout({ children }: ClerkLayoutProps) {
   const mainRef = useRef<HTMLElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { logout } = useClerkAuth();
+
+  const {
+    showModal: showPreventClose,
+    closeModal: closePreventClose,
+    handleForceExit,
+  } = usePreventAccidentalClose({
+    hasActiveWork: hasAnyActiveDraft(),
+    terminalType: "CLERK",
+    portalName: "Inventory Clerk Terminal",
+    workDetails: {
+      title: "Unsaved Stock Operation in Progress",
+      description:
+        "You have an active session in the Inventory Clerk Terminal. Please make sure all staged stock-in deliveries, inventory counts, and adjustments are submitted before leaving.",
+    },
+    onDiscardAndExit: () => {
+      logout();
+    },
+  });
 
   return (
     <ProtectedClerkRoute>
@@ -44,6 +65,19 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
           </main>
         </div>
         <BackToTop containerRef={mainRef} threshold={200} />
+        <PreventCloseModal
+          open={showPreventClose}
+          onClose={closePreventClose}
+          hasActiveWork={hasAnyActiveDraft()}
+          terminalType="CLERK"
+          portalName="Inventory Clerk Terminal"
+          workDetails={{
+            title: "Unsaved Stock Operation in Progress",
+            description:
+              "You have an active session in the Inventory Clerk Terminal. Please make sure all staged stock-in deliveries, inventory counts, and adjustments are submitted before leaving.",
+          }}
+          onForceExit={handleForceExit}
+        />
       </div>
     </ProtectedClerkRoute>
   );

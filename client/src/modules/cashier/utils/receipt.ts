@@ -224,12 +224,14 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       margin: 0;
       padding: 0;
       font-family: 'Consolas', 'Courier New', Courier, monospace;
-      font-size: 11.5px;
-      line-height: 1.45;
+      font-size: 12px;
+      font-weight: 530;
+      line-height: 1.35;
       color: #000;
+      background: #fff;
       overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: none;
+      text-rendering: crispEdges;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -247,15 +249,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
     .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
     
-    .cust-row { display: flex; align-items: baseline; margin: 2.5px 0; width: 100%; }
-    .cust-lbl { width: 85px; flex-shrink: 0; font-size: 11.5px; white-space: nowrap; }
-    .cust-line { flex: 1 1 auto; border-bottom: 1px solid #000; min-height: 13px; font-size: 11.5px; padding-left: 2px; word-break: break-word; }
-    
     .section { margin: 2.5px 0; word-break: break-word; }
     .bold { font-weight: bold; }
-    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 14.5px; font-weight: normal; letter-spacing: 0.5px; word-break: break-word; }
-    .header-info { font-size: 11px; line-height: 1.45; text-align: center; margin-bottom: 4px; }
-    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px; word-break: break-word; }
+    .header-info { font-size: 11.5px; font-weight: 530; line-height: 1.35; text-align: center; margin-bottom: 4px; }
+    .divider { border-top: 1.5px dashed #000; margin: 4px 0; }
     
     .items {
       width: 100%;
@@ -270,23 +268,23 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       box-sizing: border-box;
     }
     .items th {
-      font-size: 10.5px;
-      font-weight: bold;
+      font-size: 11px;
+      font-weight: 530;
       padding-bottom: 3px;
     }
     .items tr.header-divider-row td {
       padding: 0;
       height: 1px;
-      border-bottom: 1px dashed #000;
+      border-bottom: 1.5px dashed #000;
     }
     .items tbody tr.item-row td {
-      padding-top: 3px;
-      padding-bottom: 3px;
-      font-size: 11.5px;
-      font-weight: normal;
+      padding-top: 2px;
+      padding-bottom: 2px;
+      font-size: 12px;
+      font-weight: 530;
     }
     .items .col-qty {
-      width: 10%;
+      width: 11%;
       text-align: left;
       white-space: nowrap;
     }
@@ -296,7 +294,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       white-space: nowrap;
     }
     .items .col-desc {
-      width: 51%;
+      width: 49%;
       text-align: left;
       word-wrap: break-word;
       overflow-wrap: break-word;
@@ -304,7 +302,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       padding-right: 4px;
     }
     .items .col-amt {
-      width: 25%;
+      width: 26%;
       text-align: right;
       white-space: nowrap;
       padding-right: 0;
@@ -329,16 +327,10 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       ${(storeFb || storePhone) ? `<div class="center">${storeFb ? `Fb: ${storeFb}` : ''}${storeFb && storePhone ? ' | ' : ''}${storePhone ? `Tel No: ${storePhone}` : ''}</div>` : ''}
     </div>
     
-    <div class="center bold" style="margin: 9px 0 7px 0; font-size: 14px; letter-spacing: 0.5px;">${documentType}</div>
+    <div class="center bold" style="margin: 8px 0 6px 0; font-size: 15px; letter-spacing: 0.5px;">${documentType}</div>
     
     <div class="row"><span>SI No: ${cleanInvoiceNumber(invoiceNumber)}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
-    <div class="cust-row"><span class="cust-lbl">SOLD TO:</span><span class="cust-line">${customerInfo.name || "Walk-In Customer"}</span></div>
-    ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
-    <div class="cust-row"><span class="cust-lbl">TIN:</span><span class="cust-line">${tinVal}</span></div>
-    <div class="cust-row"><span class="cust-lbl">ADDRESS:</span><span class="cust-line">${addrVal}</span></div>
-    <div class="cust-row"><span class="cust-lbl">BUS STYLE:</span><span class="cust-line">${busVal}</span></div>
-    
     <div class="divider"></div>
     <table class="items">
       <thead>
@@ -357,38 +349,44 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       </tbody>
     </table>
     
-    <div class="row" style="margin-top: 5px;"><span>ITEMS: ${totalItems}</span><span class="bold">TOTAL:&nbsp;&nbsp;${fmtCents(grossCents)}</span></div>
+    <div class="row" style="margin-top: 5px;"><span>ITEMS: ${totalItems}</span><span>TOTAL:&nbsp;&nbsp;${fmtCents(grossCents)}</span></div>
     ${discountHTML}
     ${vatBreakdownHTML}
     
     <div style="margin: 6px 0;"></div>
     ${params.paymentType === "CREDIT" ? `
-    <div class="row bold"><span>TOTAL AMOUNT:</span><span>${fmtCents(finalTotalCents)}</span></div>
+    <div class="row"><span>TOTAL AMOUNT:</span><span>${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>PAYMENT METHOD:</span><span>CREDIT / CHARGE</span></div>
     ${(params.downPaymentCents && params.downPaymentCents > 0) ? `
     <div class="row"><span>Down Payment (Cash):</span><span>${fmtCents(params.downPaymentCents)}</span></div>
-    <div class="row bold"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
+    <div class="row"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents - params.downPaymentCents)}</span></div>
     ` : `
-    <div class="row bold"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents)}</span></div>
+    <div class="row"><span>Charged to Account:</span><span>${fmtCents(finalTotalCents)}</span></div>
     `}
     ${params.creditBalance !== undefined && params.creditBalance !== null ? `
     <div class="row"><span>Total Account Balance:</span><span>${fmtCents(params.creditBalance)}</span></div>
     ` : ''}
     <div class="divider"></div>
     <div class="section" style="margin-top: 14px; margin-bottom: 4px;">
-      <div style="border-bottom: 1px solid #000; width: 80%; margin: 12px auto 4px auto;"></div>
-      <div class="center" style="font-size: 9px;">CUSTOMER ACKNOWLEDGEMENT / SIGNATURE</div>
+      <div style="border-bottom: 1.5px solid #000; width: 80%; margin: 12px auto 4px auto;"></div>
+      <div class="center" style="font-size: 10px;">CUSTOMER ACKNOWLEDGEMENT / SIGNATURE</div>
     </div>
     ` : `
-    <div class="row bold"><span>TOTAL AMOUNT DUE:</span><span>${fmtCents(finalTotalCents)}</span></div>
+    <div class="row"><span>TOTAL AMOUNT DUE:</span><span>${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>Cash Tendered:</span><span>${fmtCents(cashCents)}</span></div>
-    <div class="row"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
+    <div class="row bold"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
     `}
+    <div class="divider"></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${customerInfo.name || "Walk-In Customer"}</span></div>
+    ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">TIN:</span><span style="flex: 1; text-align: left;">${tinVal || "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">ADDRESS:</span><span style="flex: 1; text-align: left;">${addrVal || "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">BUS STYLE:</span><span style="flex: 1; text-align: left;">${busVal || "--------------------"}</span></div>
     <div class="divider"></div>
     <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
-    <div class="center" style="font-size: 10px;">POS Software: ISRA POS System v1.0</div>
-    <div class="center" style="font-size: 10px;">Accreditation No: ${accNo}${accDate}</div>
+    <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
+    <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
     <div class="divider"></div>
     ${posMin ? `
     <div class="center">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
@@ -399,7 +397,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="center">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
     <div class="center" style="margin-top: 3px;">${settings.receipt_footer || "Thank you for shopping with us!"}</div>
     `}
-    <div style="height: 8mm;"></div>
+    <div style="height: 2mm;"></div>
   </div>
 </body>
 </html>`;
@@ -500,12 +498,6 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push(`Date:           ${dateStr}`);
   lines.push(`Time:           ${timeStr}`);
   lines.push("----------------------------------------");
-  lines.push(`SOLD TO: ${customerInfo.name || "Walk-in Customer"}`);
-  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${scPwdId || "N/A"}`);
-  lines.push(`TIN: ${customerInfo.tin || "N/A"}`);
-  lines.push(`ADDRESS: ${customerInfo.address || "N/A"}`);
-  lines.push(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
-  lines.push("----------------------------------------");
   lines.push("QTY  UNIT  DESCRIPTION        PRICE    TOTAL");
   lines.push("----------------------------------------");
 
@@ -561,6 +553,12 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     lines.push(`Change:                        ${fmt(displayChangeCents)}`);
   }
 
+  lines.push("----------------------------------------");
+  lines.push(`SOLD TO: ${customerInfo.name || "Walk-in Customer"}`);
+  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${scPwdId || "N/A"}`);
+  lines.push(`TIN: ${customerInfo.tin || "N/A"}`);
+  lines.push(`ADDRESS: ${customerInfo.address || "N/A"}`);
+  lines.push(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
   lines.push("----------------------------------------");
   lines.push(`CASHIER: ${cashierName}`);
   lines.push("----------------------------------------");
@@ -660,31 +658,37 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
       width: 80mm;
       margin: 0;
       padding: 0;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      line-height: 1.4;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 12px;
+      font-weight: 530;
+      line-height: 1.35;
       color: #000;
+      background: #fff;
       overflow-x: hidden;
+      -webkit-font-smoothing: none;
+      text-rendering: crispEdges;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    body { padding: 0; }
+    body { padding: 0; background: #fff; }
     .receipt {
       width: 76mm;
       max-width: 76mm;
       margin: 0 auto;
-      padding: 0;
+      padding: 0 1mm;
+      box-sizing: border-box;
+      background: #fff;
     }
-    .center { text-align: center; margin: 1px 0; word-break: break-word; }
-    .row { display: flex; justify-content: space-between; margin: 1px 0; word-break: break-word; }
+    .center { text-align: center; margin: 2px 0; word-break: break-word; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2.5px 0; word-break: break-word; }
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
-    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
-    .bold { font-weight: bold; }
-    .store-name { text-align: center; margin: 3px 0; font-size: 15px; font-weight: bold; word-break: break-word; }
-    .divider { border-top: 1px dashed #000; margin: 3px 0; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
+    .bold { font-weight: 650; }
+    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: 650; letter-spacing: 0.5px; word-break: break-word; }
+    .divider { border-top: 1.5px dashed #000; margin: 4px 0; }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
     }
   </style>
 </head>

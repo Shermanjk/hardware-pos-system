@@ -106,17 +106,31 @@ To make the POS system open automatically whenever the cashier PC turns on:
 | **Collect Customer Utang / Credit Payment** | `F11` or `Alt + U` or click **Collect Utang** in header |
 | **Reprint Last Receipt** (e.g. Paper ran out / jammed) | `F10` or `Alt + R` or click **Reprint Last** in header |
 | **Quick Reprint on Change Dialog** | Press `R` when Payment Complete modal is open |
-| **Close Kiosk Window** | `Alt + F4` or `Ctrl + W` |
+| **Accidental Close Guard (Close / Exit)** | `Ctrl + W` or `Ctrl + Shift + W` *(Intercepted with confirmation dialog if work/transaction is active)* |
+| **Close Kiosk Window (OS Level)** | `Alt + F4` *(Triggers browser beforeunload prompt when active transaction exists)* |
 | **Focus Barcode / Product Search** | `F1` |
 | **Focus Cart Items** | `F2` |
 | **1-Click Walk-In Customer** | `F3` |
 | **Open Discount Selector** | `F4` |
-| **Hold Transaction** | `F5` |
+| **Hold / Suspend Transaction** | `F5` |
 | **Held Transactions Panel** | `F6` |
 | **Process Returns** | `F7` |
 | **Focus Cash Tendered** | `F8` |
 | **Void Requests / Void Sale** | `F9` |
-| **Refresh Kiosk App** | `Ctrl + R` |
+| **Refresh Kiosk App** | `Ctrl + R` *(Intercepted with warning if cart is not empty)* |
+
+---
+
+## Accidental Close & Active Transaction Protection
+
+The POS terminal includes an active safety interception engine:
+1. **Keystroke Interception (`Ctrl + W` / `Ctrl + Shift + W` / `Ctrl + F4`)**:
+   - If a cashier accidentally presses `Ctrl + W` or similar browser close commands, the POS immediately blocks the browser from closing.
+   - If a **sale is in progress** (cart has items, cash is entered, or payment is processing), a high-visibility **"Active Transaction in Progress"** warning modal pops up displaying the item count, total payable, and customer name.
+   - The cashier can immediately resume the sale by pressing **`Enter`** or **`Esc`**, choose to **Hold Transaction (F5)** to safely suspend the cart to the server before exiting, or cancel the exit.
+2. **Browser-Level Window Protection (`Alt + F4` / Close Button)**:
+   - Modern browser `beforeunload` event listeners automatically guard the window whenever a transaction or drawer session is active, preventing inadvertent closing of the kiosk tab or window.
+
 
 ---
 

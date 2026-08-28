@@ -5,6 +5,9 @@ import DailyBackupReminder from "@/components/DailyBackupReminder";
 import PageTransition from "@/shared/components/PageTransition";
 import BackToTop from "@/shared/components/BackToTop";
 import { ServerStatusBanner } from "@/shared/components/ServerStatusBanner";
+import PreventCloseModal from "@/shared/components/PreventCloseModal";
+import { usePreventAccidentalClose, hasAnyActiveDraft } from "@/shared/hooks/usePreventAccidentalClose";
+import { useAuth } from "@/shared/contexts/AuthContext";
 import axios from "axios";
 import { loadToken } from "@/shared/utils/auth";
 
@@ -82,6 +85,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
   }, []);
 
+  const { logout } = useAuth();
+  const {
+    showModal: showPreventClose,
+    closeModal: closePreventClose,
+    handleForceExit,
+  } = usePreventAccidentalClose({
+    hasActiveWork: hasAnyActiveDraft(),
+    terminalType: "ADMIN",
+    portalName: "Admin Terminal",
+    workDetails: {
+      title: "Unsaved Admin Work in Progress",
+      description:
+        "You have an active session in the Admin Terminal. Please make sure all product updates, inventory settings, and configurations are saved before leaving.",
+    },
+    onDiscardAndExit: () => {
+      logout();
+    },
+  });
+
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
       <AdminSidebar isOpen={isSidebarOpen} onToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
@@ -99,6 +121,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         open={showBackupReminder}
         onClose={() => setShowBackupReminder(false)}
         lastBackup={backupStatus?.lastBackup}
+      />
+      <PreventCloseModal
+        open={showPreventClose}
+        onClose={closePreventClose}
+        hasActiveWork={hasAnyActiveDraft()}
+        terminalType="ADMIN"
+        portalName="Admin Terminal"
+        workDetails={{
+          title: "Unsaved Admin Work in Progress",
+          description:
+            "You have an active session in the Admin Terminal. Please make sure all product updates, inventory settings, and configurations are saved before leaving.",
+        }}
+        onForceExit={handleForceExit}
       />
     </div>
   );

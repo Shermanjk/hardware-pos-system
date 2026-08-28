@@ -28,6 +28,8 @@ import CreditLimitOverrideModal from "../components/CreditLimitOverrideModal";
 import HeldOrdersPanel from "../components/HeldOrdersPanel";
 import PaymentPanel from "../components/PaymentPanel";
 import PaymentSuccessModal, { type PaymentSuccessData } from "../components/PaymentSuccessModal";
+import PreventCloseModal from "@/shared/components/PreventCloseModal";
+import { usePreventAccidentalClose } from "@/shared/hooks/usePreventAccidentalClose";
 import { recordCreditPayment, type CustomerSearchResult } from "@/shared/api/customersApi";
 import type { HeldReturn } from "../components/PendingReturnsPanel";
 import PendingReturnsPanel from "../components/PendingReturnsPanel";
@@ -119,24 +121,53 @@ export default function Cashier() {
 
   // ── Offline & Server Health indicator ─────────────────────────────────────
   // Combines sub-second WebSocket connection status with active HTTP health check polling.
-  const { status: serverConnStatus, isOffline: wsOffline, isMaintenance } = useServerStatus();
+  const { status: serverConnStatus, isOffline: wsOffline, isMaintenance, reconnect } = useServerStatus();
   const [isHealthOffline, setIsHealthOffline] = useState(false);
 
-  useEffect(() => {
-    async function checkHealth() {
-      try {
-        await httpClient.get("/api/health", { timeout: 5_000 });
-        setIsHealthOffline(false);
-      } catch {
-        setIsHealthOffline(true);
-      }
+  const checkHealth = useCallback(async () => {
+    try {
+      await httpClient.get("/api/health", { timeout: 5_000 });
+      setIsHealthOffline(false);
+    } catch {
+      setIsHealthOffline(true);
     }
+  }, []);
+
+  useEffect(() => {
     checkHealth();
     const id = setInterval(checkHealth, HEALTH_POLL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [checkHealth]);
 
   const isOffline = isHealthOffline || wsOffline || serverConnStatus === "disconnected" || isMaintenance;
+
+  const handleManualReconnect = useCallback(async () => {
+    reconnect();
+    await checkHealth();
+  }, [checkHealth, reconnect]);
+
+  // Alert the cashier with toasts when server connection drops or restores
+  const prevOfflineRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (prevOfflineRef.current === null) {
+      prevOfflineRef.current = isOffline;
+      return;
+    }
+    if (!prevOfflineRef.current && isOffline) {
+      toast.error("Server Unreachable", {
+        id: "server-reachability-toast",
+        description: "Cannot communicate with the POS server. Transactions and product lookups are paused.",
+        duration: 8000,
+      });
+    } else if (prevOfflineRef.current && !isOffline) {
+      toast.success("Server Reconnected", {
+        id: "server-reachability-toast",
+        description: "Connection to POS server restored. You can resume scanning and checkout.",
+        duration: 4000,
+      });
+    }
+    prevOfflineRef.current = isOffline;
+  }, [isOffline]);
 
   // ── Cart state ────────────────────────────────────────────────────────────
   const [cartItems, setCartItemsRaw]    = useState<CartItem[]>([]);
@@ -556,6 +587,46 @@ export default function Cashier() {
     } catch (err: unknown) { toast.error(getErrorMessage(err, "Failed to suspend sale.")); }
   }, [cartItems, customerInfo, holdCounter, loadSuspendedSales, selectedDiscount]);
 
+  // ── Accidental Close & Kiosk Protection Engine ────────────────────────────
+  const hasActiveTransaction =
+    cartItems.length > 0 ||
+    isProcessing ||
+    (cashTendered.trim() !== "" && cashTendered !== "0") ||
+    (downPayment.trim() !== "" && downPayment !== "0") ||
+    (utangPaymentAmount.trim() !== "" && utangPaymentAmount !== "0") ||
+    showDiscountApprovalModal ||
+    showCreditOverrideModal ||
+    showVoidDialog;
+
+  const {
+    showModal: showPreventClose,
+    closeModal: closePreventClose,
+    handleHoldAndExit,
+    handleForceExit,
+  } = usePreventAccidentalClose({
+    hasActiveWork: hasActiveTransaction,
+    workDetails: {
+      title: "Active Sales Transaction",
+      itemsCount: cartItems.length,
+      totalAmount: fmt(finalTotalCents / 100),
+      customerName: customerInfo.name.trim() || undefined,
+      shiftActive: hasOpenSession,
+      shiftLabel: currentSession?.shift_label || "Active Shift",
+      description: hasActiveTransaction
+        ? `You currently have ${cartItems.length} item(s) in the active cart totaling ${fmt(finalTotalCents / 100)}. Please complete or hold the transaction before leaving to prevent loss of data.`
+        : undefined,
+    },
+    onHoldOrSave: cartItems.length > 0 ? handleHold : undefined,
+    onDiscardAndExit: () => {
+      logout();
+    },
+    onEndShiftAndExit: () => {
+      closePreventClose();
+      setIsLogoutShiftFlow(true);
+      setShowEndShift(true);
+    },
+  });
+
   const handleRecall = useCallback(async (holdId: string) => {
     const held = suspendedSales.find((h) => h.suspended_order_id === holdId);
     if (!held) return;
@@ -955,6 +1026,12 @@ export default function Cashier() {
 
       // ── Escape handling (closes drawers/modals/popups) ──────────────────────
       if (e.key === "Escape") {
+        if (showPreventClose) {
+          e.preventDefault();
+          closePreventClose();
+          barcodeRef.current?.focus();
+          return;
+        }
         if (showHolds) {
           e.preventDefault();
           setShowHolds(false);
@@ -1229,7 +1306,11 @@ export default function Cashier() {
           </Button>
 
           {/* Live Server Status badge in header */}
-          <ServerStatusBadge className="mr-1" />
+          <ServerStatusBadge
+            className="mr-1"
+            isOfflineOverride={isOffline}
+            onReconnectOverride={handleManualReconnect}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1273,7 +1354,10 @@ export default function Cashier() {
       </header>
 
       {/* ── Live Server Status & Maintenance banner ─────────────────────────── */}
-      <ServerStatusBanner />
+      <ServerStatusBanner
+        isOfflineOverride={isOffline}
+        onReconnectOverride={handleManualReconnect}
+      />
 
       {/* ── No-shift banner ────────────────────────────────────────────────── */}
       {/* Shown after session check completes and no open session exists.       */}
@@ -1308,6 +1392,7 @@ export default function Cashier() {
           selectedDiscount={selectedDiscount}
           setSelectedDiscount={setSelectedDiscount}
           noShift={sessionChecked && !hasOpenSession}
+          isOffline={isOffline}
         />
         <CustomerPanel
           customerInfo={customerInfo}
@@ -1469,6 +1554,28 @@ export default function Cashier() {
         }}
         data={paymentSuccessData}
         onReprint={handleReprintLastReceipt}
+      />
+
+      {/* ── Accidental Kiosk Close & Active Transaction Protection Modal ── */}
+      <PreventCloseModal
+        open={showPreventClose}
+        onClose={closePreventClose}
+        hasActiveWork={hasActiveTransaction}
+        workDetails={{
+          title: "Active Sales Transaction",
+          itemsCount: cartItems.length,
+          totalAmount: fmt(finalTotalCents / 100),
+          customerName: customerInfo.name.trim() || undefined,
+          shiftActive: hasOpenSession,
+          shiftLabel: currentSession?.shift_label || "Active Shift",
+        }}
+        onHoldAndExit={cartItems.length > 0 ? handleHoldAndExit : undefined}
+        onForceExit={handleForceExit}
+        onEndShift={() => {
+          closePreventClose();
+          setIsLogoutShiftFlow(true);
+          setShowEndShift(true);
+        }}
       />
 
     </div>

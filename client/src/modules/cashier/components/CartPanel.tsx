@@ -38,6 +38,8 @@ interface CartPanelProps {
   setSelectedDiscount: React.Dispatch<React.SetStateAction<{ id: number; name: string; percentage: number; requiresApproval: boolean; isScPwd: boolean } | null>>;
   /** When true, scanning/searching is blocked until a shift is started. */
   noShift?: boolean;
+  /** When true, the server is unreachable — product lookup is blocked. */
+  isOffline?: boolean;
 }
 
 interface Discount {
@@ -58,6 +60,7 @@ export default function CartPanel({
   barcodeRef, searchTimeoutRef,
   selectedDiscount, setSelectedDiscount,
   noShift = false,
+  isOffline = false,
 }: CartPanelProps) {
 
   const [discounts, setDiscounts] = useState<Discount[]>([]);
@@ -225,6 +228,13 @@ export default function CartPanel({
   const handleBarcodeChange = (value: string) => {
     setBarcodeInput(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (isOffline) {
+      toast.error("Server Unreachable", {
+        id: "cart-offline-lookup",
+        description: "Cannot search products while server is offline.",
+      });
+      return;
+    }
     if (!value.trim()) { setShowDropdown(false); setSearchResults([]); setHighlightedIndex(-1); return; }
     searchTimeoutRef.current = setTimeout(() => {
       lookupAndMaybeAdd(value.trim());
@@ -236,13 +246,20 @@ export default function CartPanel({
     const code = raw.trim();
     scanBufferRef.current = "";
     if (!code) return;
+    if (isOffline) {
+      toast.error("Server Unreachable", {
+        id: "cart-offline-scan",
+        description: "Cannot scan products while server is offline.",
+      });
+      return;
+    }
     setBarcodeInput(code);
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
     lookupAndMaybeAdd(code);
-  }, [lookupAndMaybeAdd, setBarcodeInput, searchTimeoutRef]);
+  }, [isOffline, lookupAndMaybeAdd, setBarcodeInput, searchTimeoutRef]);
 
   useEffect(() => {
     if (noShift) return;
@@ -482,10 +499,18 @@ export default function CartPanel({
             onKeyDown={handleKeyDown}
             onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
             onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-            placeholder={noShift ? "Start your shift to begin scanning…" : "Scan barcode or type product name… (↑/↓ to navigate, Enter to select)"}
-            disabled={noShift}
-            className="pl-9 pr-8 h-11 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-            autoFocus={!noShift}
+            placeholder={
+              noShift
+                ? "Start your shift to begin scanning…"
+                : isOffline
+                ? "⚠️ Server Unreachable — Reconnecting to POS backend..."
+                : "Scan barcode or type product name… (↑/↓ to navigate, Enter to select)"
+            }
+            disabled={noShift || isOffline}
+            className={`pl-9 pr-8 h-11 text-sm bg-white border-slate-400 text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed ${
+              isOffline ? "border-red-400 bg-red-50/50" : ""
+            }`}
+            autoFocus={!noShift && !isOffline}
           />
           {showDropdown && searchResults.length > 0 && (
             <div

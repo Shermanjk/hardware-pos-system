@@ -5,13 +5,29 @@ import { Button } from "@/components/ui/button";
 interface ServerStatusBannerProps {
   className?: string;
   showInCashier?: boolean;
+  isOfflineOverride?: boolean;
+  onReconnectOverride?: () => void;
 }
 
-export function ServerStatusBanner({ className = "", showInCashier = true }: ServerStatusBannerProps) {
+export function ServerStatusBanner({
+  className = "",
+  showInCashier = true,
+  isOfflineOverride,
+  onReconnectOverride,
+}: ServerStatusBannerProps) {
   const { status, isOffline, isMaintenance, maintenanceMessage, retryCount, reconnect } = useServerStatus();
 
-  // If server is connected and not in maintenance, render nothing
-  if (status === "connected" && !isMaintenance) {
+  const effectivelyOffline = isOfflineOverride !== undefined ? isOfflineOverride : isOffline || status === "disconnected";
+
+  const handleReconnect = () => {
+    reconnect();
+    if (onReconnectOverride) {
+      onReconnectOverride();
+    }
+  };
+
+  // If server is connected and not in maintenance and not offline override, render nothing
+  if (!effectivelyOffline && status === "connected" && !isMaintenance) {
     return null;
   }
 
@@ -35,8 +51,8 @@ export function ServerStatusBanner({ className = "", showInCashier = true }: Ser
         <Button
           size="sm"
           variant="secondary"
-          className="bg-white/20 hover:bg-white/30 text-white border-0 text-xs shrink-0 h-7 px-3"
-          onClick={reconnect}
+          className="bg-white/20 hover:bg-white/30 text-white border-0 text-xs shrink-0 h-7 px-3 cursor-pointer"
+          onClick={handleReconnect}
         >
           <RefreshCw className="w-3 h-3 mr-1" />
           Check Status
@@ -46,30 +62,30 @@ export function ServerStatusBanner({ className = "", showInCashier = true }: Ser
   }
 
   // Offline / Disconnected banner
-  if (isOffline || status === "disconnected") {
+  if (effectivelyOffline || status === "disconnected") {
     return (
       <div
         className={`bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white px-4 py-2.5 shadow-md flex items-center justify-between gap-3 text-sm z-50 animate-in fade-in duration-200 ${className}`}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-1 bg-white/20 rounded-full shrink-0">
+          <div className="p-1.5 bg-white/20 rounded-lg shrink-0 animate-pulse">
             <WifiOff className="w-4 h-4 text-white" />
           </div>
           <div className="truncate">
-            <span className="font-semibold mr-1.5">Server Unreachable:</span>
+            <span className="font-bold mr-1.5">Server Unreachable:</span>
             <span className="text-red-100">
               {status === "connecting"
                 ? `Reconnecting to POS backend (Attempt #${retryCount})...`
-                : "Real-time updates and new transactions are temporarily unavailable."}
+                : "Cannot communicate with POS backend. Product lookups and transactions are temporarily suspended."}
             </span>
           </div>
         </div>
         <Button
           size="sm"
           variant="secondary"
-          className="bg-white/20 hover:bg-white/30 text-white border-0 text-xs shrink-0 h-7 px-3 font-medium"
+          className="bg-white/20 hover:bg-white/30 text-white border-0 text-xs shrink-0 h-7 px-3 font-semibold cursor-pointer"
           disabled={status === "connecting"}
-          onClick={reconnect}
+          onClick={handleReconnect}
         >
           <RefreshCw className={`w-3 h-3 mr-1.5 ${status === "connecting" ? "animate-spin" : ""}`} />
           {status === "connecting" ? "Connecting..." : "Reconnect Now"}
@@ -84,10 +100,26 @@ export function ServerStatusBanner({ className = "", showInCashier = true }: Ser
 interface ServerStatusBadgeProps {
   className?: string;
   showText?: boolean;
+  isOfflineOverride?: boolean;
+  onReconnectOverride?: () => void;
 }
 
-export function ServerStatusBadge({ className = "", showText = true }: ServerStatusBadgeProps) {
+export function ServerStatusBadge({
+  className = "",
+  showText = true,
+  isOfflineOverride,
+  onReconnectOverride,
+}: ServerStatusBadgeProps) {
   const { status, isOffline, isMaintenance, reconnect } = useServerStatus();
+
+  const effectivelyOffline = isOfflineOverride !== undefined ? isOfflineOverride : isOffline || status === "disconnected";
+
+  const handleReconnect = () => {
+    reconnect();
+    if (onReconnectOverride) {
+      onReconnectOverride();
+    }
+  };
 
   if (isMaintenance) {
     return (
@@ -101,7 +133,7 @@ export function ServerStatusBadge({ className = "", showText = true }: ServerSta
     );
   }
 
-  if (status === "connected" && !isOffline) {
+  if (!effectivelyOffline && status === "connected" && !isOffline) {
     return (
       <div
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 ${className}`}
@@ -116,7 +148,7 @@ export function ServerStatusBadge({ className = "", showText = true }: ServerSta
   if (status === "connecting") {
     return (
       <button
-        onClick={reconnect}
+        onClick={handleReconnect}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors ${className}`}
         title="Reconnecting to server..."
       >
@@ -128,9 +160,9 @@ export function ServerStatusBadge({ className = "", showText = true }: ServerSta
 
   return (
     <button
-      onClick={reconnect}
+      onClick={handleReconnect}
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors ${className}`}
-      title="Server disconnected. Click to reconnect."
+      title="Server unreachable. Click to reconnect."
     >
       <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
       {showText && <span>Offline</span>}

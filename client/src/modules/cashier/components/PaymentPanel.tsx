@@ -536,6 +536,12 @@ export default function PaymentPanel({
               </div>
             </Button>
           </div>
+          {isOffline && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 flex items-center gap-2 text-xs text-red-700 font-semibold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0" />
+              <span>Server Unreachable: Reconnect before processing checkout.</span>
+            </div>
+          )}
           {noShift && (
             <p className="text-xs text-center text-amber-600 font-semibold">
               You must <span className="underline">Start Shift</span> before processing transactions.

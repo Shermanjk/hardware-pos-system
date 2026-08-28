@@ -149,8 +149,8 @@ namespace IsraPOS.PrintAgent
 
     public class PrinterMarginsConfig
     {
-        public float topMarginMm = 5.0f;
-        public float bottomMarginMm = 50.0f;
+        public float topMarginMm = 2.0f;
+        public float bottomMarginMm = 2.0f;
         public float leftMarginMm = 1.0f;
         public float contentWidthMm = 71.6f;
 
@@ -356,9 +356,9 @@ namespace IsraPOS.PrintAgent
                     float totalDrawHeight        = drawWidthHundredths * aspectRatio;
 
                     // EXACT DYNAMIC PAGE HEIGHT CALCULATION:
-                    // Content draw height + top margin + bottom clearance feed past tear bar
-                    int totalPageHeightHundredths = (int)Math.Ceiling(topMarginHundredths + totalDrawHeight + bottomMarginHundredths + 20f);
-                    if (totalPageHeightHundredths < 200) totalPageHeightHundredths = 200; // Minimum 50mm
+                    // Content draw height + top margin + bottom margin
+                    int totalPageHeightHundredths = (int)Math.Ceiling(topMarginHundredths + totalDrawHeight + bottomMarginHundredths + 4f);
+                    if (totalPageHeightHundredths < 100) totalPageHeightHundredths = 100; // Minimum 25mm
 
                     // Find driver stock if defined (to inherit RawKind / driver binding)
                     PaperSize stock80mm = null;
@@ -440,7 +440,7 @@ namespace IsraPOS.PrintAgent
                         Console.ResetColor();
 
                         // Crisp thermal rendering: avoid anti-aliasing gray halftones that cause blur on thermal heads
-                        e.Graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                        e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
                         e.Graphics.SmoothingMode     = SmoothingMode.None;
                         e.Graphics.PixelOffsetMode   = PixelOffsetMode.Half;
 
@@ -786,6 +786,11 @@ namespace IsraPOS.PrintAgent
                 var list = new List<string>();
                 foreach (string p in PrinterSettings.InstalledPrinters)
                 {
+                    string lower = p.ToLower();
+                    // Exclude barcode/label printers from POS receipt agent
+                    if (lower.Contains("365") || lower.Contains("label") || lower.Contains("barcode"))
+                        continue;
+
                     list.Add(p);
                 }
                 return list.ToArray();
@@ -798,28 +803,31 @@ namespace IsraPOS.PrintAgent
 
         public static string ResolveTargetPrinter(string requestedPrinter)
         {
-            if (!string.IsNullOrEmpty(requestedPrinter) && requestedPrinter.Trim() != "Default")
+            if (!string.IsNullOrEmpty(requestedPrinter) && requestedPrinter.Trim() != "Default" && !requestedPrinter.ToLower().Contains("365"))
             {
                 return requestedPrinter.Trim();
             }
 
-            string def = GetDefaultPrinterName();
-            if (!string.IsNullOrEmpty(def) && def != "Default")
-            {
-                return def;
-            }
-
             string[] printers = GetInstalledPrinters();
+
+            // 1. Explicitly prioritize dedicated 80mm POS receipt printers (POS-80, VOZY, Thermal, Receipt)
             foreach (string p in printers)
             {
                 string lower = p.ToLower();
-                if (lower.Contains("pos") || lower.Contains("thermal") || lower.Contains("receipt") || lower.Contains("xprinter") || lower.Contains("epson") || lower.Contains("365"))
+                if (lower.Contains("pos-80") || lower.Contains("pos 80") || lower.Contains("vozy") || lower.Contains("pos") || lower.Contains("receipt") || lower.Contains("thermal"))
                 {
                     return p;
                 }
             }
 
-            return printers.Length > 0 ? printers[0] : "Default";
+            // 2. Fallback to Windows default printer (if not a label printer)
+            string def = GetDefaultPrinterName();
+            if (!string.IsNullOrEmpty(def) && def != "Default" && !def.ToLower().Contains("365") && !def.ToLower().Contains("label"))
+            {
+                return def;
+            }
+
+            return printers.Length > 0 ? printers[0] : "POS-80";
         }
 
         public static string GetTestReceiptString(string targetPrinter)
@@ -886,30 +894,60 @@ namespace IsraPOS.PrintAgent
             return new byte[] { 0x1B, 0x70, 0x00, 0x19, 0xFA };
         }
 
-        public static void Main(string[] args)
+        public static void SafeLog(string message, ConsoleColor? color = null)
         {
             try
             {
-                Console.Title = "Isra POS Hardware Print Agent (Active)";
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("=================================================");
-                Console.WriteLine("  Isra Hardware POS - Standalone Print Agent     ");
-                Console.WriteLine("=================================================");
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("  Default Printer: " + GetDefaultPrinterName());
-                
-                string[] all = GetInstalledPrinters();
-                Console.WriteLine("  Installed Printers (" + all.Length + "):");
-                foreach (string p in all)
-                {
-                    Console.WriteLine("    * " + p);
-                }
+                if (color.HasValue) Console.ForegroundColor = color.Value;
+                Console.WriteLine(message);
+                if (color.HasValue) Console.ResetColor();
+            }
+            catch { }
+            try
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "agent_debug.log");
+                File.AppendAllText(logPath, "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message + "\r\n");
+            }
+            catch { }
+        }
 
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("  100% Zero-Flash Printing Engine Ready.");
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("=================================================");
-                Console.ResetColor();
+        public static void Main(string[] args)
+        {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try
+                {
+                    string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "agent_debug.log");
+                    File.AppendAllText(logPath, "[" + DateTime.Now.ToString() + "] UnhandledException: " + (e.ExceptionObject != null ? e.ExceptionObject.ToString() : "null") + "\r\n");
+                }
+                catch { }
+            };
+
+            SafeLog("=================================================", ConsoleColor.Green);
+            SafeLog("  Isra Hardware POS - Standalone Print Agent     ", ConsoleColor.Green);
+            SafeLog("=================================================", ConsoleColor.Green);
+            SafeLog("  Receipt Printer: " + ResolveTargetPrinter(null), ConsoleColor.Cyan);
+            
+            string[] all = GetInstalledPrinters();
+            SafeLog("  Installed Receipt Printers (" + all.Length + "):", ConsoleColor.Cyan);
+            foreach (string p in all)
+            {
+                SafeLog("    * " + p);
+            }
+
+            SafeLog("  100% Zero-Flash Printing Engine Ready.", ConsoleColor.Yellow);
+            SafeLog("=================================================", ConsoleColor.Green);
+
+            try
+            {
+                int currentPid = System.Diagnostics.Process.GetCurrentProcess().Id;
+                foreach (var proc in System.Diagnostics.Process.GetProcessesByName("IsraPrintAgent"))
+                {
+                    if (proc.Id != currentPid)
+                    {
+                        try { proc.Kill(); proc.WaitForExit(1000); } catch { }
+                    }
+                }
             }
             catch { }
 
@@ -925,31 +963,23 @@ namespace IsraPOS.PrintAgent
                     listener.Start();
                     ActivePort = port;
                     started = true;
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("\n[SUCCESS] Print Agent listening on http://127.0.0.1:" + ActivePort);
-                    Console.ResetColor();
+                    SafeLog("\n[SUCCESS] Print Agent listening on http://127.0.0.1:" + ActivePort, ConsoleColor.Green);
                     break;
                 }
                 catch (Exception ex)
                 {
-                    Console.ForegroundColor = ConsoleColor.DarkGray;
-                    Console.WriteLine("Port " + port + " busy (" + ex.Message + "), trying next...");
-                    Console.ResetColor();
+                    SafeLog("Port " + port + " busy (" + ex.Message + "), trying next...", ConsoleColor.DarkGray);
                 }
             }
 
             if (!started)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("[FATAL ERROR] Could not bind to any candidate port (18181-18184).");
-                Console.ResetColor();
-                Console.ReadLine();
+                SafeLog("[FATAL ERROR] Could not bind to any candidate port (18181-18184).", ConsoleColor.Red);
+                try { Console.ReadLine(); } catch { }
                 return;
             }
 
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Waiting for print jobs from Chrome POS... (Logs will appear below)\n");
-            Console.ResetColor();
+            SafeLog("Waiting for print jobs from Chrome POS... (Logs will appear below)\n", ConsoleColor.White);
 
             while (true)
             {
@@ -960,11 +990,7 @@ namespace IsraPOS.PrintAgent
                 }
                 catch (Exception ex)
                 {
-                    try
-                    {
-                        Console.WriteLine("[Socket Accept Exception] " + ex.Message);
-                    }
-                    catch { }
+                    SafeLog("[Socket Accept Exception] " + ex.Message);
                     Thread.Sleep(100);
                 }
             }
@@ -1028,10 +1054,8 @@ namespace IsraPOS.PrintAgent
 
                     if (method == "GET" && (path == "/health" || path == "/status"))
                     {
-                        string def = GetDefaultPrinterName();
-                        Console.ForegroundColor = ConsoleColor.DarkCyan;
-                        Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [HEALTH CHECK] Connected from Chrome POS (Port " + ActivePort + ")");
-                        Console.ResetColor();
+                        string def = ResolveTargetPrinter(null);
+                        SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [HEALTH CHECK] Connected from Chrome POS (Port " + ActivePort + ", Printer: " + def + ")", ConsoleColor.DarkCyan);
 
                         string json = "{\"status\":\"ok\",\"agent\":\"IsraPOS-StandaloneExe\",\"version\":\"3.3.0\",\"defaultPrinter\":\"" + EscapeJson(def) + "\",\"port\":" + ActivePort + ",\"timestamp\":\"" + DateTime.UtcNow.ToString("o") + "\"}";
                         SendResponse(stream, 200, "OK", json);
@@ -1066,7 +1090,7 @@ namespace IsraPOS.PrintAgent
                         }
                         catch (Exception parseEx)
                         {
-                            Console.WriteLine("[JSON Parse Warning] " + parseEx.Message);
+                            SafeLog("[JSON Parse Warning] " + parseEx.Message);
                         }
 
                         string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
@@ -1076,9 +1100,7 @@ namespace IsraPOS.PrintAgent
                         bool kickDrawer = jsonDict != null && jsonDict.ContainsKey("kickDrawer") && Convert.ToBoolean(jsonDict["kickDrawer"]);
                         string target = ResolveTargetPrinter(printerName);
 
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "' (Image: " + (!string.IsNullOrEmpty(imageBase64) ? "YES" : "NO") + ", Text: " + (text != null ? text.Length : 0) + " chars, Base64: " + (base64 != null ? base64.Length : 0) + " chars, Drawer: " + kickDrawer + ")");
-                        Console.ResetColor();
+                        SafeLog("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [PRINT REQUEST] Target: '" + target + "' (Image: " + (!string.IsNullOrEmpty(imageBase64) ? "YES" : "NO") + ", Text: " + (text != null ? text.Length : 0) + " chars, Base64: " + (base64 != null ? base64.Length : 0) + " chars, Drawer: " + kickDrawer + ")", ConsoleColor.Yellow);
 
                         bool printed = false;
 
@@ -1088,46 +1110,30 @@ namespace IsraPOS.PrintAgent
                             try
                             {
                                 byte[] imgBytes = Convert.FromBase64String(imageBase64);
-                                string lowerTarget = target.ToLower();
 
-                                // For Xprinter XP-365B and TSPL barcode label printers in Label Mode:
-                                // Direct TSPL with dynamic SIZE provides 100% infinite continuous height with 0% driver clipping!
-                                if (lowerTarget.Contains("365") || lowerTarget.Contains("xprinter") || lowerTarget.Contains("tspl") || lowerTarget.Contains("label"))
-                                {
-                                    Console.ForegroundColor = ConsoleColor.Green;
-                                    Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [TSPL NATIVE] Printing canonical receipt image via Direct TSPL RAW (0% GDI clipping, 100% dynamic continuous roll)...");
-                                    Console.ResetColor();
-                                    printed = TsplRasterPrinter.PrintReceiptImageTspl(target, imgBytes);
-                                }
+                                SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing canonical receipt image via Windows GDI...", ConsoleColor.Cyan);
+                                printed = ImageReceiptPrinter.PrintReceiptImage(target, imgBytes);
 
                                 if (!printed)
                                 {
-                                    Console.ForegroundColor = ConsoleColor.Cyan;
-                                    Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing canonical receipt image via Windows GDI...");
-                                    Console.ResetColor();
-                                    printed = ImageReceiptPrinter.PrintReceiptImage(target, imgBytes);
-                                }
-
-                                if (!printed)
-                                {
-                                    Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Windows GDI failed, trying ESC/POS raw backup...");
+                                    SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] Windows GDI failed, trying ESC/POS raw backup...");
                                     printed = EscPosRasterPrinter.PrintReceiptImageEscpos(target, imgBytes);
                                 }
                             }
                             catch (Exception imgEx)
                             {
-                                Console.WriteLine("[Image Decode Warning] " + imgEx.Message);
+                                SafeLog("[Image Decode Warning] " + imgEx.Message);
                             }
                         }
 
                         // 2. FALLBACK 1: GDI text rendering
                         if (!printed && !string.IsNullOrEmpty(text))
                         {
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI text engine...");
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] Printing via GDI text engine...");
                             printed = GdiReceiptPrinter.PrintReceiptText(target, text);
                             if (!printed)
                             {
-                                Console.WriteLine("[GDI Warning] GDI failed — trying TEXT spooler fallback...");
+                                SafeLog("[GDI Warning] GDI failed — trying TEXT spooler fallback...");
                                 string textRes = RawPrinterHelper.SendTextToPrinter(target, text);
                                 if (textRes == "OK") printed = true;
                             }
@@ -1139,13 +1145,13 @@ namespace IsraPOS.PrintAgent
                             try
                             {
                                 byte[] bytes = Convert.FromBase64String(base64);
-                                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes to spooler...");
+                                SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] Dispatching " + bytes.Length + " raw ESC/POS bytes to spooler...");
                                 string res = RawPrinterHelper.SendBytesToPrinter(target, bytes);
                                 if (res == "OK") printed = true;
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine("[RAW Spooler Warning] " + ex.Message);
+                                SafeLog("[RAW Spooler Warning] " + ex.Message);
                             }
                         }
 
@@ -1162,16 +1168,12 @@ namespace IsraPOS.PrintAgent
 
                         if (printed)
                         {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Print completed successfully to '" + target + "'");
-                            Console.ResetColor();
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Print completed successfully to '" + target + "'", ConsoleColor.Green);
                             SendResponse(stream, 200, "OK", "{\"success\":true,\"printer\":\"" + EscapeJson(target) + "\"}");
                         }
                         else
                         {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [FAILED] Print job failed");
-                            Console.ResetColor();
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [FAILED] Print job failed", ConsoleColor.Red);
                             SendResponse(stream, 500, "Internal Server Error", "{\"error\":\"Print job failed to spool\"}");
                         }
                         return;
@@ -1190,9 +1192,7 @@ namespace IsraPOS.PrintAgent
                         string printerName = jsonDict != null && jsonDict.ContainsKey("printerName") ? Convert.ToString(jsonDict["printerName"]) : null;
                         string target = ResolveTargetPrinter(printerName);
 
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [TEST PRINT] Printing test page to '" + target + "'...");
-                        Console.ResetColor();
+                        SafeLog("\n[" + DateTime.Now.ToString("HH:mm:ss") + "] [TEST PRINT] Printing test page to '" + target + "'...", ConsoleColor.Yellow);
 
                         // Primary: GDI engine with test receipt text
                         string testText = GetTestReceiptString(target);
@@ -1200,7 +1200,7 @@ namespace IsraPOS.PrintAgent
 
                         if (!testPrinted)
                         {
-                            Console.WriteLine("[GDI Warning] GDI failed — trying ESC/POS RAW fallback...");
+                            SafeLog("[GDI Warning] GDI failed — trying ESC/POS RAW fallback...");
                             byte[] testBytes = BuildTestReceiptEscpos(target);
                             string rawRes = RawPrinterHelper.SendBytesToPrinter(target, testBytes);
                             if (rawRes == "OK") testPrinted = true;
@@ -1208,16 +1208,12 @@ namespace IsraPOS.PrintAgent
 
                         if (testPrinted)
                         {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Test receipt dispatched to '" + target + "'");
-                            Console.ResetColor();
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Test receipt dispatched to '" + target + "'", ConsoleColor.Green);
                             SendResponse(stream, 200, "OK", "{\"success\":true,\"printer\":\"" + EscapeJson(target) + "\"}");
                         }
                         else
                         {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [ERROR] Test print failed.");
-                            Console.ResetColor();
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [ERROR] Test print failed.", ConsoleColor.Red);
                             SendResponse(stream, 500, "Internal Server Error", "{\"error\":\"Print job failed on all methods\"}");
                         }
                         return;
@@ -1240,9 +1236,7 @@ namespace IsraPOS.PrintAgent
                         string res = RawPrinterHelper.SendBytesToPrinter(target, drawerBytes);
                         if (res == "OK")
                         {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Cash drawer kick sent.");
-                            Console.ResetColor();
+                            SafeLog("[" + DateTime.Now.ToString("HH:mm:ss") + "] [SUCCESS] Cash drawer kick sent.", ConsoleColor.Green);
                             SendResponse(stream, 200, "OK", "{\"success\":true,\"printer\":\"" + EscapeJson(target) + "\"}");
                         }
                         else
@@ -1256,9 +1250,7 @@ namespace IsraPOS.PrintAgent
                 }
                 catch (Exception ex)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("[REQUEST EXCEPTION] " + ex.Message);
-                    Console.ResetColor();
+                    SafeLog("[REQUEST EXCEPTION] " + ex.Message, ConsoleColor.Red);
                 }
             }
         }

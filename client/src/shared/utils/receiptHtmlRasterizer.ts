@@ -88,12 +88,39 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
       scrollY: 0,
     });
 
+    // 4. Pure-Black Thermal Binarization (Eliminate gray anti-aliasing dithering)
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (ctx) {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i];
+        const g = d[i + 1];
+        const b = d[i + 2];
+        const a = d[i + 3];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        // Tuned 1-Bit Thermal Threshold: Solid pitch-black strokes with zero blur and zero heavy bloat
+        if (a > 50 && lum < 185) {
+          d[i] = 0;
+          d[i + 1] = 0;
+          d[i + 2] = 0;
+          d[i + 3] = 255;
+        } else {
+          d[i] = 255;
+          d[i + 1] = 255;
+          d[i + 2] = 255;
+          d[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
     const dataUrl = canvas.toDataURL("image/png");
     const imageBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
     const renderTimeMs = Math.round(performance.now() - t0);
 
     console.log(
-      `%c[ReceiptRasterizer] ✅ SUCCESS: Rendered ${canvas.width}x${canvas.height}px in ${renderTimeMs}ms | base64 length: ${imageBase64.length} chars`,
+      `%c[ReceiptRasterizer] ✅ SUCCESS: Rendered crisp 1-bit ${canvas.width}x${canvas.height}px in ${renderTimeMs}ms | base64 length: ${imageBase64.length} chars`,
       "color: #10b981; font-weight: bold;"
     );
 
