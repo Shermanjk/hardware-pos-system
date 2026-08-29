@@ -325,7 +325,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   <div class="receipt">
     <div class="store-name">${storeName}</div>
     <div class="header-info">
-      ${proprietor ? `<div class="center">Proprietor - ${proprietor}</div>` : ''}
+      ${proprietor ? `<div class="center">Proprietor: ${proprietor}</div>` : ''}
       ${registeredTaxpayerName && registeredTaxpayerName !== proprietor ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
       ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
       <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
@@ -726,7 +726,7 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
   <div class="receipt">
     <div class="store-name">${storeName}</div>
     <div class="header-info">
-      ${proprietor ? `<div class="center">Proprietor - ${proprietor}</div>` : ''}
+      ${proprietor ? `<div class="center">Proprietor: ${proprietor}</div>` : ''}
       ${registeredTaxpayerName && registeredTaxpayerName !== proprietor ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
       ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
       <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>

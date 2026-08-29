@@ -226,7 +226,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
     b.center(registeredName);
   }
   if (proprietor) {
-    b.center(`Proprietor - ${proprietor}`);
+    b.center(`Proprietor: ${proprietor}`);
   }
   if (settings.address) {
     b.center(settings.address);

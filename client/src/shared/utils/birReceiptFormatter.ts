@@ -199,7 +199,7 @@ export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string
   lines.push(doubleDivider());
   lines.push(centerLine(storeName));
   if (registeredName && registeredName !== storeName) {
-    lines.push(centerLine(`Operated by: ${registeredName}`));
+    lines.push(centerLine(`Proprietor: ${registeredName}`));
   }
   if (address) {
     lines.push(centerLine(address));
