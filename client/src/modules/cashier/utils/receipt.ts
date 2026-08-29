@@ -136,12 +136,12 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     return (cents / 100).toFixed(2);
   };
 
-  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
-  const tinVal = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "____________________";
-  const addrVal = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "____________________";
-  const busVal = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "____________________";
-  const scPwdIdVal = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "____________________";
-  const custNameVal = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
+  const isBlank = (val?: string | null) => !val || !val.trim();
+  const tinVal = !isBlank(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "____________________";
+  const addrVal = !isBlank(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "____________________";
+  const busVal = !isBlank(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "____________________";
+  const scPwdIdVal = !isBlank(scPwdId) ? scPwdId!.trim().toUpperCase() : "____________________";
+  const custNameVal = !isBlank(customerInfo.name) ? customerInfo.name!.trim().toUpperCase() : "WALK-IN CUSTOMER";
 
   const itemsHTML = cartItems.map(item => {
     const qty = item.quantity;
@@ -556,12 +556,12 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     lines.push(`Change:                        ${fmt(displayChangeCents)}`);
   }
 
-  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
-  const custName = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
-  const custTin = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "____________________";
-  const custAddr = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "____________________";
-  const custBus = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "____________________";
-  const custScPwdId = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "____________________";
+  const isBlank = (val?: string | null) => !val || !val.trim();
+  const custName = !isBlank(customerInfo.name) ? customerInfo.name!.trim().toUpperCase() : "WALK-IN CUSTOMER";
+  const custTin = !isBlank(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "____________________";
+  const custAddr = !isBlank(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "____________________";
+  const custBus = !isBlank(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "____________________";
+  const custScPwdId = !isBlank(scPwdId) ? scPwdId!.trim().toUpperCase() : "____________________";
 
   lines.push("----------------------------------------");
   lines.push(`SOLD TO: ${custName}`);
