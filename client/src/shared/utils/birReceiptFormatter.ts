@@ -239,23 +239,23 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   // Invoice & Customer Metadata
   lines.push(padLine("SI No:", cleanInvoiceNumber(params.invoiceNumber)));
   lines.push(padLine("Date & Time:", `${dateStr} ${timeStr}`));
-  lines.push(padLine("Cashier:", params.cashierName));
+  lines.push(padLine("Cashier:", params.cashierName.toUpperCase()));
   if (params.terminalId) {
-    lines.push(padLine("Terminal:", params.terminalId));
+    lines.push(padLine("Terminal:", params.terminalId.toUpperCase()));
   }
   lines.push(divider());
 
   // Customer Section
-  lines.push(padLine("Sold To:", customer.name || "Walk-in Customer"));
+  lines.push(padLine("Sold To:", (customer.name || "Walk-in Customer").toUpperCase()));
   if (customer.tin) {
-    lines.push(padLine("TIN:", customer.tin));
+    lines.push(padLine("TIN:", customer.tin.toUpperCase()));
   }
   if (customer.address) {
-    lines.push(padLine("Address:", customer.address));
+    lines.push(padLine("Address:", customer.address.toUpperCase()));
   }
   if (customer.scPwdType && customer.scPwdType !== "NONE") {
-    const label = customer.scPwdType === "SENIOR_CITIZEN" ? "Senior Citizen ID:" : "PWD ID:";
-    lines.push(padLine(label, customer.scPwdId || "N/A"));
+    const label = customer.scPwdType === "SENIOR_CITIZEN" ? "OSCA ID:" : "PWD ID:";
+    lines.push(padLine(label, (customer.scPwdId || "N/A").toUpperCase()));
   }
   lines.push(divider());
 

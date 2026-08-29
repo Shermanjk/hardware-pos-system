@@ -92,7 +92,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const grossCents = cartItems.reduce((acc, item) => acc + toCentavos(item.subtotal), 0);
   const displayTaxCents = isScPwd ? 0 : taxCents;
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
-  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
+  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "OSCA ID" : scPwdType === "PWD" ? "PWD ID" : "";
 
   const storeName = settings.store_name || "ISRA HARDWARE TRADING";
   const proprietor = settings.proprietor || "";
@@ -381,13 +381,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="row"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
     `}
     <div class="divider"></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${customerInfo.name || "Walk-In Customer"}</span></div>
-    ${scPwdType !== "NONE" ? `<div class="row"><span>${scPwdLabel}:</span><span>${scPwdId || "N/A"}</span></div>` : ''}
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">TIN:</span><span style="flex: 1; text-align: left;">${tinVal || "--------------------"}</span></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">ADDRESS:</span><span style="flex: 1; text-align: left;">${addrVal || "--------------------"}</span></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">BUS STYLE:</span><span style="flex: 1; text-align: left;">${busVal || "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${(customerInfo.name || "Walk-In Customer").toUpperCase()}</span></div>
+    ${scPwdType !== "NONE" ? `<div class="row"><span style="width: 80px; flex-shrink: 0;">${scPwdLabel}:</span><span style="flex: 1; text-align: left;">${(scPwdId || "N/A").toUpperCase()}</span></div>` : ''}
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">TIN:</span><span style="flex: 1; text-align: left;">${tinVal ? tinVal.toUpperCase() : "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">ADDRESS:</span><span style="flex: 1; text-align: left;">${addrVal ? addrVal.toUpperCase() : "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">BUS STYLE:</span><span style="flex: 1; text-align: left;">${busVal ? busVal.toUpperCase() : "--------------------"}</span></div>
     <div class="divider"></div>
-    <div class="section">CASHIER: ${cashierName}</div>
+    <div class="section">CASHIER: ${(cashierName || "—").toUpperCase()}</div>
     <div class="divider"></div>
     <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
     <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
@@ -419,7 +419,7 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const isScPwd = scPwdType !== "NONE";
   const displayTaxCents = isScPwd ? 0 : taxCents;
   const displayChangeCents = changeCents !== null ? changeCents : (cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0);
-  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN" : scPwdType === "PWD" ? "PWD" : "";
+  const scPwdLabel = scPwdType === "SENIOR_CITIZEN" ? "OSCA ID" : scPwdType === "PWD" ? "PWD ID" : "";
 
   const storeName = settings.store_name || "ISRA HARDWARE TRADING";
   const proprietor = settings.proprietor || "";
@@ -555,13 +555,13 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   }
 
   lines.push("----------------------------------------");
-  lines.push(`SOLD TO: ${customerInfo.name || "Walk-in Customer"}`);
-  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${scPwdId || "N/A"}`);
-  lines.push(`TIN: ${customerInfo.tin || "N/A"}`);
-  lines.push(`ADDRESS: ${customerInfo.address || "N/A"}`);
-  lines.push(`BUSINESS STYLE: ${customerInfo.businessStyle || "N/A"}`);
+  lines.push(`SOLD TO: ${(customerInfo.name || "Walk-in Customer").toUpperCase()}`);
+  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${(scPwdId || "N/A").toUpperCase()}`);
+  lines.push(`TIN: ${(customerInfo.tin || "N/A").toUpperCase()}`);
+  lines.push(`ADDRESS: ${(customerInfo.address || "N/A").toUpperCase()}`);
+  lines.push(`BUSINESS STYLE: ${(customerInfo.businessStyle || "N/A").toUpperCase()}`);
   lines.push("----------------------------------------");
-  lines.push(`CASHIER: ${cashierName}`);
+  lines.push(`CASHIER: ${(cashierName || "—").toUpperCase()}`);
   lines.push("----------------------------------------");
   const accNo = settings.accreditation_no || "000-000000000-000000";
   const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
@@ -609,14 +609,14 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   lines.push(`Date:           ${dateStr}`);
   lines.push(`Time:           ${timeStr}`);
   lines.push("----------------------------------------");
-  lines.push(`Received From:  ${customerName}`);
-  if (customerCode) lines.push(`Customer Code:  ${customerCode}`);
-  if (notes) lines.push(`Notes:          ${notes}`);
+  lines.push(`Received From:  ${(customerName || "").toUpperCase()}`);
+  if (customerCode) lines.push(`Customer Code:  ${customerCode.toUpperCase()}`);
+  if (notes) lines.push(`Notes:          ${notes.toUpperCase()}`);
   lines.push("----------------------------------------");
   lines.push(`AMOUNT PAID:                   ${fmt(amountPaidCents)}`);
   lines.push(`REMAINING BALANCE:             ${fmt(newBalanceCents)}`);
   lines.push("----------------------------------------");
-  lines.push(`Received By:    ${cashierName}`);
+  lines.push(`Received By:    ${(cashierName || "").toUpperCase()}`);
   lines.push("----------------------------------------");
   lines.push("       Thank you for your payment!");
   lines.push("   We sincerely appreciate your trust");
@@ -733,14 +733,14 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     <div class="row"><span>CR No: ${receiptNumber}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
     <div class="divider"></div>
-    <div class="row"><span style="width: 100px; flex-shrink: 0;">RECEIVED FROM:</span><span style="flex: 1; text-align: left;">${customerName}</span></div>
-    ${customerCode ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">CUST CODE:</span><span style="flex: 1; text-align: left;">${customerCode}</span></div>` : ''}
-    ${notes ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">REMARKS:</span><span style="flex: 1; text-align: left;">${notes}</span></div>` : ''}
+    <div class="row"><span style="width: 100px; flex-shrink: 0;">RECEIVED FROM:</span><span style="flex: 1; text-align: left;">${(customerName || "").toUpperCase()}</span></div>
+    ${customerCode ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">CUST CODE:</span><span style="flex: 1; text-align: left;">${customerCode.toUpperCase()}</span></div>` : ''}
+    ${notes ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">REMARKS:</span><span style="flex: 1; text-align: left;">${notes.toUpperCase()}</span></div>` : ''}
     <div class="divider"></div>
     <div class="row"><span>AMOUNT PAID:</span><span>${fmtCents(amountPaidCents)}</span></div>
     <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${fmtCents(newBalanceCents)}</span></div>
     <div class="divider"></div>
-    <div class="section">CASHIER: ${cashierName}</div>
+    <div class="section">CASHIER: ${(cashierName || "").toUpperCase()}</div>
     <div class="divider"></div>
     <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
     <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>

@@ -6,7 +6,7 @@
 import type { StoreSettings } from "@/shared/api/settingsApi";
 import type { CartItem, CustomerInfo, SaleReceiptParams, CreditPaymentReceiptParams } from "@/modules/cashier/utils/receipt";
 import type { ReturnReceiptData } from "@/shared/utils/returnReceiptPrinter";
-import type { XReadingParams, ZReadingParams } from "@/shared/utils/birReceiptFormatter";
+import { cleanInvoiceNumber, type XReadingParams, type ZReadingParams } from "@/shared/utils/birReceiptFormatter";
 
 const RECEIPT_WIDTH = 42; // Standard 80mm font A width in characters
 
@@ -255,13 +255,13 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.divider();
 
   // Customer Info
-  b.row("SOLD TO:", customerInfo.name || "Walk-in Customer");
-  if (customerInfo.address) b.row("ADDRESS:", customerInfo.address);
-  if (customerInfo.tin) b.row("TIN:", customerInfo.tin);
-  if (customerInfo.businessStyle) b.row("BUS STYLE:", customerInfo.businessStyle);
+  b.row("SOLD TO:", (customerInfo.name || "Walk-in Customer").toUpperCase());
+  if (customerInfo.address) b.row("ADDRESS:", customerInfo.address.toUpperCase());
+  if (customerInfo.tin) b.row("TIN:", customerInfo.tin.toUpperCase());
+  if (customerInfo.businessStyle) b.row("BUS STYLE:", customerInfo.businessStyle.toUpperCase());
   if (scPwdType !== "NONE") {
-    const scLabel = scPwdType === "SENIOR_CITIZEN" ? "SC ID:" : "PWD ID:";
-    b.row(scLabel, scPwdId || "N/A");
+    const scLabel = scPwdType === "SENIOR_CITIZEN" ? "OSCA ID:" : "PWD ID:";
+    b.row(scLabel, (scPwdId || "N/A").toUpperCase());
   }
   b.divider();
 
@@ -351,7 +351,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   }
 
   b.divider();
-  b.row("CASHIER:", cashierName);
+  b.row("CASHIER:", (cashierName || "—").toUpperCase());
   b.divider();
   const accNo = settings.accreditation_no || "000-000000000-000000";
   const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";

@@ -32,7 +32,7 @@ export default function CustomerPanel({
   onCollectPayment,
 }: CustomerPanelProps) {
   const set = (k: keyof CustomerInfo, v: string) =>
-    setCustomerInfo((prev) => ({ ...prev, [k]: v }));
+    setCustomerInfo((prev) => ({ ...prev, [k]: typeof v === "string" ? v.toUpperCase() : v }));
 
   const setScPwdType = (v: "NONE" | "SENIOR_CITIZEN" | "PWD") =>
     setCustomerInfo((prev) => ({ ...prev, scPwdType: v }));
@@ -429,7 +429,7 @@ export default function CustomerPanel({
           <button
             type="button"
             onClick={() => {
-              set("name", "Walk-in Customer");
+              set("name", "WALK-IN CUSTOMER");
               document.getElementById("cash-tendered-input")?.focus();
             }}
             className="mb-3 w-full py-1.5 px-2.5 rounded-lg text-xs font-semibold bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-between gap-1.5 transition-all active:scale-[0.98] shadow-xs"

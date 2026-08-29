@@ -57,8 +57,8 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push(`Return No: ${data.return_number}`);
   lines.push(`Original Invoice: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}`);
   lines.push(`Date: ${dateStr} ${timeStr}`);
-  lines.push(`Processed By: ${data.processed_by_name}`);
-  lines.push(`Customer: ${data.customer_name}`);
+  lines.push(`Processed By: ${(data.processed_by_name || "").toUpperCase()}`);
+  lines.push(`Customer: ${(data.customer_name || "Walk-in Customer").toUpperCase()}`);
   lines.push("----------------------------------------");
   lines.push("QTY  ITEM DESCRIPTION         PRICE    TOTAL");
   lines.push("----------------------------------------");
@@ -276,8 +276,8 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="row"><span>Original SI No: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date: ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
     <div class="divider"></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">CUSTOMER:</span><span style="flex: 1; text-align: left;">${data.customer_name || "Walk-In Customer"}</span></div>
-    <div class="section">PROCESSED BY: ${data.processed_by_name}</div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">CUSTOMER:</span><span style="flex: 1; text-align: left;">${(data.customer_name || "Walk-In Customer").toUpperCase()}</span></div>
+    <div class="section">PROCESSED BY: ${(data.processed_by_name || "").toUpperCase()}</div>
     <div class="divider"></div>
     <table class="items">
       <thead>
