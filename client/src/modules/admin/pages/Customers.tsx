@@ -353,8 +353,8 @@ export default function CustomersPage() {
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-slate-900">Customer & Credit Management</h1>
-          <p className="text-slate-500 mt-1">Manage customer profiles, credit limits, receivables (utang), and store credit balances</p>
+          <h1 className="text-2xl font-bold text-gray-900">Customer & Credit Management</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage customer profiles, credit limits, receivables (utang), and store credit balances</p>
         </div>
 
         <div className="flex items-center gap-2.5">

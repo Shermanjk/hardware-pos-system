@@ -846,8 +846,8 @@ export default function Users() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold text-gray-900">Users</h1>
-          <p className="text-gray-600 mt-1">Manage employee accounts, single-session access, and permissions</p>
+          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage employee accounts, single-session access, and permissions</p>
         </div>
         <Button className="gap-2" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4" /> Add User
