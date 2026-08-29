@@ -96,3 +96,16 @@ export async function localOverrideVoid(
   );
   return res.data;
 }
+
+export async function directOverrideVoid(payload: {
+  sale_id: number;
+  reason: string;
+  username: string;
+  password: string;
+}): Promise<{ message: string; admin_name: string; admin_id: number }> {
+  const res = await httpClient.post<{ message: string; admin_name: string; admin_id: number }>(
+    `/api/sales/direct-override-void`,
+    payload
+  );
+  return res.data;
+}

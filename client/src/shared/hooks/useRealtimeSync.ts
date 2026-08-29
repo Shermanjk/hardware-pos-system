@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { loadToken } from "@/shared/utils/auth";
+import { loadToken, clearToken } from "@/shared/utils/auth";
+import { toast } from "sonner";
 import axios from "axios";
 
 export type EntityType =
@@ -230,6 +231,17 @@ class RealtimeSyncHub {
           const data = JSON.parse(event.data);
           if (data && data.type === "entity_updated") {
             this.notifyListeners(data as EntityUpdateEvent);
+          } else if (data && data.type === "force_logout") {
+            const message = data.message || "Your session has been ended by an administrator.";
+            clearToken();
+            toast.error("Session Ended", {
+              description: message,
+              duration: 8000,
+            });
+            setTimeout(() => {
+              window.location.href = "/login";
+            }, 600);
+            return;
           } else if (data && data.type === "server_maintenance") {
             const isMaint = data.status === "started";
             const wasMaint = this.state.isMaintenance;
@@ -259,9 +271,13 @@ class RealtimeSyncHub {
           retryCount: this.state.retryCount + 1,
         });
 
-        this.startFastHealthProbe();
+        if (event.code === 1008 || event.code === 4001) {
+          clearToken();
+          window.location.href = "/login";
+          return;
+        }
 
-        if (event.code === 1008) return; // unauthorized — do not auto-reconnect
+        this.startFastHealthProbe();
 
         if (this.retryTimer) clearTimeout(this.retryTimer);
         this.retryTimer = setTimeout(() => {

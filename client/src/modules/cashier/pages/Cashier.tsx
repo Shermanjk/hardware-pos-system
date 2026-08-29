@@ -605,6 +605,8 @@ export default function Cashier() {
     handleForceExit,
   } = usePreventAccidentalClose({
     hasActiveWork: hasActiveTransaction,
+    isLoggedIn: !!user,
+    currentUser: user,
     workDetails: {
       title: "Active Sales Transaction",
       itemsCount: cartItems.length,
@@ -1561,6 +1563,8 @@ export default function Cashier() {
         open={showPreventClose}
         onClose={closePreventClose}
         hasActiveWork={hasActiveTransaction}
+        isLoggedIn={!!user}
+        currentUser={user}
         workDetails={{
           title: "Active Sales Transaction",
           itemsCount: cartItems.length,

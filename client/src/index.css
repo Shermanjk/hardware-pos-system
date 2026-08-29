@@ -284,4 +284,163 @@ nav ::-webkit-scrollbar-thumb:hover {
   display: none;
   width: 0;
   height: 0;
+}
+
+/* ==========================================================================
+   Crisp, High-Contrast & Compact Toast Notifications (All Terminals)
+   ========================================================================== */
+
+[data-sonner-toaster] {
+  --normal-bg: #ffffff;
+  --normal-text: #0f172a;
+  --normal-border: #cbd5e1;
+  --description-color: #334155;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  z-index: 99999 !important;
+}
+
+.dark [data-sonner-toaster] {
+  --normal-bg: #0f172a;
+  --normal-text: #f8fafc;
+  --normal-border: #334155;
+  --description-color: #cbd5e1;
+}
+
+[data-sonner-toast] {
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.12), 0 2px 4px -2px rgba(15, 23, 42, 0.04) !important;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  border-width: 1px !important;
+  min-height: 38px !important;
+  max-width: 320px !important;
+  gap: 8px !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  margin-right: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+[data-sonner-toast] [data-icon] svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+[data-sonner-toast] [data-content] {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  min-width: 0 !important;
+}
+
+[data-sonner-toast] [data-title] {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.01em !important;
+}
+
+.dark [data-sonner-toast] [data-title] {
+  color: #f8fafc !important;
+}
+
+[data-sonner-toast] [data-description] {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  color: #334155 !important; /* High contrast legible slate */
+}
+
+.dark [data-sonner-toast] [data-description] {
+  color: #cbd5e1 !important;
+}
+
+/* Success Toast */
+[data-sonner-toast][data-type="success"] {
+  background: #ffffff !important;
+  border-color: #86efac !important; /* Emerald 300 */
+}
+[data-sonner-toast][data-type="success"] [data-title] {
+  color: #065f46 !important;
+}
+[data-sonner-toast][data-type="success"] [data-description] {
+  color: #1e293b !important;
+}
+.dark [data-sonner-toast][data-type="success"] {
+  background: #064e3b !important;
+  border-color: #10b981 !important;
+}
+.dark [data-sonner-toast][data-type="success"] [data-title] {
+  color: #a7f3d0 !important;
+}
+.dark [data-sonner-toast][data-type="success"] [data-description] {
+  color: #d1fae5 !important;
+}
+
+/* Error Toast */
+[data-sonner-toast][data-type="error"] {
+  background: #ffffff !important;
+  border-color: #fda4af !important; /* Rose 300 */
+}
+[data-sonner-toast][data-type="error"] [data-title] {
+  color: #9f1239 !important;
+}
+[data-sonner-toast][data-type="error"] [data-description] {
+  color: #1e293b !important;
+}
+.dark [data-sonner-toast][data-type="error"] {
+  background: #881337 !important;
+  border-color: #f43f5e !important;
+}
+.dark [data-sonner-toast][data-type="error"] [data-title] {
+  color: #fecdd3 !important;
+}
+.dark [data-sonner-toast][data-type="error"] [data-description] {
+  color: #ffe4e6 !important;
+}
+
+/* Warning Toast */
+[data-sonner-toast][data-type="warning"] {
+  background: #ffffff !important;
+  border-color: #fcd34d !important; /* Amber 300 */
+}
+[data-sonner-toast][data-type="warning"] [data-title] {
+  color: #92400e !important;
+}
+[data-sonner-toast][data-type="warning"] [data-description] {
+  color: #1e293b !important;
+}
+.dark [data-sonner-toast][data-type="warning"] {
+  background: #78350f !important;
+  border-color: #f59e0b !important;
+}
+.dark [data-sonner-toast][data-type="warning"] [data-title] {
+  color: #fde68a !important;
+}
+.dark [data-sonner-toast][data-type="warning"] [data-description] {
+  color: #fef3c7 !important;
+}
+
+/* Info Toast */
+[data-sonner-toast][data-type="info"] {
+  background: #ffffff !important;
+  border-color: #93c5fd !important; /* Blue 300 */
+}
+[data-sonner-toast][data-type="info"] [data-title] {
+  color: #1e40af !important;
+}
+[data-sonner-toast][data-type="info"] [data-description] {
+  color: #1e293b !important;
+}
+.dark [data-sonner-toast][data-type="info"] {
+  background: #1e3a8a !important;
+  border-color: #3b82f6 !important;
+}
+.dark [data-sonner-toast][data-type="info"] [data-title] {
+  color: #bfdbfe !important;
+}
+.dark [data-sonner-toast][data-type="info"] [data-description] {
+  color: #dbeafe !important;
 }

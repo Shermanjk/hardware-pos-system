@@ -137,6 +137,8 @@ export interface EntityUpdateNotification {
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
+import { pool } from "./db.js";
+
 // ─── Heartbeat constants ──────────────────────────────────────────────────────
 // Every 30 s we ping each connected socket. If no pong arrives within 10 s we
 // terminate the connection. This prevents zombie sockets from accumulating in
@@ -152,12 +154,45 @@ const adminClients = new Set<WebSocket>();
 const cashierClients = new Map<number, Set<WebSocket>>();
 // Track clerk sockets
 const clerkClients = new Set<WebSocket>();
+// Track all active sockets keyed by userId (for all roles: Admin, Cashier, Inventory Clerk)
+const userSockets = new Map<number, Set<WebSocket>>();
+
+/**
+ * Check if a user currently has an active open WebSocket connection.
+ */
+export function isUserSocketConnected(userId: number): boolean {
+  const sockets = userSockets.get(userId);
+  if (!sockets || sockets.size === 0) return false;
+  for (const ws of Array.from(sockets)) {
+    if (ws.readyState === WebSocket.OPEN) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Terminate all active WebSocket connections for a user and notify their client.
+ */
+export function terminateUserSockets(userId: number, reason = "Session ended."): void {
+  const sockets = userSockets.get(userId);
+  if (!sockets) return;
+  const payload = JSON.stringify({ type: "force_logout", message: reason });
+  for (const ws of Array.from(sockets)) {
+    if (ws.readyState === WebSocket.OPEN) {
+      try { ws.send(payload); } catch { /* silent */ }
+      try { ws.close(4001, reason); } catch { /* silent */ }
+    }
+  }
+  userSockets.delete(userId);
+}
 
 // ─── Per-socket heartbeat setup ───────────────────────────────────────────────
 // Attach a ping/pong heartbeat to a freshly opened WebSocket. Returns a
 // cleanup function that clears both timers — call it from the "close" handler.
-function attachHeartbeat(ws: WebSocket): () => void {
+function attachHeartbeat(ws: WebSocket, userId?: number): () => void {
   let pongTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastDbUpdate = Date.now();
 
   // Kick off a recurring ping every HEARTBEAT_INTERVAL_MS.
   const heartbeatInterval = setInterval(() => {
@@ -172,7 +207,7 @@ function attachHeartbeat(ws: WebSocket): () => void {
     // If the client doesn't respond with a pong within PONG_TIMEOUT_MS,
     // terminate the connection so it is removed from the client Sets.
     pongTimer = setTimeout(() => {
-      ws.terminate(); // triggers "close" event → removes from adminClients/cashierClients
+      ws.terminate(); // triggers "close" event → removes from client tracking
     }, PONG_TIMEOUT_MS);
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -181,6 +216,11 @@ function attachHeartbeat(ws: WebSocket): () => void {
     if (pongTimer) {
       clearTimeout(pongTimer);
       pongTimer = null;
+    }
+    // Update last_activity_at in DB throttled to at most once per 60s
+    if (userId && Date.now() - lastDbUpdate > 60_000) {
+      lastDbUpdate = Date.now();
+      pool.execute("UPDATE users SET last_activity_at = NOW() WHERE id = ?", [userId]).catch(() => {});
     }
   });
 
@@ -213,13 +253,30 @@ export function initWebSocket(server: Server): void {
       return;
     }
 
+    const userId = payload.id;
+
     // ── Start heartbeat immediately on connection ────────────────────────────
-    const stopHeartbeat = attachHeartbeat(ws);
+    const stopHeartbeat = attachHeartbeat(ws, userId);
     allClients.add(ws);
+
+    if (!userSockets.has(userId)) userSockets.set(userId, new Set());
+    userSockets.get(userId)!.add(ws);
+
+    // Update DB status on successful connection
+    pool.execute("UPDATE users SET is_logged_in = 1, last_activity_at = NOW() WHERE id = ?", [userId]).catch(() => {});
 
     const handleClose = () => {
       stopHeartbeat();
       allClients.delete(ws);
+
+      const uSockets = userSockets.get(userId);
+      if (uSockets) {
+        uSockets.delete(ws);
+        if (uSockets.size === 0) {
+          userSockets.delete(userId);
+          pool.execute("UPDATE users SET last_activity_at = NOW() WHERE id = ?", [userId]).catch(() => {});
+        }
+      }
     };
 
     if (payload.role === "Admin") {

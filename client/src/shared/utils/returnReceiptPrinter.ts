@@ -73,28 +73,34 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   }
 
   lines.push("----------------------------------------");
-  lines.push(`TOTAL REFUND AMOUNT:           P${fmt(data.refund_amount ?? 0)}`);
-  lines.push(`RESOLUTION:                    ${data.resolution.toUpperCase()}`);
-  lines.push(`CONDITION:                     ${data.item_condition.toUpperCase()}`);
+  lines.push("       Thank you for your business.");
+  lines.push("   We sincerely appreciate your trust");
+  lines.push("  and look forward to serving you again!");
   lines.push("----------------------------------------");
-  lines.push("  THANK YOU - SALES RETURN COMPLETED");
-  lines.push("----------------------------------------\n\n\n");
+  lines.push("       SALES RETURN RECEIPT");
+  lines.push(" This document is not valid for claiming");
+  lines.push("             input taxes.");
+  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
 
 export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
   const settings = data.settings;
-  const storeName              = settings.store_name              || "";
+  const storeName              = settings.store_name              || "ISRA HARDWARE TRADING";
   const proprietor             = settings.proprietor             || "";
   const storeFb                = settings.facebook                || "";
   const storePhone             = settings.contact_number          || "";
   const storeAddress           = settings.address                || "";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
-  const storeTIN               = settings.tin || settings.business_license || "";
-  const documentType           = settings.document_type           || "SALES INVOICE";
-  const taxRate                = Number(settings.vat_rate) > 0 ? Number(settings.vat_rate) : 12;
-  const isVAT                  = settings.vat_enabled ?? false;
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : (settings.tin || "000-000-000");
+  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
+  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const ptuNo = settings.ptu_or_accn_no || "";
+  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
   const posMin                 = settings.pos_min    || "";
   const posSerial              = settings.pos_serial || "";
@@ -107,19 +113,14 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
 
   const itemsHTML = data.items.map(item => {
     const qty = item.quantity_returned;
-    const unit = "";
+    const unit = "pc";
     const desc = item.product_name;
-    const up = fmtPeso(item.unit_price);
     const amt = fmtPeso(item.unit_price * item.quantity_returned);
-    return `<tr class="item-name-row">
-      <td colspan="5" class="col-name">${desc}</td>
-    </tr>
-    <tr class="item-detail-row">
+    return `<tr class="item-row">
       <td class="col-qty">${qty}</td>
       <td class="col-unit">${unit}</td>
-      <td class="col-spacer"></td>
-      <td class="col-price">${currSym} ${up}</td>
-      <td class="col-amt">${currSym} ${amt}</td>
+      <td class="col-desc">${desc}</td>
+      <td class="col-amt">${amt}</td>
     </tr>`;
   }).join("");
 
@@ -134,7 +135,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     resolutionHTML = `
     <div class="row"><span>TOTAL RETURN VALUE:</span><span>${currSym} ${fmtPeso(totalReturnVal)}</span></div>
     ${creditRefund > 0 ? `<div class="row"><span>CREDIT DEBT REDUCED:</span><span>${currSym} ${fmtPeso(creditRefund)}</span></div>` : ''}
-    <div class="row bold"><span>CASH REFUNDED:</span><span>${currSym} ${fmtPeso(cashRefund)}</span></div>
+    <div class="row"><span>CASH REFUNDED:</span><span>${currSym} ${fmtPeso(cashRefund)}</span></div>
     ${data.customer_balance !== undefined && data.customer_balance !== null ? `
     <div class="divider"></div>
     <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${currSym} ${fmtPeso(data.customer_balance)}</span></div>
@@ -189,61 +190,107 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     .center { text-align: center; margin: 2px 0; word-break: break-word; }
     .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2.5px 0; word-break: break-word; }
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
-    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; max-width: 55%; }
-    .section { margin: 2px 0; word-break: break-word; }
-    .bold { font-weight: 650; }
-    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: 650; letter-spacing: 0.5px; word-break: break-word; }
-    .divider { border-top: 1.5px dashed #000; margin: 4px 0; }
-    .items { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
-    .items th, .items td { padding: 0 1px; vertical-align: middle; }
-    .items th { font-size: 11px; font-weight: 700; }
-    .items .col-hdr-qty   { width: 12%; text-align: center; }
-    .items .col-hdr-unit  { width: 14%; text-align: left; }
-    .items .col-hdr-space { width: 4%; text-align: left; }
-    .items .col-hdr-price { width: 35%; text-align: right; }
-    .items .col-hdr-amt   { width: 35%; text-align: right; }
-    .item-name-row td.col-name { word-break: break-word; overflow-wrap: anywhere; padding: 2px 1px 0 1px; font-weight: 700; }
-    .item-detail-row td { padding: 0 1px 3px 1px; font-weight: 500; font-size: 12px; }
-    .item-detail-row .col-qty   { width: 12%; text-align: center; }
-    .item-detail-row .col-unit  { width: 14%; text-align: left; }
-    .item-detail-row .col-spacer { width: 4%; }
-    .item-detail-row .col-price { width: 35%; text-align: right; word-break: break-all; }
-    .item-detail-row .col-amt   { width: 35%; text-align: right; word-break: break-all; }
+    .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
+    .section { margin: 2.5px 0; word-break: break-word; }
+    .bold { font-weight: bold; }
+    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px; word-break: break-word; }
+    .header-info { font-size: 11.5px; font-weight: 530; line-height: 1.35; text-align: center; margin-bottom: 4px; }
+    .divider { border-top: 1.5px dashed #000; margin: 9px 0 10px 0; }
+    
+    .items {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin: 6px 0;
+    }
+    .items th,
+    .items td {
+      vertical-align: top;
+      padding: 2px 0;
+      box-sizing: border-box;
+    }
+    .items th {
+      font-size: 11px;
+      font-weight: 530;
+      padding-top: 3px;
+      padding-bottom: 8px;
+    }
+    .items tr.header-divider-row td {
+      padding: 0;
+      height: 1px;
+      border-bottom: 1.5px dashed #000;
+    }
+    .items tbody tr.item-row:first-child td {
+      padding-top: 8px;
+    }
+    .items tbody tr.item-row td {
+      padding-top: 2.5px;
+      padding-bottom: 2.5px;
+      font-size: 12px;
+      font-weight: 530;
+    }
+    .items .col-qty {
+      width: 11%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-unit {
+      width: 14%;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .items .col-desc {
+      width: 49%;
+      text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      padding-right: 4px;
+    }
+    .items .col-amt {
+      width: 26%;
+      text-align: right;
+      white-space: nowrap;
+      padding-right: 0;
+    }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
-    <div class="divider"></div>
     <div class="store-name">${storeName}</div>
-    ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
-    ${proprietor ? `<div class="center">PROPRIETOR: ${proprietor}</div>` : ''}
-    <div class="center">${storeAddress}</div>
-    <div class="center">${isVAT ? 'VAT REGISTERED | ' : ''}TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
-    ${posMin || posSerial ? `<div class="center">MIN: ${posMin} | S/N: ${posSerial}</div>` : ''}
-    <div class="center">Fb: ${storeFb} | Tel No: ${storePhone}</div>
+    <div class="header-info">
+      ${proprietor ? `<div class="center">Proprietor - ${proprietor}</div>` : ''}
+      ${registeredTaxpayerName && registeredTaxpayerName !== proprietor ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
+      ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
+      <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+      ${(posMin || posSerial) ? `<div class="center">${posMin ? `MIN: ${posMin}` : ''}${posMin && posSerial ? ' | ' : ''}${posSerial ? `S/N: ${posSerial}` : ''}</div>` : ''}
+      ${ptuNo ? `<div class="center">PTU No: ${ptuNo}${ptuDate}</div>` : ''}
+      ${(storeFb || storePhone) ? `<div class="center">${storeFb ? `Fb: ${storeFb}` : ''}${storeFb && storePhone ? ' | ' : ''}${storePhone ? `Tel No: ${storePhone}` : ''}</div>` : ''}
+    </div>
+    
+    <div class="center bold" style="margin: 8px 0 6px 0; font-size: 15px; letter-spacing: 0.5px;">SALES RETURN RECEIPT</div>
+    
+    <div class="row"><span>Return No: ${data.return_number}</span></div>
+    <div class="row"><span>Original SI No: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}</span></div>
+    <div class="row"><span style="white-space:nowrap;">Date: ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
     <div class="divider"></div>
-    <div class="center bold">SALES RETURN RECEIPT</div>
-    <div class="row"><span>Return No:</span><span>${data.return_number}</span></div>
-    <div class="row"><span>Original Invoice:</span><span>${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}</span></div>
-    <div class="row"><span>Date:</span><span>${dateStr}</span></div>
-    <div class="row"><span>Time:</span><span>${timeStr}</span></div>
-    <div class="divider"></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">CUSTOMER:</span><span style="flex: 1; text-align: left;">${data.customer_name || "Walk-In Customer"}</span></div>
     <div class="section">PROCESSED BY: ${data.processed_by_name}</div>
-    <div class="divider"></div>
-    <div class="section">CUSTOMER: ${data.customer_name}</div>
     <div class="divider"></div>
     <table class="items">
       <thead>
         <tr>
-          <th class="col-hdr-qty">QTY</th>
-          <th class="col-hdr-unit">UNIT</th>
-          <th class="col-hdr-space"></th>
-          <th class="col-hdr-price">PRICE</th>
-          <th class="col-hdr-amt">AMOUNT</th>
+          <th class="col-qty">QTY</th>
+          <th class="col-unit">UNIT</th>
+          <th class="col-desc">DESCRIPTION</th>
+          <th class="col-amt">AMOUNT</th>
+        </tr>
+        <tr class="header-divider-row">
+          <td colspan="4"></td>
         </tr>
       </thead>
       <tbody>
@@ -260,13 +307,12 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="section">ITEM CONDITION: ${data.item_condition === "good" ? "Good" : data.item_condition === "damaged" ? "Damaged" : "Defective"}</div>
     <div class="section">INVENTORY ACTION: ${data.item_condition === "good" ? "Returned to Stock" : "Marked as Damaged/Defective"}</div>
     <div class="divider"></div>
-    <div class="section">PROCESSED BY: ${data.processed_by_name}</div>
-    <div class="divider"></div>
     <div class="center">Thank you for your business.</div>
     <div class="center">We sincerely appreciate your trust</div>
-    <div class="center">and look forward to serving you again.</div>
-    <div class="center">This is your SALES RETURN RECEIPT.</div>
-    <div class="center">"This document is not valid for claiming input taxes."</div>
+    <div class="center">and look forward to serving you again!</div>
+    <div style="margin-top: 3px;"></div>
+    <div class="center" style="font-size: 11px;">This is your SALES RETURN RECEIPT.</div>
+    <div class="center" style="font-size: 10.5px;">"This document is not valid for claiming input taxes."</div>
     <div class="divider"></div>
   </div>
 </body>

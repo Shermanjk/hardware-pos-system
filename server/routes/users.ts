@@ -6,6 +6,7 @@ import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { generateTempPassword } from "../utils/passwordGenerator.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { broadcastEntityUpdate, isUserSocketConnected, terminateUserSockets } from "../ws.js";
 
 const router = Router();
 
@@ -24,7 +25,8 @@ function requireAdmin(req: Request, res: Response): boolean {
 // ─── Columns returned in user list responses (never expose password_hash) ─────
 const USER_COLS = `
   id, full_name, username, role, employee_id, status,
-  must_change_password, password_changed_at, updated_at
+  must_change_password, password_changed_at, updated_at,
+  is_logged_in, last_login_at, last_activity_at, logged_in_ip, logged_in_device
 `;
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
@@ -99,7 +101,19 @@ router.get("/", async (req: Request, res: Response) => {
     const [rows] = await pool.execute<any[]>(
       `SELECT ${USER_COLS} FROM users ORDER BY full_name ASC`
     );
-    res.status(200).json(rows);
+
+    // Compute live online/active session status
+    const mappedRows = rows.map((u) => {
+      const socketActive = isUserSocketConnected(u.id);
+      const isOnline = u.is_logged_in === 1 && (socketActive || (u.last_activity_at && Date.now() - new Date(u.last_activity_at).getTime() < 90_000));
+      return {
+        ...u,
+        is_logged_in: Boolean(isOnline),
+        is_online: Boolean(isOnline),
+      };
+    });
+
+    res.status(200).json(mappedRows);
   } catch (err) {
     console.error("[users/GET /] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
@@ -388,6 +402,71 @@ router.post("/:id/deactivate", async (req: Request, res: Response) => {
     res.status(200).json(rows[0]);
   } catch (err) {
     console.error("[users/POST /:id/deactivate] Unexpected error:", err);
+    res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+  }
+});
+
+// ─── POST /api/users/:id/force-logout ─────────────────────────────────────────
+// Admin-only: immediately release a user's session and disconnect their active sockets.
+router.post("/:id/force-logout", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const userId = parseInt(req.params.id, 10);
+  if (isNaN(userId)) {
+    res.status(400).json({ message: "Invalid user ID." });
+    return;
+  }
+
+  try {
+    const [targetRows] = await pool.execute<any[]>(
+      "SELECT id, username FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    );
+    if ((targetRows as any[]).length === 0) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+    const targetUser = targetRows[0];
+
+    // Reset session in database
+    await pool.execute(
+      `UPDATE users
+       SET is_logged_in = 0, current_session_id = NULL, last_activity_at = NULL, updated_at = NOW()
+       WHERE id = ?`,
+      [userId]
+    );
+
+    // Disconnect active WebSocket connections for this user
+    terminateUserSockets(userId, "Your session was ended by an administrator.");
+
+    await logAuditEvent({
+      action: "USER_FORCE_LOGOUT",
+      performedById: req.user!.id,
+      performedByUsername: req.user!.username,
+      targetUserId: userId,
+      targetUsername: targetUser.username,
+      reason: "Session released / forced logout by administrator",
+    });
+
+    // Notify connected admin dashboards to update user list
+    broadcastEntityUpdate({ entity: "dashboard", action: "updated", id: userId });
+
+    const [rows] = await pool.execute<any[]>(
+      `SELECT ${USER_COLS} FROM users WHERE id = ? LIMIT 1`,
+      [userId]
+    );
+
+    const userObj = rows[0]
+      ? {
+          ...rows[0],
+          is_logged_in: false,
+          is_online: false,
+        }
+      : null;
+
+    res.status(200).json({ message: "User session released successfully.", user: userObj });
+  } catch (err) {
+    console.error("[users/POST /:id/force-logout] Unexpected error:", err);
     res.status(500).json({ message: "An unexpected error occurred. Please try again." });
   }
 });

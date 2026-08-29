@@ -35,6 +35,7 @@ const rejectSchema = z.object({ return_reason: z.string().min(1) });
 
 const approveSchema = z.object({
   resolution: z.enum(["refund", "exchange", "store_credit", "rejected"]),
+  customer_id: z.number().int().positive().optional(),
   exchange_barcode: z.string().optional(),
   exchange_quantity: z.number().int().positive().optional(),
   additional_payment: z.number().positive().optional(),
@@ -478,7 +479,7 @@ router.patch(
       return;
     }
 
-    const { resolution, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
+    const { resolution, customer_id, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -499,6 +500,44 @@ router.patch(
         await conn.rollback();
         res.status(422).json({ message: "Only pending returns can be approved." });
         return;
+      }
+
+      // If store_credit resolution, verify customer account
+      if (resolution === "store_credit") {
+        let targetCustomerId = customer_id ?? null;
+        if (!targetCustomerId) {
+          const [saleCheck] = await conn.execute<any[]>(
+            `SELECT customer_id, customer_name FROM sales WHERE id = ? LIMIT 1`,
+            [returnRow.sale_id]
+          );
+          if (saleCheck[0]?.customer_id) {
+            targetCustomerId = saleCheck[0].customer_id;
+          }
+        }
+
+        if (!targetCustomerId) {
+          await conn.rollback();
+          res.status(400).json({
+            message: "Store Credit requires a registered customer account. Please select or register a customer first."
+          });
+          return;
+        }
+
+        const [custRows] = await conn.execute<any[]>(
+          `SELECT id, full_name FROM customers WHERE id = ? LIMIT 1`,
+          [targetCustomerId]
+        );
+        if (!custRows[0]) {
+          await conn.rollback();
+          res.status(404).json({ message: "Selected customer account not found." });
+          return;
+        }
+
+        // Link customer to sale if previously unlinked
+        await conn.execute(
+          `UPDATE sales SET customer_id = ?, customer_name = ? WHERE id = ?`,
+          [custRows[0].id, custRows[0].full_name, returnRow.sale_id]
+        );
       }
 
       // Convert barcode to product_id for exchange
@@ -989,6 +1028,260 @@ router.patch(
   }
 );
 
+// ─── POST /direct-override — Direct Manager Override without pre-creating pending request ──
+// Verifies admin credentials FIRST. If invalid, fails immediately with 401 without
+// creating any database record or broadcasting any pending request.
+const directOverrideReturnSchema = z.object({
+  username:           z.string().min(1, "Username is required"),
+  password:           z.string().min(1, "Password is required"),
+  sale_id:            z.number().int().positive(),
+  return_reason:      z.string().min(1),
+  item_condition:     z.enum(["good", "damaged", "defective"]),
+  items: z
+    .array(
+      z.object({
+        sale_item_id:      z.number().int().positive(),
+        product_id:        z.number().int().positive(),
+        quantity_returned: z.number().int().positive(),
+        unit_price:        z.number().positive(),
+      })
+    )
+    .min(1),
+  resolution:         z.enum(["refund", "exchange", "store_credit", "rejected"]),
+  customer_id:        z.number().int().positive().optional(),
+  exchange_barcode:   z.string().optional(),
+  exchange_quantity:  z.number().int().positive().optional(),
+  additional_payment: z.number().positive().optional(),
+  refund_difference:  z.number().positive().optional(),
+  rejection_reason:   z.string().optional(),
+});
+
+router.post(
+  "/direct-override",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const parsed = directOverrideReturnSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+      return;
+    }
+
+    const {
+      username,
+      password,
+      sale_id,
+      return_reason,
+      item_condition,
+      items,
+      resolution,
+      customer_id,
+      exchange_barcode,
+      exchange_quantity,
+      additional_payment,
+      refund_difference,
+      rejection_reason,
+    } = parsed.data;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // ── 1. Verify manager credentials FIRST ────────────────────────────────
+      const [userRows] = await conn.execute<any[]>(
+        `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+        [username]
+      );
+      const manager = userRows[0];
+      if (!manager || manager.status !== "Active") {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+      if (!passwordMatch) {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      if (manager.role !== "Admin") {
+        await conn.rollback();
+        res.status(403).json({ message: "Only an Admin can authorize return requests." });
+        return;
+      }
+
+      // ── 2. Validate return items against business rules ────────────────────
+      const validation = await validateReturnItems(
+        conn,
+        sale_id,
+        items as ReturnItemPayload[],
+        new Date()
+      );
+      if (!validation.valid) {
+        await conn.rollback();
+        res.status(validation.status).json({ message: validation.message });
+        return;
+      }
+
+      // ── 3. If store_credit resolution, verify customer account ─────────────
+      if (resolution === "store_credit") {
+        let targetCustomerId = customer_id ?? null;
+        if (!targetCustomerId) {
+          const [saleCheck] = await conn.execute<any[]>(
+            `SELECT customer_id, customer_name FROM sales WHERE id = ? LIMIT 1`,
+            [sale_id]
+          );
+          if (saleCheck[0]?.customer_id) {
+            targetCustomerId = saleCheck[0].customer_id;
+          }
+        }
+
+        if (!targetCustomerId) {
+          await conn.rollback();
+          res.status(400).json({
+            message: "Store Credit requires a registered customer account. Please select or register a customer first."
+          });
+          return;
+        }
+
+        const [custRows] = await conn.execute<any[]>(
+          `SELECT id, full_name FROM customers WHERE id = ? LIMIT 1`,
+          [targetCustomerId]
+        );
+        if (!custRows[0]) {
+          await conn.rollback();
+          res.status(404).json({ message: "Selected customer account not found." });
+          return;
+        }
+
+        // Link customer to sale if previously unlinked
+        await conn.execute(
+          `UPDATE sales SET customer_id = ?, customer_name = ? WHERE id = ?`,
+          [custRows[0].id, custRows[0].full_name, sale_id]
+        );
+      }
+
+      // ── 4. Validate exchange details if needed ───────────────────────────
+      let exchange_product_id: number | null = null;
+      if (resolution === "exchange") {
+        if (!exchange_barcode || !exchange_quantity) {
+          await conn.rollback();
+          res.status(400).json({ message: "Exchange requires barcode and quantity." });
+          return;
+        }
+        const [productRows] = await conn.execute<any[]>(
+          `SELECT id, quantity FROM products WHERE barcode = ? FOR UPDATE`,
+          [exchange_barcode]
+        );
+        const product = productRows[0];
+        if (!product) {
+          await conn.rollback();
+          res.status(404).json({ message: "Product with this barcode not found." });
+          return;
+        }
+        exchange_product_id = product.id;
+        if (Number(product.quantity) < exchange_quantity) {
+          await conn.rollback();
+          res.status(409).json({ message: "Insufficient stock for exchange product." });
+          return;
+        }
+      }
+
+      if (resolution === "rejected" && !rejection_reason) {
+        await conn.rollback();
+        res.status(400).json({ message: "Rejection requires a reason." });
+        return;
+      }
+
+      // ── 5. Generate return number and insert directly in resolved state ────
+      const return_number = await generateReturnNumber(conn);
+      const initialStatus = resolution === "rejected" ? "rejected" : "waiting_for_cashier";
+
+      const [returnResult] = await conn.execute<any>(
+        `INSERT INTO returns
+           (return_number, sale_id, processed_by, approved_by, return_reason, item_condition, status, resolution, exchange_product_id, exchange_quantity, additional_payment, refund_difference, resolved_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          return_number,
+          sale_id,
+          req.user!.id,
+          manager.id,
+          resolution === "rejected" ? rejection_reason : return_reason,
+          item_condition,
+          initialStatus,
+          resolution,
+          exchange_product_id ?? null,
+          exchange_quantity ?? null,
+          additional_payment ?? null,
+          refund_difference ?? null,
+        ]
+      );
+      const return_id: number = returnResult.insertId;
+
+      for (const item of validation.validatedItems) {
+        await conn.execute(
+          `INSERT INTO return_items
+             (return_id, sale_item_id, product_id, quantity_returned, unit_price, effective_unit_price)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            return_id,
+            item.sale_item_id,
+            item.product_id,
+            item.quantity_returned,
+            item.unit_price,
+            item.effective_unit_price,
+          ]
+        );
+      }
+
+      await conn.commit();
+
+      const updated = await fetchReturnSummary(conn, return_id);
+
+      // ── 6. Audit log ──────────────────────────────────────────────────────
+      await logAuditEvent({
+        action: resolution === "rejected" ? "RETURN_REJECTED_LOCAL_OVERRIDE" : "RETURN_APPROVED_LOCAL_OVERRIDE",
+        performedById: manager.id,
+        performedByUsername: manager.username,
+        entityType: "returns",
+        entityId: return_id,
+        newValues: {
+          return_number,
+          sale_id,
+          resolution,
+          override_method: "direct_manager_override",
+          cashier_id: req.user!.id,
+          cashier_username: req.user!.username,
+        },
+      });
+
+      // ── 7. WebSocket broadcast ───────────────────────────────────────────
+      sendReturnDecision({
+        type: "return_decision",
+        id: updated.id,
+        return_number: updated.return_number,
+        invoice_number: updated.invoice_number,
+        customer_name: updated.customer_name,
+        decision: resolution === "rejected" ? "rejected" : "approved",
+        admin_name: updated.admin_name ?? manager.full_name ?? manager.username,
+        cashier_user_id: updated.processed_by,
+      });
+
+      res.status(200).json({
+        ...updated,
+        admin_name: manager.full_name ?? manager.username,
+        admin_id: manager.id,
+      });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[POST /api/returns/direct-override] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
 // ─── POST /:id/local-override — Manager Override on Cashier Terminal ──────────
 // Verifies admin credentials on the spot, then approves the return request
 // with the selected resolution — identical logic to PATCH /:id/approve.
@@ -996,6 +1289,7 @@ const localOverrideReturnSchema = z.object({
   username:        z.string().min(1, "Username is required"),
   password:        z.string().min(1, "Password is required"),
   resolution:      z.enum(["refund", "exchange", "store_credit", "rejected"]),
+  customer_id:     z.number().int().positive().optional(),
   exchange_barcode: z.string().optional(),
   exchange_quantity: z.number().int().positive().optional(),
   additional_payment: z.number().positive().optional(),
@@ -1020,7 +1314,7 @@ router.post(
       return;
     }
 
-    const { username, password, resolution, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
+    const { username, password, resolution, customer_id, exchange_barcode, exchange_quantity, additional_payment, refund_difference, rejection_reason } = parsed.data;
 
     const conn = await pool.getConnection();
     try {
@@ -1068,6 +1362,44 @@ router.post(
             : "Only pending returns can be approved.",
         });
         return;
+      }
+
+      // ── If store_credit resolution, verify customer account ──────────────
+      if (resolution === "store_credit") {
+        let targetCustomerId = customer_id ?? null;
+        if (!targetCustomerId) {
+          const [saleCheck] = await conn.execute<any[]>(
+            `SELECT customer_id, customer_name FROM sales WHERE id = ? LIMIT 1`,
+            [returnRow.sale_id]
+          );
+          if (saleCheck[0]?.customer_id) {
+            targetCustomerId = saleCheck[0].customer_id;
+          }
+        }
+
+        if (!targetCustomerId) {
+          await conn.rollback();
+          res.status(400).json({
+            message: "Store Credit requires a registered customer account. Please select or register a customer first."
+          });
+          return;
+        }
+
+        const [custRows] = await conn.execute<any[]>(
+          `SELECT id, full_name FROM customers WHERE id = ? LIMIT 1`,
+          [targetCustomerId]
+        );
+        if (!custRows[0]) {
+          await conn.rollback();
+          res.status(404).json({ message: "Selected customer account not found." });
+          return;
+        }
+
+        // Link customer to sale if previously unlinked
+        await conn.execute(
+          `UPDATE sales SET customer_id = ?, customer_name = ? WHERE id = ?`,
+          [custRows[0].id, custRows[0].full_name, returnRow.sale_id]
+        );
       }
 
       // ── 3. Validate exchange details if needed ────────────────────────────

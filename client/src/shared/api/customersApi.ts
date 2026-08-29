@@ -10,6 +10,7 @@ export interface Customer {
   business_style?: string;
   credit_limit: number;
   current_balance: number;
+  store_credit_balance?: number;
   is_credit_enabled: boolean;
   status: "Active" | "Inactive";
   created_at: string;
@@ -25,8 +26,20 @@ export interface CustomerSearchResult {
   contact_number?: string;
   credit_limit: number;
   current_balance: number;
+  store_credit_balance?: number;
   is_credit_enabled: boolean;
   status: "Active" | "Inactive";
+}
+
+export interface StoreCreditRecord {
+  id: number;
+  credit_amount: number;
+  remaining_balance: number;
+  status: "active" | "expired" | "fully_used";
+  issued_date: string;
+  expiration_date?: string | null;
+  return_number?: string;
+  invoice_number?: string;
 }
 
 export interface CreditLedgerEntry {
@@ -84,6 +97,12 @@ export async function getCustomer(id: number): Promise<Customer> {
 // ─── Get customer ledger ──────────────────────────────────────────────────────
 export async function getCustomerLedger(customerId: number): Promise<CreditLedgerEntry[]> {
   const res = await httpClient.get<CreditLedgerEntry[]>(`/api/customers/${customerId}/ledger`);
+  return res.data;
+}
+
+// ─── Get customer store credits ───────────────────────────────────────────────
+export async function getCustomerStoreCredits(customerId: number): Promise<StoreCreditRecord[]> {
+  const res = await httpClient.get<StoreCreditRecord[]>(`/api/customers/${customerId}/store-credits`);
   return res.data;
 }
 

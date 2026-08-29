@@ -1236,6 +1236,172 @@ router.patch(
   }
 );
 
+// ─── POST /direct-override-void — Direct Manager Override for Sale Void ─────────
+// Verifies admin credentials FIRST. If invalid, fails with 401 without creating
+// any pending void request in the database or broadcasting to the Admin.
+router.post(
+  "/direct-override-void",
+  authenticate,
+  requireRole("Cashier", "Admin"),
+  async (req: Request, res: Response): Promise<void> => {
+    const parsed = z.object({
+      sale_id:  z.number().int().positive("Invalid sale ID"),
+      reason:   z.string().min(1, "Reason is required"),
+      username: z.string().min(1, "Username is required"),
+      password: z.string().min(1, "Password is required"),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request." });
+      return;
+    }
+
+    const { sale_id, reason, username, password } = parsed.data;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // ── 1. Verify manager credentials FIRST ────────────────────────────────
+      const [userRows] = await conn.execute<any[]>(
+        `SELECT id, username, full_name, password_hash, role, status FROM users WHERE username = ? LIMIT 1`,
+        [username]
+      );
+      const manager = userRows[0];
+      if (!manager || manager.status !== "Active") {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      const passwordMatch = await bcrypt.compare(password, manager.password_hash);
+      if (!passwordMatch) {
+        await conn.rollback();
+        res.status(401).json({ message: "Invalid credentials." });
+        return;
+      }
+      if (manager.role !== "Admin") {
+        await conn.rollback();
+        res.status(403).json({ message: "Only an Admin can authorize void requests." });
+        return;
+      }
+
+      // ── 2. Load and lock the sale ──────────────────────────────────────────
+      const [saleRows] = await conn.execute<any[]>(
+        `SELECT id, invoice_number, total_amount, payment_type, is_credit, customer_id, cashier_id, shift_id, void_status, created_at
+         FROM sales WHERE id = ? FOR UPDATE`,
+        [sale_id]
+      );
+      const sale = saleRows[0];
+      if (!sale) {
+        await conn.rollback();
+        res.status(404).json({ message: "Sale not found." });
+        return;
+      }
+      if (sale.void_status === "voided") {
+        await conn.rollback();
+        res.status(422).json({ message: "This transaction is already voided." });
+        return;
+      }
+
+      // Check if this sale belongs to a closed Z-Reading window (BIR Compliance Guard)
+      const [lastZRows] = await conn.execute<any[]>(
+        `SELECT closed_at FROM z_readings ORDER BY id DESC LIMIT 1`
+      );
+      if (lastZRows.length > 0 && lastZRows[0].closed_at) {
+        const lastZClosedAt = new Date(lastZRows[0].closed_at);
+        const saleCreatedAt = new Date(sale.created_at);
+        if (saleCreatedAt <= lastZClosedAt) {
+          await conn.rollback();
+          res.status(422).json({
+            message: "This transaction belongs to a closed Z-Reading period and cannot be voided. In accordance with BIR regulations, please process a Return / Refund instead.",
+            code: "TRANSACTION_LOCKED_POST_Z_READING",
+          });
+          return;
+        }
+      }
+
+      // ── 3. Insert sale_voids directly with status 'approved' ───────────────
+      const [voidInsert] = await conn.execute<any>(
+        `INSERT INTO sale_voids (sale_id, requested_by, approved_by, reason, status, resolved_at)
+         VALUES (?, ?, ?, ?, 'approved', NOW())`,
+        [sale_id, req.user!.id, manager.id, reason]
+      );
+      const voidId = voidInsert.insertId;
+
+      // ── 4. Restore inventory ───────────────────────────────────────────────
+      const [saleItems] = await conn.execute<any[]>(
+        `SELECT product_id, quantity FROM sale_items WHERE sale_id = ?`,
+        [sale_id]
+      );
+      for (const item of saleItems) {
+        await conn.execute(
+          `UPDATE products SET quantity = quantity + ? WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+        await conn.execute(
+          `INSERT INTO inventory_logs (product_id, transaction_type, action, quantity_change, reference, user_id)
+           VALUES (?, 'Adjustment', 'void_restore', ?, ?, ?)`,
+          [item.product_id, item.quantity, sale.invoice_number, manager.id]
+        );
+      }
+
+      await conn.execute(
+        `UPDATE sales SET void_status = 'voided' WHERE id = ?`,
+        [sale_id]
+      );
+
+      await conn.commit();
+
+      // ── 5. Audit log ───────────────────────────────────────────────────────
+      await logAuditEvent({
+        action: "SALE_VOIDED_LOCAL_OVERRIDE",
+        performedById: manager.id,
+        performedByUsername: manager.username,
+        entityType: "sales",
+        entityId: sale_id,
+        reason: reason,
+        newValues: {
+          invoice_number: sale.invoice_number,
+          void_request_id: voidId,
+          override_method: "direct_manager_override",
+          cashier_id: req.user!.id,
+          cashier_username: req.user!.username,
+        },
+      });
+
+      // ── 6. Notify cashier via WebSocket ───────────────────────────────────
+      sendVoidDecision({
+        type: "void_decision",
+        void_id: voidId,
+        sale_id: sale_id,
+        invoice_number: sale.invoice_number,
+        total_amount: Number(sale.total_amount),
+        decision: "approved",
+        admin_name: manager.full_name ?? manager.username,
+        rejection_reason: null,
+        cashier_user_id: sale.cashier_id,
+      });
+
+      // Real-time system sync: notify sales, inventory, dashboard, requests
+      broadcastEntityUpdate({ entity: "sales", action: "voided", id: sale_id });
+      broadcastEntityUpdate({ entity: "dashboard" });
+      broadcastEntityUpdate({ entity: "inventory" });
+      broadcastEntityUpdate({ entity: "requests" });
+
+      res.status(200).json({
+        message: "Void approved via manager override.",
+        admin_name: manager.full_name ?? manager.username,
+        admin_id: manager.id,
+      });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[POST /api/sales/direct-override-void] Error:", err);
+      res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+    } finally {
+      conn.release();
+    }
+  }
+);
+
 // ─── POST /voids/:id/local-override — Manager Override on Cashier Terminal ────
 // Verifies admin credentials on the spot, then executes the void immediately
 // (identical logic to void-approve) without requiring an admin terminal login.

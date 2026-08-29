@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import axios from "axios";
 
@@ -31,11 +31,13 @@ export default function Login() {
   const [password,     setPassword]     = useState("");
   const [isLoading,    setIsLoading]    = useState(false);
   const [error,        setError]        = useState<string | null>(null);
+  const [isSessionLocked, setIsSessionLocked] = useState(false);
   const [fieldErrors,  setFieldErrors]  = useState<{ username?: string; password?: string }>({});
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSessionLocked(false);
     setFieldErrors({});
 
     const errors: { username?: string; password?: string } = {};
@@ -52,9 +54,17 @@ export default function Login() {
       await login(username.trim(), password, false);
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const message =
-          err.response?.data?.message ?? "An unexpected error occurred. Please try again.";
-        setError(message);
+        if (err.response?.status === 409 || err.response?.data?.code === "ALREADY_LOGGED_IN") {
+          setIsSessionLocked(true);
+          setError(
+            err.response?.data?.message ??
+            "Your account is already logged in on another PC or device. Please log out from that device first or contact an administrator to release your session."
+          );
+        } else {
+          const message =
+            err.response?.data?.message ?? "An unexpected error occurred. Please try again.";
+          setError(message);
+        }
       } else {
         setError("Unable to connect to the server. Please try again.");
       }
@@ -112,12 +122,27 @@ export default function Login() {
 
           <form onSubmit={handleLogin} className="space-y-5" noValidate autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false}>
 
-            {/* Error banner */}
+            {/* Error banner / Already logged in banner */}
             {error && (
-              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                <p className="text-sm text-red-700 flex-1">{error}</p>
-              </div>
+              isSessionLocked ? (
+                <div className="p-4 bg-amber-50/90 border-2 border-amber-300 rounded-xl shadow-sm space-y-2">
+                  <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                    <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0" />
+                    <span>Account Already Logged In</span>
+                  </div>
+                  <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                    {error}
+                  </p>
+                  <div className="pt-1 text-[11px] text-amber-700 bg-amber-100/60 p-2 rounded border border-amber-200/60 font-sans">
+                    💡 <strong>Tip:</strong> If you closed your previous computer or terminal, ask an Admin to click <em>"Force Logout"</em> in User Management to release your session immediately.
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-700 flex-1">{error}</p>
+                </div>
+              )
             )}
 
             {/* Username */}

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { requestVoidSale } from "@/shared/api/salesApi";
-import { localOverrideVoid } from "@/shared/api/voidApi";
+import { directOverrideVoid, localOverrideVoid } from "@/shared/api/voidApi";
 import { loadToken } from "@/shared/utils/auth";
 import {
     AlertTriangle,
@@ -176,19 +176,22 @@ export default function VoidAuthModal({
     setIsOverriding(true);
 
     try {
-      // 1. Create the void request first (so there's a DB record to approve)
-      let effectiveVoidId = voidId;
-      if (!effectiveVoidId) {
-        const result = await requestVoidSale(saleId, voidReason);
-        effectiveVoidId = result.void_id;
-        if (mountedRef.current) setVoidId(effectiveVoidId);
+      let overrideResult;
+      if (voidId) {
+        // Approving a request that was already sent to Admin
+        overrideResult = await localOverrideVoid(voidId, {
+          username: managerUsername.trim(),
+          password: managerPassword,
+        });
+      } else {
+        // Direct manager override: Authenticates credentials FIRST before creating any DB record
+        overrideResult = await directOverrideVoid({
+          sale_id: saleId,
+          reason: voidReason,
+          username: managerUsername.trim(),
+          password: managerPassword,
+        });
       }
-
-      // 2. Immediately approve it via manager override
-      const overrideResult = await localOverrideVoid(effectiveVoidId, {
-        username: managerUsername.trim(),
-        password: managerPassword,
-      });
 
       if (!mountedRef.current) return;
 

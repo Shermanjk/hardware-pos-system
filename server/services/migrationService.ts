@@ -94,13 +94,13 @@ export async function getMigrationHistory(
   limit = 50
 ): Promise<MigrationRecord[]> {
   try {
-    const [rows] = await pool.execute<any[]>(
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 500));
+    const [rows] = await pool.query<any[]>(
       `SELECT mh.*, u.username as executed_by_username
        FROM migration_history mh
        LEFT JOIN users u ON mh.executed_by = u.id
        ORDER BY mh.applied_date DESC
-       LIMIT ?`,
-      [limit]
+       LIMIT ${safeLimit}`
     );
     return rows;
   } catch (error) {

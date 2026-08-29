@@ -28,7 +28,7 @@ function ProtectedClerkRoute({ children }: { children: React.ReactNode }) {
 export default function ClerkLayout({ children }: ClerkLayoutProps) {
   const mainRef = useRef<HTMLElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { logout } = useClerkAuth();
+  const { user, logout } = useClerkAuth();
 
   const {
     showModal: showPreventClose,
@@ -36,6 +36,8 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
     handleForceExit,
   } = usePreventAccidentalClose({
     hasActiveWork: hasAnyActiveDraft(),
+    isLoggedIn: !!user,
+    currentUser: user,
     terminalType: "CLERK",
     portalName: "Inventory Clerk Terminal",
     workDetails: {
@@ -69,6 +71,8 @@ export default function ClerkLayout({ children }: ClerkLayoutProps) {
           open={showPreventClose}
           onClose={closePreventClose}
           hasActiveWork={hasAnyActiveDraft()}
+          isLoggedIn={!!user}
+          currentUser={user}
           terminalType="CLERK"
           portalName="Inventory Clerk Terminal"
           workDetails={{

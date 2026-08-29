@@ -105,11 +105,18 @@ function RejectDialog({ open, onConfirm, onCancel, loading }: RejectDialogProps)
 
 // ─── Return Approval Dialog ─────────────────────────────────────────────────────
 
+function isWalkIn(name?: string | null): boolean {
+  if (!name) return true;
+  const n = name.trim().toLowerCase();
+  return n === "walk-in customer" || n === "walk-in" || n === "walkin" || n === "unknown";
+}
+
 interface ReturnApprovalDialogProps {
   open: boolean;
   req: UnifiedRequest | null;
   onConfirm: (payload: {
     resolution: "refund" | "exchange" | "store_credit" | "rejected";
+    customer_id?: number;
     exchange_barcode?: string;
     exchange_quantity?: number;
     additional_payment?: number;
@@ -128,6 +135,16 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
   const [refundDifference, setRefundDifference] = useState<number | undefined>();
   const [rejectionReason, setRejectionReason] = useState("");
 
+  // Store credit customer state
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: number; name: string } | null>(null);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
   useEffect(() => {
     if (!open) {
       setResolution("refund");
@@ -136,8 +153,65 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
       setAdditionalPayment(undefined);
       setRefundDifference(undefined);
       setRejectionReason("");
+      setSelectedCustomer(null);
+      setCustomerSearchQuery("");
+      setCustomerSearchResults([]);
+      setShowQuickAddCustomer(false);
+      setQuickCustomerName("");
+      setQuickCustomerPhone("");
+      setIsCreatingCustomer(false);
+    } else if (req?.customer_id && !isWalkIn(req?.customer_name)) {
+      setSelectedCustomer({ id: req.customer_id, name: req.customer_name || "" });
     }
-  }, [open]);
+  }, [open, req]);
+
+  // Customer search typeahead
+  useEffect(() => {
+    const q = customerSearchQuery.trim();
+    if (q.length < 2) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingCustomer(true);
+      try {
+        const { searchCustomers } = await import("@/shared/api/customersApi");
+        const results = await searchCustomers(q);
+        setCustomerSearchResults(results);
+      } catch {
+        setCustomerSearchResults([]);
+      } finally {
+        setIsSearchingCustomer(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [customerSearchQuery]);
+
+  const handleCreateCustomer = async () => {
+    const name = quickCustomerName.trim();
+    if (!name) {
+      toast.error("Please enter the customer's full name.");
+      return;
+    }
+    setIsCreatingCustomer(true);
+    try {
+      const { createCustomer } = await import("@/shared/api/customersApi");
+      const created = await createCustomer({
+        full_name: name,
+        contact_number: quickCustomerPhone.trim() || undefined,
+      });
+      setSelectedCustomer({ id: created.id, name: created.full_name });
+      setShowQuickAddCustomer(false);
+      setQuickCustomerName("");
+      setQuickCustomerPhone("");
+      toast.success(`Customer account created for ${created.full_name}!`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create customer.");
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
 
   const handleConfirm = () => {
     if (resolution === "rejected" && !rejectionReason.trim()) {
@@ -148,8 +222,13 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
       toast.error("Exchange requires barcode and quantity.");
       return;
     }
+    if (resolution === "store_credit" && !selectedCustomer?.id) {
+      toast.error("Store Credit requires a registered customer account. Please select or register a customer.");
+      return;
+    }
     onConfirm({
       resolution,
+      customer_id: resolution === "store_credit" ? selectedCustomer?.id : undefined,
       exchange_barcode: exchangeBarcode,
       exchange_quantity: exchangeQuantity,
       additional_payment: additionalPayment,
@@ -172,7 +251,7 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
             <p className="text-xs text-green-100 mt-0.5">Select the resolution for this return</p>
           </div>
         </div>
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {req && (
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
               <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold">{req.return_number}</span></div>
@@ -195,6 +274,132 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
               </SelectContent>
             </Select>
           </div>
+
+          {/* Store Credit Customer Verification Section */}
+          {resolution === "store_credit" && (
+            <div className="space-y-2">
+              {selectedCustomer?.id ? (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span>Registered Account Linked</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomer(null)}
+                      className="text-xs font-medium text-emerald-700 hover:underline"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <p className="text-sm text-emerald-950 font-semibold">{selectedCustomer.name}</p>
+                  <p className="text-[11px] text-emerald-700">Store credit will be credited to this customer's account balance.</p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Customer Account Required for Store Credit</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    The original invoice was a walk-in sale. Link an existing customer or quickly register a new account to issue store credit.
+                  </p>
+
+                  {!showQuickAddCustomer ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <Input
+                          placeholder="Search customer by name or phone…"
+                          value={customerSearchQuery}
+                          onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                          className="h-8 pl-8 text-xs bg-white"
+                        />
+                      </div>
+
+                      {isSearchingCustomer && (
+                        <p className="text-[11px] text-gray-500 italic">Searching customers…</p>
+                      )}
+
+                      {customerSearchResults.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-md bg-white divide-y divide-gray-100">
+                          {customerSearchResults.map((c: any) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer({ id: c.id, name: c.full_name });
+                                setCustomerSearchQuery("");
+                                setCustomerSearchResults([]);
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-blue-50 flex items-center justify-between"
+                            >
+                              <div>
+                                <span className="font-semibold text-gray-900">{c.full_name}</span>
+                                {c.contact_number && <span className="text-gray-500 ml-1.5">({c.contact_number})</span>}
+                              </div>
+                              <span className="text-[10px] font-mono text-gray-400">{c.customer_code}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="pt-1 flex items-center justify-between">
+                        <span className="text-[11px] text-gray-500">Don't see the customer?</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowQuickAddCustomer(true)}
+                          className="h-7 text-xs gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        >
+                          Quick Add Customer
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <Input
+                        placeholder="Full Name *"
+                        value={quickCustomerName}
+                        onChange={(e) => setQuickCustomerName(e.target.value)}
+                        className="h-8 text-xs bg-white"
+                      />
+                      <Input
+                        placeholder="Contact Number (optional)"
+                        value={quickCustomerPhone}
+                        onChange={(e) => setQuickCustomerPhone(e.target.value)}
+                        className="h-8 text-xs bg-white"
+                      />
+                      <div className="flex items-center gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleCreateCustomer}
+                          disabled={isCreatingCustomer}
+                          className="h-7 text-xs flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                        >
+                          {isCreatingCustomer ? <LoadingSpinner size={12} className="text-white mr-1" /> : null}
+                          Save & Link Account
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowQuickAddCustomer(false)}
+                          className="h-7 text-xs text-gray-500"
+                        >
+                          Back
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {resolution === "exchange" && (
             <div className="space-y-3">
               <div>

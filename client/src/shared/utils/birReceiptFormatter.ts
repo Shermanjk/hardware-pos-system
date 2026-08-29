@@ -13,6 +13,7 @@ import { buildPlainTextEscpos } from "@/shared/services/escpos/escposBuilder";
 import { localPrintAgent } from "@/shared/services/escpos/localPrintAgent";
 import { webSerialPrinter } from "@/shared/services/escpos/webSerialPrinter";
 import { printHtmlSilently } from "@/shared/utils/silentHtmlPrinter";
+import { rasterizeReceiptHtml } from "@/shared/utils/receiptHtmlRasterizer";
 
 const RECEIPT_WIDTH = 42;
 
@@ -506,9 +507,76 @@ export function formatZReadingText(params: ZReadingParams): string {
 export async function printThermalMonospace(text: string): Promise<void> {
   const bytes = buildPlainTextEscpos(text);
 
-  // 1. Try Local Print Agent (100% Zero-Flash)
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Thermal Print</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 80mm auto; margin: 0; }
+    html, body {
+      width: 80mm;
+      margin: 0;
+      padding: 0;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 12px;
+      font-weight: 530;
+      line-height: 1.35;
+      color: #000;
+      background: #fff;
+      overflow-x: hidden;
+      -webkit-font-smoothing: none;
+      text-rendering: crispEdges;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body { padding: 0; background: #fff; }
+    .receipt {
+      width: 76mm;
+      max-width: 76mm;
+      margin: 0 auto;
+      padding: 0 1mm;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    pre {
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 12px;
+      font-weight: 530;
+      line-height: 1.35;
+      color: #000;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      word-break: break-all;
+      margin: 0;
+      padding: 0;
+    }
+    @media print {
+      html, body { width: 80mm; margin: 0; padding: 0; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <pre>${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+    <div style="height: 3mm;"></div>
+  </div>
+</body>
+</html>`;
+
+  // 1. Try Local Print Agent (100% Zero-Flash, Exact HTML Raster Image matching receipt typography)
   try {
-    const success = await localPrintAgent.printRaw(bytes, undefined, text);
+    let imageBase64: string | undefined;
+    try {
+      const raster = await rasterizeReceiptHtml(html);
+      imageBase64 = raster?.imageBase64;
+    } catch (rasterErr) {
+      console.warn("[printThermalMonospace] Rasterization warning:", rasterErr);
+    }
+
+    const success = await localPrintAgent.printRaw(bytes, undefined, text, imageBase64, true);
     if (success) return;
   } catch (err) {
     console.warn("[LocalPrintAgent] Report print failed:", err);
@@ -524,41 +592,7 @@ export async function printThermalMonospace(text: string): Promise<void> {
     }
   }
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <title>Thermal Print</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 80mm auto; margin: 0; }
-    html, body {
-      width: 80mm;
-      margin: 0;
-      padding: 2mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      line-height: 1.35;
-      color: #000;
-      background: #fff;
-      white-space: pre-wrap;
-      word-break: break-all;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    pre {
-      font-family: inherit;
-      font-size: inherit;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-  </style>
-</head>
-<body>
-  <pre>${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
-</body>
-</html>`;
-
+  // 3. Fallback: Browser silent print
   printHtmlSilently(html);
 }
 

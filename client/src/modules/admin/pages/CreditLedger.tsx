@@ -494,17 +494,27 @@ export default function CreditLedgerPage() {
       </div>
 
       {/* ── Summary & Customer Info Cards ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Balance (Utang)</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">🔴 Utang Balance</p>
           <p className={`text-2xl font-bold mt-1 ${customer.current_balance > 0 ? "text-rose-600" : "text-slate-900"}`}>
             {fmt(customer.current_balance)}
           </p>
           {customer.is_credit_enabled && customer.credit_limit > 0 && (
             <p className="text-xs text-slate-400 mt-1">
-              Available: {fmt(Math.max(0, customer.credit_limit - customer.current_balance))}
+              Credit Left: {fmt(Math.max(0, customer.credit_limit - customer.current_balance))}
             </p>
           )}
+        </div>
+
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">🟢 Store Credit (Deposit)</p>
+          <p className={`text-2xl font-bold mt-1 ${(customer.store_credit_balance ?? 0) > 0 ? "text-emerald-700" : "text-slate-900"}`}>
+            {fmt(customer.store_credit_balance ?? 0)}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {(customer.store_credit_balance ?? 0) > 0 ? "Available for purchase" : "No active deposits"}
+          </p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
@@ -536,6 +546,11 @@ export default function CreditLedgerPage() {
         <div><strong>Address:</strong> {customer.address || "—"}</div>
         <div><strong>TIN:</strong> {customer.tin || "—"}</div>
         <div><strong>Business Style:</strong> {customer.business_style || "—"}</div>
+        {(customer.store_credit_balance ?? 0) > 0 && (
+          <div className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-xs flex items-center gap-1">
+            <RotateCcw className="h-3 w-3" /> Store Credit: {fmt(customer.store_credit_balance ?? 0)}
+          </div>
+        )}
         <div><strong>Status:</strong> <span className="font-semibold text-slate-800">{customer.status}</span></div>
       </div>
 

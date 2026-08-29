@@ -179,6 +179,54 @@ export default function EndShiftModal({
     }
   };
 
+  const [printingXReading, setPrintingXReading] = useState(false);
+  const [printingZReading, setPrintingZReading] = useState(false);
+
+  const handlePrintXReading = async (targetSessionId?: number) => {
+    const sId = targetSessionId || session?.id;
+    if (!sId) {
+      toast.error("No active shift session found to print.");
+      return;
+    }
+    setPrintingXReading(true);
+    try {
+      const [xData, settings] = await Promise.all([
+        getXReading(sId),
+        getSettings().catch(() => ({}) as StoreSettings),
+      ]);
+      const formatted = formatXReadingText({
+        sessionId: xData.session_id,
+        shiftLabel: xData.shift_label,
+        cashierName: xData.cashier_name,
+        openedAt: xData.opened_at,
+        closedAt: xData.closed_at,
+        begInvoiceNo: xData.beg_invoice_no,
+        endInvoiceNo: xData.end_invoice_no,
+        transactionCount: xData.transaction_count,
+        shiftGross: xData.shift_gross,
+        shiftDiscounts: xData.shift_discounts,
+        shiftRefunds: xData.shift_refunds,
+        shiftNet: xData.shift_net,
+        openingCash: xData.opening_cash,
+        cashSales: xData.cash_sales,
+        creditCollections: xData.credit_collections,
+        cashRefunds: xData.cash_refunds,
+        expectedCash: xData.expected_cash,
+        actualCash: xData.actual_cash,
+        variance: xData.variance,
+        status: xData.status,
+        settings: settings as StoreSettings,
+      });
+      printThermalMonospace(formatted);
+      toast.success("X-Reading sent to thermal printer.");
+    } catch (err) {
+      console.error("Print X-Reading error:", err);
+      toast.error("Failed to generate X-Reading printout.");
+    } finally {
+      setPrintingXReading(false);
+    }
+  };
+
   // ── End shift & optional Z-Reading handler ────────────────────────────────
   const handleEndShift = async () => {
     setError(null);
@@ -193,6 +241,13 @@ export default function EndShiftModal({
       // 1. Close cashier shift & submit cash count
       const res = await closeSession({ actual_cash: amount });
       setResult(res);
+
+      // Auto-print official X-Reading slip immediately upon submission
+      try {
+        await handlePrintXReading(session?.id);
+      } catch (xErr) {
+        console.warn("Auto-print X-Reading warning:", xErr);
+      }
 
       // 2. If EOD is checked, atomically commit and print the BIR Z-Reading
       if (isEODClose) {
@@ -256,54 +311,6 @@ export default function EndShiftModal({
       setError(msg);
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const [printingXReading, setPrintingXReading] = useState(false);
-  const [printingZReading, setPrintingZReading] = useState(false);
-
-  const handlePrintXReading = async (targetSessionId?: number) => {
-    const sId = targetSessionId || session?.id;
-    if (!sId) {
-      toast.error("No active shift session found to print.");
-      return;
-    }
-    setPrintingXReading(true);
-    try {
-      const [xData, settings] = await Promise.all([
-        getXReading(sId),
-        getSettings().catch(() => ({}) as StoreSettings),
-      ]);
-      const formatted = formatXReadingText({
-        sessionId: xData.session_id,
-        shiftLabel: xData.shift_label,
-        cashierName: xData.cashier_name,
-        openedAt: xData.opened_at,
-        closedAt: xData.closed_at,
-        begInvoiceNo: xData.beg_invoice_no,
-        endInvoiceNo: xData.end_invoice_no,
-        transactionCount: xData.transaction_count,
-        shiftGross: xData.shift_gross,
-        shiftDiscounts: xData.shift_discounts,
-        shiftRefunds: xData.shift_refunds,
-        shiftNet: xData.shift_net,
-        openingCash: xData.opening_cash,
-        cashSales: xData.cash_sales,
-        creditCollections: xData.credit_collections,
-        cashRefunds: xData.cash_refunds,
-        expectedCash: xData.expected_cash,
-        actualCash: xData.actual_cash,
-        variance: xData.variance,
-        status: xData.status,
-        settings: settings as StoreSettings,
-      });
-      printThermalMonospace(formatted);
-      toast.success("X-Reading sent to thermal printer.");
-    } catch (err) {
-      console.error("Print X-Reading error:", err);
-      toast.error("Failed to generate X-Reading printout.");
-    } finally {
-      setPrintingXReading(false);
     }
   };
 
@@ -511,7 +518,7 @@ export default function EndShiftModal({
                 </p>
               </div>
 
-              {/* ── Close Store & Execute Z-Reading Checkbox ─────────────── */}
+              {/* ── Close Store & Execute Z-Reading Checkbox (Unchecked by default) ─────────────── */}
               <label className="flex items-start gap-3 p-3 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-50 cursor-pointer transition-colors select-none">
                 <input
                   type="checkbox"
@@ -525,7 +532,7 @@ export default function EndShiftModal({
                     <span>Close Store & Generate Daily Z-Reading (EOD)</span>
                   </div>
                   <p className="text-indigo-700/90 leading-relaxed">
-                    Atomically commits the official BIR End-of-Day audit report, increments Z-Counter, rolls over Grand Total (GT), and prints the Z-reading slip.
+                    <strong>Optional:</strong> Leave unchecked for regular shift handovers, breaks, or emergency end-shifts. Only check this when closing the store at the end of the business day.
                   </p>
                 </div>
               </label>
@@ -537,17 +544,7 @@ export default function EndShiftModal({
                 </div>
               )}
 
-              <div className="flex gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="gap-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300"
-                  onClick={() => handlePrintXReading()}
-                  disabled={submitting || printingXReading}
-                >
-                  <Printer className="h-4 w-4 text-slate-600" />
-                  {printingXReading ? "Printing…" : "Print X-Reading"}
-                </Button>
+              <div className="flex gap-3 pt-2">
                 <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>
                   Cancel
                 </Button>

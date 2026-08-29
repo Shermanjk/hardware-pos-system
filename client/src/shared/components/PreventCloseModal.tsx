@@ -6,6 +6,7 @@ import {
   Boxes,
   Clock,
   Layers,
+  LogOut,
   PauseCircle,
   PowerOff,
   ShieldAlert,
@@ -13,7 +14,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import type { ActiveWorkDetails } from "../hooks/usePreventAccidentalClose";
+import type { ActiveWorkDetails, CurrentUserSummary } from "../hooks/usePreventAccidentalClose";
 import { useEffect, useRef } from "react";
 
 export type TerminalType = "CASHIER" | "ADMIN" | "CLERK";
@@ -21,7 +22,9 @@ export type TerminalType = "CASHIER" | "ADMIN" | "CLERK";
 interface PreventCloseModalProps {
   open: boolean;
   onClose: () => void;
-  hasActiveWork: boolean;
+  hasActiveWork?: boolean;
+  isLoggedIn?: boolean;
+  currentUser?: CurrentUserSummary | null;
   terminalType?: TerminalType;
   portalName?: string;
   workDetails?: ActiveWorkDetails;
@@ -33,7 +36,9 @@ interface PreventCloseModalProps {
 export default function PreventCloseModal({
   open,
   onClose,
-  hasActiveWork,
+  hasActiveWork = false,
+  isLoggedIn = true,
+  currentUser,
   terminalType = "CASHIER",
   portalName,
   workDetails,
@@ -74,14 +79,14 @@ export default function PreventCloseModal({
       ? "Stay in Clerk Terminal"
       : hasActiveWork
       ? "Stay on POS (Resume Sale)"
-      : "Stay on POS";
+      : "Stay Logged In (POS)";
 
   const defaultExitText =
     terminalType === "ADMIN"
-      ? "Exit Admin Terminal"
+      ? "Log Out & Exit Admin Terminal"
       : terminalType === "CLERK"
-      ? "Exit Clerk Terminal"
-      : "Exit Kiosk Window";
+      ? "Log Out & Exit Clerk Terminal"
+      : "Log Out & Close Kiosk";
 
   return (
     <Dialog
@@ -118,28 +123,22 @@ export default function PreventCloseModal({
             </div>
           </div>
         ) : (
-          <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white flex items-center justify-between">
+          <div className="bg-gradient-to-r from-amber-600 to-slate-900 px-6 py-5 text-white flex items-center justify-between">
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
-                {terminalType === "ADMIN" ? (
-                  <Wrench className="h-6 w-6 text-blue-400" />
-                ) : terminalType === "CLERK" ? (
-                  <Boxes className="h-6 w-6 text-emerald-400" />
-                ) : (
-                  <PowerOff className="h-6 w-6 text-blue-400" />
-                )}
+              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
+                <ShieldAlert className="h-6 w-6 text-white animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/20 text-slate-200 tracking-wide">
-                    Confirmation Required
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white/20 text-white tracking-wide">
+                    Active Session Detected
                   </span>
                 </div>
                 <h2 className="text-lg font-bold leading-tight mt-0.5 text-white">
-                  Are You Sure You Want to Exit?
+                  Please Log Out Before Closing
                 </h2>
-                <p className="text-xs text-slate-300 font-medium">
-                  Please confirm if you want to leave {defaultPortalName}.
+                <p className="text-xs text-amber-100 font-medium">
+                  You must log out of your account before exiting {defaultPortalName}.
                 </p>
               </div>
             </div>
@@ -270,33 +269,53 @@ export default function PreventCloseModal({
                 {/* 4. Force Discard & Exit */}
                 <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                   <span className="text-[11px] text-gray-400">
-                    Discard unsaved changes and exit?
+                    Discard unsaved changes and log out?
                   </span>
                   <button
                     type="button"
                     onClick={onForceExit}
                     className="text-xs font-semibold text-red-600 hover:text-red-800 hover:underline cursor-pointer"
                   >
-                    Discard & Exit
+                    Log Out & Exit
                   </button>
                 </div>
               </div>
             </>
           ) : (
             <>
-              {/* Idle State Confirmation */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm text-slate-700 leading-relaxed">
-                  Are you sure you want to exit {defaultPortalName}?
+              {/* Idle State Active Session Warning */}
+              <div className="bg-amber-50/90 border-2 border-amber-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                    <User className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Logged In Account</span>
+                  </div>
+                  {currentUser?.role && (
+                    <span className="inline-flex items-center text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-200/80 text-amber-900">
+                      {currentUser.role}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  You are currently logged in as{" "}
+                  <strong className="text-amber-950 font-bold">
+                    {currentUser?.full_name || currentUser?.username || "an active user"}
+                  </strong>
+                  .
+                </p>
+
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  To protect terminal security and maintain accurate shift and audit logs, please log out of your session before closing the Kiosk.
                 </p>
 
                 {shiftActive && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2.5 text-xs text-amber-900">
-                    <Clock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="bg-white/80 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2 text-xs text-amber-900 mt-2">
+                    <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold">Active Shift is Open</p>
-                      <p className="text-amber-700 text-[11px] mt-0.5">
-                        Your drawer session ({shiftLabel}) is currently active. If you are leaving for the day, please End Shift to balance your cash count.
+                      <p className="font-bold text-[11px]">Active Shift is Open ({shiftLabel})</p>
+                      <p className="text-amber-700 text-[10px] mt-0.5">
+                        Please perform End Shift to count cash and close drawer before leaving.
                       </p>
                     </div>
                   </div>
@@ -310,7 +329,7 @@ export default function PreventCloseModal({
                   type="button"
                   size="lg"
                   onClick={onClose}
-                  className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-2 flex items-center justify-center cursor-pointer"
+                  className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-2 flex items-center justify-center cursor-pointer shadow-sm"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   <span>{defaultStayText}</span>
@@ -329,7 +348,7 @@ export default function PreventCloseModal({
                   >
                     <div className="flex items-center gap-2">
                       <PowerOff className="h-4 w-4 text-red-600" />
-                      <span>End Shift & Exit</span>
+                      <span>End Shift & Log Out</span>
                     </div>
                     <span className="text-[10px] bg-red-200 text-red-800 px-1.5 py-0.5 rounded font-mono">
                       Count Cash
@@ -339,12 +358,13 @@ export default function PreventCloseModal({
 
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  variant="outline"
+                  size="lg"
                   onClick={onForceExit}
-                  className="w-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold h-9 cursor-pointer"
+                  className="w-full text-slate-700 hover:text-red-700 hover:bg-red-50 border-slate-300 font-semibold text-xs h-10 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {defaultExitText}
+                  <LogOut className="h-4 w-4 text-slate-500" />
+                  <span>{defaultExitText}</span>
                 </Button>
               </div>
             </>

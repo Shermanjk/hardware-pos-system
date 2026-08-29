@@ -11,7 +11,9 @@ export type AuditAction =
   | "USER_ROLE_CHANGED"
   | "USER_LOGIN"
   | "USER_LOGOUT"
+  | "USER_FORCE_LOGOUT"
   | "USER_LOGIN_FAILED"
+  | "USER_LOGIN_BLOCKED_CONCURRENT"
   // ── Sales ───────────────────────────────────────────────────────────────────
   | "SALE_CREATED"
   | "SALE_COMPLETED"

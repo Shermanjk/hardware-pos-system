@@ -410,6 +410,8 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
   b.row("Received By:", cashierName);
   b.divider();
   b.center("Thank you for your payment!");
+  b.center("We sincerely appreciate your trust");
+  b.center("and look forward to serving you again!");
   b.doubleDivider();
 
   b.cashDrawer();

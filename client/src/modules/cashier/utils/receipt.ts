@@ -253,13 +253,13 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .bold { font-weight: bold; }
     .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px; word-break: break-word; }
     .header-info { font-size: 11.5px; font-weight: 530; line-height: 1.35; text-align: center; margin-bottom: 4px; }
-    .divider { border-top: 1.5px dashed #000; margin: 4px 0; }
+    .divider { border-top: 1.5px dashed #000; margin: 9px 0 10px 0; }
     
     .items {
       width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
-      margin: 4px 0;
+      margin: 6px 0;
     }
     .items th,
     .items td {
@@ -270,16 +270,20 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     .items th {
       font-size: 11px;
       font-weight: 530;
-      padding-bottom: 3px;
+      padding-top: 3px;
+      padding-bottom: 8px;
     }
     .items tr.header-divider-row td {
       padding: 0;
       height: 1px;
       border-bottom: 1.5px dashed #000;
     }
+    .items tbody tr.item-row:first-child td {
+      padding-top: 8px;
+    }
     .items tbody tr.item-row td {
-      padding-top: 2px;
-      padding-bottom: 2px;
+      padding-top: 2.5px;
+      padding-bottom: 2.5px;
       font-size: 12px;
       font-weight: 530;
     }
@@ -374,7 +378,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     ` : `
     <div class="row"><span>TOTAL AMOUNT DUE:</span><span>${fmtCents(finalTotalCents)}</span></div>
     <div class="row"><span>Cash Tendered:</span><span>${fmtCents(cashCents)}</span></div>
-    <div class="row bold"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
+    <div class="row"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
     `}
     <div class="divider"></div>
     <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${customerInfo.name || "Walk-In Customer"}</span></div>
@@ -388,16 +392,20 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
     <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
     <div class="divider"></div>
+    <div class="center">Thank you for your business.</div>
+    <div class="center">We sincerely appreciate your trust</div>
+    <div class="center">and look forward to serving you again!</div>
+    <div style="margin-top: 3px;"></div>
     ${posMin ? `
-    <div class="center">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
-    <div class="center" style="margin-top: 3px;">${settings.receipt_footer || "Thank you for your business!"}</div>
+    <div class="center" style="font-size: 11px;">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
+    <div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer || "Please keep this invoice for warranty & records."}</div>
     ` : `
-    <div class="center">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
-    <div class="center">***      CLAIM OF INPUT TAX        ***</div>
-    <div class="center">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
-    <div class="center" style="margin-top: 3px;">${settings.receipt_footer || "Thank you for shopping with us!"}</div>
+    <div class="center" style="font-size: 10.5px;">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
+    <div class="center" style="font-size: 10.5px;">***      CLAIM OF INPUT TAX        ***</div>
+    <div class="center" style="font-size: 10.5px;">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
+    ${settings.receipt_footer ? `<div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer}</div>` : ''}
     `}
-    <div style="height: 2mm;"></div>
+    <div class="divider"></div>
   </div>
 </body>
 </html>`;
@@ -567,17 +575,20 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push("       POS Software: ISRA POS System v1.0");
   lines.push(`     Accreditation No: ${accNo}${accDate}`);
   lines.push("----------------------------------------");
+  lines.push("       Thank you for your business.");
+  lines.push("   We sincerely appreciate your trust");
+  lines.push("  and look forward to serving you again!");
+  lines.push("----------------------------------------");
   if (posMin) {
     lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
-    lines.push(`         ${settings.receipt_footer || "Thank you for your business!"}`);
-    lines.push(" Please keep this invoice for warranty claims.");
+    lines.push(`    ${settings.receipt_footer || "Please keep this invoice for warranty."}`);
   } else {
     lines.push("    *** THIS DOCUMENT IS NOT VALID FOR ***");
     lines.push("    ***      CLAIM OF INPUT TAX        ***");
     lines.push("    *** THIS IS NOT AN OFFICIAL INVOICE ***");
-    lines.push(`         ${settings.receipt_footer || "Thank you for shopping with us!"}`);
+    if (settings.receipt_footer) lines.push(`         ${settings.receipt_footer}`);
   }
-  lines.push("----------------------------------------\n\n\n");
+  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
@@ -621,8 +632,10 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   lines.push("----------------------------------------");
   lines.push(`Received By:    ${cashierName}`);
   lines.push("----------------------------------------");
-  lines.push("        Thank you for your payment!");
-  lines.push("----------------------------------------\n\n\n");
+  lines.push("       Thank you for your payment!");
+  lines.push("   We sincerely appreciate your trust");
+  lines.push("  and look forward to serving you again!");
+  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
@@ -634,15 +647,37 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     notes, settings,
   } = params;
 
-  const storeName = settings.store_name || "";
-  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const storeName = settings.store_name || "ISRA HARDWARE TRADING";
+  const proprietor = settings.proprietor || "";
+  const storeFb = settings.facebook || "";
+  const storePhone = settings.contact_number || "";
   const storeAddress = settings.address || "";
-  const storeTIN = settings.tin || settings.business_license || "";
-  const currSym = "";
+  const registeredTaxpayerName = settings.registered_taxpayer_name || "";
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : (settings.tin || "000-000-000");
+  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
+  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const ptuNo = settings.ptu_or_accn_no || "";
+  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
+  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  const posMin = settings.pos_min || "";
+  const posSerial = settings.pos_serial || "";
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const yyyy = now.getFullYear();
+  const dateStr = `${mm}/${dd}/${yyyy}`;
+
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const timeStr = `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
 
   const fmtCents = (cents: number) => (cents / 100).toFixed(2);
 
@@ -650,7 +685,7 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Credit Payment Receipt</title>
+  <title>Collection Receipt ${receiptNumber}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     @page { size: 80mm auto; margin: 0; }
@@ -683,9 +718,11 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2.5px 0; word-break: break-word; }
     .row span:first-child { flex: 1 1 auto; padding-right: 4px; min-width: 0; }
     .row span:last-child { flex: 0 0 auto; white-space: nowrap; text-align: right; padding-right: 0; max-width: 60%; }
-    .bold { font-weight: 650; }
-    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: 650; letter-spacing: 0.5px; word-break: break-word; }
-    .divider { border-top: 1.5px dashed #000; margin: 4px 0; }
+    .section { margin: 2.5px 0; word-break: break-word; }
+    .bold { font-weight: bold; }
+    .store-name { text-align: center; margin: 2px 0 3px 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px; word-break: break-word; }
+    .header-info { font-size: 11.5px; font-weight: 530; line-height: 1.35; text-align: center; margin-bottom: 4px; }
+    .divider { border-top: 1.5px dashed #000; margin: 9px 0 10px 0; }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
       .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
@@ -694,27 +731,37 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
 </head>
 <body>
   <div class="receipt">
-    <div class="divider"></div>
     <div class="store-name">${storeName}</div>
-    ${registeredTaxpayerName ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
-    <div class="center">${storeAddress}</div>
-    <div class="center">TIN: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+    <div class="header-info">
+      ${proprietor ? `<div class="center">Proprietor - ${proprietor}</div>` : ''}
+      ${registeredTaxpayerName && registeredTaxpayerName !== proprietor ? `<div class="center">${registeredTaxpayerName}</div>` : ''}
+      ${storeAddress ? `<div class="center">${storeAddress}</div>` : ''}
+      <div class="center">${settings.vat_enabled ? 'VAT REG TIN' : 'NON-VAT REG TIN'}: ${storeTIN || "[TIN NOT CONFIGURED]"}</div>
+      ${(posMin || posSerial) ? `<div class="center">${posMin ? `MIN: ${posMin}` : ''}${posMin && posSerial ? ' | ' : ''}${posSerial ? `S/N: ${posSerial}` : ''}</div>` : ''}
+      ${ptuNo ? `<div class="center">PTU No: ${ptuNo}${ptuDate}</div>` : ''}
+      ${(storeFb || storePhone) ? `<div class="center">${storeFb ? `Fb: ${storeFb}` : ''}${storeFb && storePhone ? ' | ' : ''}${storePhone ? `Tel No: ${storePhone}` : ''}</div>` : ''}
+    </div>
+    
+    <div class="center bold" style="margin: 8px 0 6px 0; font-size: 15px; letter-spacing: 0.5px;">COLLECTION RECEIPT</div>
+    
+    <div class="row"><span>CR No: ${receiptNumber}</span></div>
+    <div class="row"><span style="white-space:nowrap;">Date:  ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
     <div class="divider"></div>
-    <div class="center bold">COLLECTION RECEIPT / PAYMENT ACKNOWLEDGEMENT</div>
-    <div class="row"><span>Receipt No:</span><span>${receiptNumber}</span></div>
-    <div class="row"><span>Date:</span><span>${dateStr}</span></div>
-    <div class="row"><span>Time:</span><span>${timeStr}</span></div>
+    <div class="row"><span style="width: 100px; flex-shrink: 0;">RECEIVED FROM:</span><span style="flex: 1; text-align: left;">${customerName}</span></div>
+    ${customerCode ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">CUST CODE:</span><span style="flex: 1; text-align: left;">${customerCode}</span></div>` : ''}
+    ${notes ? `<div class="row"><span style="width: 100px; flex-shrink: 0;">REMARKS:</span><span style="flex: 1; text-align: left;">${notes}</span></div>` : ''}
     <div class="divider"></div>
-    <div class="row"><span>Received From:</span><span class="bold">${customerName}</span></div>
-    ${customerCode ? `<div class="row"><span>Customer Code:</span><span>${customerCode}</span></div>` : ''}
-    ${notes ? `<div class="row"><span>Notes:</span><span>${notes}</span></div>` : ''}
+    <div class="row"><span>AMOUNT PAID:</span><span>${fmtCents(amountPaidCents)}</span></div>
+    <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${fmtCents(newBalanceCents)}</span></div>
     <div class="divider"></div>
-    <div class="row bold" style="font-size: 13px;"><span>AMOUNT PAID:</span><span>${fmtCents(amountPaidCents)}</span></div>
-    <div class="row bold"><span>REMAINING BALANCE:</span><span>${fmtCents(newBalanceCents)}</span></div>
+    <div class="section">CASHIER: ${cashierName}</div>
     <div class="divider"></div>
-    <div class="row"><span>Received By:</span><span>${cashierName}</span></div>
+    <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
+    <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
     <div class="divider"></div>
-    <div class="center" style="margin-top: 10px;">Thank you for your payment!</div>
+    <div class="center">Thank you for your payment!</div>
+    <div class="center">We sincerely appreciate your trust</div>
+    <div class="center">and look forward to serving you again!</div>
     <div class="divider"></div>
   </div>
 </body>

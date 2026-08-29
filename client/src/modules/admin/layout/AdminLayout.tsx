@@ -85,13 +85,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
   }, []);
 
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const {
     showModal: showPreventClose,
     closeModal: closePreventClose,
     handleForceExit,
   } = usePreventAccidentalClose({
     hasActiveWork: hasAnyActiveDraft(),
+    isLoggedIn: !!user,
+    currentUser: user,
     terminalType: "ADMIN",
     portalName: "Admin Terminal",
     workDetails: {
@@ -126,6 +128,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         open={showPreventClose}
         onClose={closePreventClose}
         hasActiveWork={hasAnyActiveDraft()}
+        isLoggedIn={!!user}
+        currentUser={user}
         terminalType="ADMIN"
         portalName="Admin Terminal"
         workDetails={{

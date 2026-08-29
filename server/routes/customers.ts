@@ -127,20 +127,27 @@ router.get(
     if (!q) { res.json([]); return; }
     try {
       const [rows] = await pool.execute<any[]>(
-        `SELECT id, customer_code, full_name, address, contact_number,
-                credit_limit, current_balance, is_credit_enabled, status
-         FROM customers
-         WHERE status = 'Active'
-           AND (full_name LIKE ? OR customer_code LIKE ? OR contact_number LIKE ?)
-         ORDER BY full_name ASC
+        `SELECT c.id, c.customer_code, c.full_name, c.address, c.contact_number,
+                c.credit_limit, c.current_balance, c.is_credit_enabled, c.status,
+                COALESCE(
+                  (SELECT SUM(csc.remaining_balance)
+                   FROM customer_store_credit csc
+                   WHERE csc.customer_id = c.id AND csc.status = 'active'),
+                  0
+                ) AS store_credit_balance
+         FROM customers c
+         WHERE c.status = 'Active'
+           AND (c.full_name LIKE ? OR c.customer_code LIKE ? OR c.contact_number LIKE ?)
+         ORDER BY c.full_name ASC
          LIMIT 20`,
         [`%${q}%`, `%${q}%`, `%${q}%`]
       );
       res.json(rows.map((r: any) => ({
         ...r,
-        credit_limit:     Number(r.credit_limit),
-        current_balance:  Number(r.current_balance),
-        is_credit_enabled: r.is_credit_enabled === 1 || r.is_credit_enabled === true,
+        credit_limit:          Number(r.credit_limit),
+        current_balance:       Number(r.current_balance),
+        store_credit_balance:  Number(r.store_credit_balance || 0),
+        is_credit_enabled:     r.is_credit_enabled === 1 || r.is_credit_enabled === true,
       })));
     } catch (err) {
       console.error("[GET /api/customers/search]", err);
@@ -155,7 +162,7 @@ router.get(
   authenticate,
   requireRole("Admin", "Cashier"),
   async (req: Request, res: Response): Promise<void> => {
-    const { status, credit_enabled } = req.query as Record<string, string>;
+    const { status, credit_enabled, with_store_credit } = req.query as Record<string, string>;
     const conditions: string[] = [];
     const params: any[] = [];
     if (status) { conditions.push("c.status = ?"); params.push(status); }
@@ -166,19 +173,32 @@ router.get(
         `SELECT c.id, c.customer_code, c.full_name, c.address, c.contact_number,
                 c.tin, c.business_style, c.credit_limit, c.current_balance,
                 c.is_credit_enabled, c.status, c.created_at,
-                u.full_name AS created_by_name
+                u.full_name AS created_by_name,
+                COALESCE(
+                  (SELECT SUM(csc.remaining_balance)
+                   FROM customer_store_credit csc
+                   WHERE csc.customer_id = c.id AND csc.status = 'active'),
+                  0
+                ) AS store_credit_balance
          FROM customers c
          LEFT JOIN users u ON u.id = c.created_by
          ${where}
          ORDER BY c.full_name ASC`,
         params
       );
-      res.json(rows.map((r: any) => ({
+      let mapped = rows.map((r: any) => ({
         ...r,
-        credit_limit:     Number(r.credit_limit),
-        current_balance:  Number(r.current_balance),
-        is_credit_enabled: r.is_credit_enabled === 1 || r.is_credit_enabled === true,
-      })));
+        credit_limit:          Number(r.credit_limit),
+        current_balance:       Number(r.current_balance),
+        store_credit_balance:  Number(r.store_credit_balance || 0),
+        is_credit_enabled:     r.is_credit_enabled === 1 || r.is_credit_enabled === true,
+      }));
+
+      if (with_store_credit === "true") {
+        mapped = mapped.filter((c) => c.store_credit_balance > 0);
+      }
+
+      res.json(mapped);
     } catch (err) {
       console.error("[GET /api/customers]", err);
       res.status(500).json({ message: "An unexpected error occurred." });
@@ -198,7 +218,13 @@ router.get(
         `SELECT c.id, c.customer_code, c.full_name, c.address, c.contact_number,
                 c.tin, c.business_style, c.credit_limit, c.current_balance,
                 c.is_credit_enabled, c.status, c.created_at, c.updated_at,
-                u.full_name AS created_by_name
+                u.full_name AS created_by_name,
+                COALESCE(
+                  (SELECT SUM(csc.remaining_balance)
+                   FROM customer_store_credit csc
+                   WHERE csc.customer_id = c.id AND csc.status = 'active'),
+                  0
+                ) AS store_credit_balance
          FROM customers c
          LEFT JOIN users u ON u.id = c.created_by
          WHERE c.id = ?`,
@@ -208,12 +234,44 @@ router.get(
       const r = rows[0];
       res.json({
         ...r,
-        credit_limit:     Number(r.credit_limit),
-        current_balance:  Number(r.current_balance),
-        is_credit_enabled: r.is_credit_enabled === 1 || r.is_credit_enabled === true,
+        credit_limit:          Number(r.credit_limit),
+        current_balance:       Number(r.current_balance),
+        store_credit_balance:  Number(r.store_credit_balance || 0),
+        is_credit_enabled:     r.is_credit_enabled === 1 || r.is_credit_enabled === true,
       });
     } catch (err) {
       console.error("[GET /api/customers/:id]", err);
+      res.status(500).json({ message: "An unexpected error occurred." });
+    }
+  }
+);
+
+// ─── GET /api/customers/:id/store-credits ──────────────────────────────────────
+router.get(
+  "/:id/store-credits",
+  authenticate,
+  requireRole("Admin", "Cashier"),
+  async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    try {
+      const [rows] = await pool.execute<any[]>(
+        `SELECT csc.id, csc.credit_amount, csc.remaining_balance, csc.status,
+                csc.issued_date, csc.expiration_date,
+                r.return_number, s.invoice_number
+         FROM customer_store_credit csc
+         LEFT JOIN returns r ON r.id = csc.return_id
+         LEFT JOIN sales s ON s.id = r.sale_id
+         WHERE csc.customer_id = ?
+         ORDER BY csc.issued_date DESC`,
+        [id]
+      );
+      res.json(rows.map((r: any) => ({
+        ...r,
+        credit_amount:     Number(r.credit_amount),
+        remaining_balance: Number(r.remaining_balance),
+      })));
+    } catch (err) {
+      console.error("[GET /api/customers/:id/store-credits]", err);
       res.status(500).json({ message: "An unexpected error occurred." });
     }
   }

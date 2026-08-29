@@ -18,9 +18,19 @@ export interface ActiveWorkDetails {
   description?: string;
 }
 
+export interface CurrentUserSummary {
+  username?: string;
+  role?: string;
+  full_name?: string;
+}
+
 export interface UsePreventAccidentalCloseOptions {
   /** Set to true when an active transaction, cart items, or unsaved work exists */
-  hasActiveWork: boolean;
+  hasActiveWork?: boolean;
+  /** Whether a user is currently logged in (active session) */
+  isLoggedIn?: boolean;
+  /** Current logged in user object */
+  currentUser?: CurrentUserSummary | null;
   /** Type of terminal: "CASHIER" | "ADMIN" | "CLERK" */
   terminalType?: TerminalType;
   /** Custom portal/terminal name override */
@@ -72,14 +82,17 @@ export function hasAnyActiveDraft(): boolean {
  * ─────────────────────────────────────────────────────────────────────────────
  * Multi-layer protection engine for POS Kiosk & Terminals (Cashier, Admin, Clerk):
  *
- * 1. Intercepts keyboard close shortcuts (Ctrl+W, Ctrl+Shift+W, Ctrl+F4, Ctrl+Q, Ctrl+R)
- *    at the document capture phase so accidental keystrokes don't immediately kill the KIOSK/app.
- * 2. Registers a browser `beforeunload` listener whenever `hasActiveWork` or uncommitted drafts exist,
- *    ensuring browser-level close buttons ('X', Alt+F4, or taskbar kill) prompt the native confirmation.
- * 3. Displays a rich, accessible in-app warning modal detailing what transaction/work is in progress.
+ * 1. Intercepts keyboard close shortcuts (Ctrl+W, Ctrl+Shift+W, Ctrl+F4, Ctrl+Q, Alt+F4)
+ *    when the user has not logged out, preventing accidental termination of the KIOSK.
+ * 2. Allows Ctrl+Shift+R / Ctrl+R / F5 (Reload) to refresh seamlessly WITHOUT any warning modal.
+ * 3. Registers a browser `beforeunload` listener whenever a user is logged in or active work exists,
+ *    ensuring browser-level close buttons ('X', Alt+F4) prompt that the user must log out first.
+ * 4. Displays a rich warning modal explaining that the user must log out before closing the Kiosk.
  */
 export function usePreventAccidentalClose({
-  hasActiveWork,
+  hasActiveWork = false,
+  isLoggedIn = true,
+  currentUser,
   terminalType = "CASHIER",
   portalName,
   workDetails,
@@ -89,12 +102,18 @@ export function usePreventAccidentalClose({
   isKiosk = true,
 }: UsePreventAccidentalCloseOptions): UsePreventAccidentalCloseReturn {
   const [showModal, setShowModal] = useState(false);
+  const isReloadingRef = useRef(false);
 
   // Keep latest refs to avoid stale closures in window event listeners
   const hasActiveWorkRef = useRef(hasActiveWork);
   useEffect(() => {
     hasActiveWorkRef.current = hasActiveWork;
   }, [hasActiveWork]);
+
+  const isLoggedInRef = useRef(isLoggedIn);
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   const onHoldOrSaveRef = useRef(onHoldOrSave);
   useEffect(() => {
@@ -107,12 +126,17 @@ export function usePreventAccidentalClose({
   }, [onDiscardAndExit]);
 
   const isEffectivelyDirty = useCallback(() => {
-    return hasActiveWorkRef.current || hasAnyActiveDraft();
+    return hasActiveWorkRef.current || hasAnyActiveDraft() || isLoggedInRef.current;
   }, []);
 
   // ── 1. Browser-level beforeunload guard ─────────────────────────────────────
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // If user is intentionally reloading (e.g. Ctrl+Shift+R or F5), do NOT block!
+      if (isReloadingRef.current) {
+        return;
+      }
+
       if (isEffectivelyDirty()) {
         e.preventDefault();
         // Standard modern browser beforeunload contract
@@ -127,30 +151,35 @@ export function usePreventAccidentalClose({
     };
   }, [isEffectivelyDirty]);
 
-  // ── 2. Keyboard shortcut interceptor (Ctrl+W, Ctrl+Shift+W, Ctrl+F4, Ctrl+Q, Ctrl+R) ─
+  // ── 2. Keyboard shortcut interceptor (Ctrl+W, Ctrl+Shift+W, Ctrl+F4, Ctrl+Q, Alt+F4) ─
   useEffect(() => {
     const handleKeyDownCapture = (e: KeyboardEvent) => {
       const isCtrlOrMeta = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      const isCloseShortcut =
-        (isCtrlOrMeta && (key === "w" || e.key === "F4" || key === "q")) ||
-        (isCtrlOrMeta && e.shiftKey && key === "w");
-
+      // RELOAD SHORTCUTS: Ctrl+Shift+R, Ctrl+R, F5, Shift+F5
+      // MUST NOT trigger any warning or modal. Allow normal browser reload!
       const isReloadShortcut =
-        (isCtrlOrMeta && key === "r") || (e.key === "F5" && !e.altKey && !e.ctrlKey && !e.shiftKey);
+        (isCtrlOrMeta && key === "r") ||
+        e.key === "F5" ||
+        (e.shiftKey && e.key === "F5");
 
-      // If it's a close shortcut (e.g. Ctrl+W):
-      if (isCloseShortcut) {
-        // ALWAYS prevent default browser tab/window close
-        e.preventDefault();
-        e.stopPropagation();
-        setShowModal(true);
+      if (isReloadShortcut) {
+        isReloadingRef.current = true;
+        setTimeout(() => {
+          isReloadingRef.current = false;
+        }, 2000);
         return;
       }
 
-      // If user presses Ctrl+R / F5 while active transaction is in progress, warn first
-      if (isReloadShortcut && isEffectivelyDirty()) {
+      // CLOSE SHORTCUTS: Ctrl+W, Ctrl+Shift+W, Ctrl+Q, Ctrl+F4, Alt+F4
+      const isCloseShortcut =
+        (isCtrlOrMeta && (key === "w" || e.key === "F4" || key === "q")) ||
+        (isCtrlOrMeta && e.shiftKey && key === "w") ||
+        (e.altKey && e.key === "F4");
+
+      // If user tries to close while logged in or with active work:
+      if (isCloseShortcut) {
         e.preventDefault();
         e.stopPropagation();
         setShowModal(true);
@@ -163,7 +192,7 @@ export function usePreventAccidentalClose({
     return () => {
       window.removeEventListener("keydown", handleKeyDownCapture, true);
     };
-  }, [isEffectivelyDirty]);
+  }, []);
 
   const openModal = useCallback(() => setShowModal(true), []);
   const closeModal = useCallback(() => setShowModal(false), []);

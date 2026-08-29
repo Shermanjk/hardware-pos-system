@@ -1,4 +1,4 @@
-import { loginRequest } from "@/shared/api/authApi";
+import { loginRequest, logoutRequest } from "@/shared/api/authApi";
 import httpClient from "@/shared/api/httpClient";
 import {
     clearToken,
@@ -174,7 +174,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false);
 
-    return clearAllTimers;
+    // Release session if window/tab is closed
+    const handlePageHide = () => {
+      const currentToken = loadToken();
+      if (currentToken) {
+        try {
+          fetch("/api/auth/logout", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${currentToken}`,
+            },
+            keepalive: true,
+          }).catch(() => {});
+        } catch { /* ignore */ }
+      }
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      clearAllTimers();
+    };
   }, [scheduleExpiryWarning, scheduleRenewal, clearAllTimers]);
 
   // ── Login ─────────────────────────────────────────────────────────────────
@@ -195,12 +217,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
+    const currentToken = token || loadToken();
+    const currentUserId = user?.id;
+    const currentUsername = user?.username;
+
+    logoutRequest(currentToken, currentUserId, currentUsername);
     clearAllTimers();
     clearToken();
     setToken(null);
     setUser(null);
     setLocation("/login");
-  }, [setLocation, clearAllTimers]);
+  }, [token, user, setLocation, clearAllTimers]);
 
   return (
     <AuthContext.Provider

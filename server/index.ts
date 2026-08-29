@@ -134,6 +134,14 @@ async function startServer() {
     console.error("[Database] Migration startup check:", migErr);
   }
 
+  // ─── Reset stale session flags on server startup ─────────────────────────────
+  try {
+    const { pool } = await import("./db.js");
+    await pool.execute("UPDATE users SET is_logged_in = 0, current_session_id = NULL WHERE is_logged_in = 1");
+  } catch (sessionErr) {
+    console.error("[Auth] Session cleanup on startup:", sessionErr);
+  }
+
   server.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}/`);
   });

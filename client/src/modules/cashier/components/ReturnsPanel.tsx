@@ -6,8 +6,8 @@ import { getSaleByInvoice, searchSales, type Sale, type SaleSummary } from "@/sh
 import { type StoreSettings } from "@/shared/api/settingsApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
-import { CheckCircle, Hourglass, Loader2, RotateCcw, X, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowUp, CheckCircle, Hourglass, Loader2, RotateCcw, X, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { HeldReturn } from "./PendingReturnsPanel";
 import ReturnAuthModal from "./ReturnAuthModal";
@@ -53,12 +53,25 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [returnHistory, setReturnHistory] = useState<ReturnFull[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  const handleScroll = () => {
+    if (scrollContainerRef.current) {
+      setShowBackToTop(scrollContainerRef.current.scrollTop > 150);
+    }
+  };
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Auth modal state — shown after return is created
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingReturnPayload, setPendingReturnPayload] = useState<any>(null);
   const [pendingInvoiceNumber, setPendingInvoiceNumber] = useState("");
   const [pendingCustomerName, setPendingCustomerName] = useState("");
+  const [pendingCustomerId, setPendingCustomerId] = useState<number | null>(null);
 
   // Load return history when panel opens
   useEffect(() => {
@@ -169,6 +182,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
     });
     setPendingInvoiceNumber(returnSale.invoice_number);
     setPendingCustomerName(returnSale.customer_name);
+    setPendingCustomerId(returnSale.customer_id ? Number(returnSale.customer_id) : null);
     setShowAuthModal(true);
   };
 
@@ -260,7 +274,11 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
           <div className="flex items-center gap-2"><RotateCcw className="h-5 w-5 text-blue-500" /><h2 className="text-base font-bold text-gray-900">Process Return</h2></div>
           <button onClick={() => { onClose(); resetPanel(); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"><X className="h-4 w-4" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+        >
           {!returnSale && !submittedReturn && (
             <div className="space-y-3">
               {/* Pending Returns Section */}
@@ -363,7 +381,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
               )}
               {returnLookupError && <p className="text-xs text-red-600">{returnLookupError}</p>}
               {searchMode === "history" && (
-                <div className="space-y-2 max-h-80 overflow-y-auto">
+                <div className="space-y-2.5 pb-6">
                   {historyLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -638,6 +656,19 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
             </div>
           )}
         </div>
+
+        {/* Floating Back to Top Button */}
+        {showBackToTop && (
+          <button
+            type="button"
+            onClick={scrollToTop}
+            className="absolute bottom-5 right-5 z-50 flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-full shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer border border-blue-400/40"
+            title="Back to Top"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+            <span>Top</span>
+          </button>
+        )}
       </div>
       <Dialog open={showResolution} onOpenChange={(o) => { if (!o) { setShowResolution(false); setResolveData(null); setResolveError(null); } }}>
         <DialogContent className="max-w-md">
@@ -688,6 +719,7 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
         returnPayload={pendingReturnPayload}
         invoiceNumber={pendingInvoiceNumber}
         customerName={pendingCustomerName}
+        customerId={pendingCustomerId}
         onApproved={handleReturnApproved}
       />
     </>

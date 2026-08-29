@@ -110,6 +110,7 @@ router.get("/pending", async (req: Request, res: Response) => {
         0 as system_quantity,
         ri.quantity_returned as physical_quantity,
         s.invoice_number,
+        s.customer_id,
         s.customer_name,
         r.refund_amount as amount,
         ri.unit_price

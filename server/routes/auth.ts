@@ -1,10 +1,12 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { pool } from "../db.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { authenticate } from "../middleware/authenticate.js";
+import { isUserSocketConnected, terminateUserSockets } from "../ws.js";
 
 const router = Router();
 
@@ -28,10 +30,11 @@ router.post("/login", async (req: Request, res: Response) => {
   const { username, password, rememberMe } = parsed.data;
 
   try {
-    // 2. Look up user by username — include must_change_password
+    // 2. Look up user by username — include session tracking and password lifecycle
     const [rows] = await pool.execute<any[]>(
       `SELECT id, full_name, username, password_hash, role, employee_id,
-              status, must_change_password
+              status, must_change_password, is_logged_in, last_activity_at,
+              logged_in_ip, current_session_id
        FROM users
        WHERE username = ?
        LIMIT 1`,
@@ -75,6 +78,41 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
 
+    // 5. Check for active concurrent session on another PC / device
+    const socketActive = isUserSocketConnected(user.id);
+    let isSessionActive = false;
+
+    if (user.is_logged_in === 1) {
+      if (socketActive) {
+        isSessionActive = true;
+      } else if (user.last_activity_at) {
+        const lastActiveMs = new Date(user.last_activity_at).getTime();
+        // Active within last 90 seconds (grace window before dropped sockets time out)
+        if (Date.now() - lastActiveMs < 90_000) {
+          isSessionActive = true;
+        }
+      }
+    }
+
+    if (isSessionActive) {
+      await logAuditEvent({
+        action: "USER_LOGIN_BLOCKED_CONCURRENT",
+        performedById: user.id,
+        performedByUsername: user.username,
+        reason: "Attempted duplicate login while account is actively logged in on another device",
+        metadata: { ip: req.ip, previousIp: user.logged_in_ip, lastActive: user.last_activity_at },
+      });
+      res.status(409).json({
+        message:
+          "Your account is already logged in on another PC or device. Please log out from that device first or contact an administrator to release your session.",
+        code: "ALREADY_LOGGED_IN",
+        sessionInfo: {
+          lastActive: user.last_activity_at,
+        },
+      });
+      return;
+    }
+
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       console.error("JWT_SECRET is not set");
@@ -82,13 +120,24 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
 
-    // 6. Base JWT payload — never includes password_hash
+    // 6. Generate unique session ID and record login in DB
+    const sessionId = randomUUID();
+    await pool.execute(
+      `UPDATE users
+       SET is_logged_in = 1, current_session_id = ?, last_login_at = NOW(),
+           last_activity_at = NOW(), logged_in_ip = ?, logged_in_device = ?
+       WHERE id = ?`,
+      [sessionId, req.ip, req.headers["user-agent"]?.slice(0, 255) || null, user.id]
+    );
+
+    // 7. Base JWT payload — never includes password_hash
     const basePayload = {
       id: user.id,
       full_name: user.full_name,
       username: user.username,
       role: user.role,
       employee_id: user.employee_id ?? null,
+      sessionId,
     };
 
     // Log successful login
@@ -99,12 +148,13 @@ router.post("/login", async (req: Request, res: Response) => {
       newValues: {
         role: user.role,
         employee_id: user.employee_id,
+        sessionId,
         login_time: new Date().toISOString(),
       },
       metadata: { ip: req.ip, rememberMe },
     });
 
-    // 7. If the account requires a password change, issue a restricted 15-min
+    // 8. If the account requires a password change, issue a restricted 15-min
     //    token with mustChangePassword: true and return early.
     //    The employee cannot reach any dashboard until they change their password.
     if (user.must_change_password) {
@@ -119,11 +169,11 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
 
-    // 8. Normal login — full-access token
+    // 9. Normal login — full-access token
     const expiresIn = rememberMe ? "30d" : "12h";
     const token = jwt.sign(basePayload, secret, { expiresIn });
 
-    // 9. Respond — never include password_hash
+    // 10. Respond — never include password_hash
     res.status(200).json({
       token,
       user: basePayload,
@@ -137,20 +187,68 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/auth/logout ────────────────────────────────────────────────────
-router.post("/logout", authenticate, async (req: Request, res: Response) => {
+router.post("/logout", async (req: Request, res: Response) => {
   try {
-    const user = req.user!;
-    await logAuditEvent({
-      action: "USER_LOGOUT",
-      performedById: user.id,
-      performedByUsername: user.username,
-      newValues: { logout_time: new Date().toISOString() },
-      metadata: { ip: req.ip },
-    });
+    let userId: number | null = null;
+    let username: string | null = null;
+
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      const secret = process.env.JWT_SECRET;
+      if (secret) {
+        try {
+          const decoded = jwt.verify(token, secret) as any;
+          userId = decoded.id;
+          username = decoded.username;
+        } catch {
+          // If token expired, decode payload to extract userId and release DB session
+          const unverified = jwt.decode(token) as any;
+          if (unverified?.id) {
+            userId = unverified.id;
+            username = unverified.username;
+          }
+        }
+      }
+    }
+
+    if (!userId && req.body?.userId) {
+      userId = Number(req.body.userId);
+    }
+    if (!username && req.body?.username) {
+      username = String(req.body.username);
+    }
+
+    if (userId) {
+      await pool.execute(
+        `UPDATE users
+         SET is_logged_in = 0, current_session_id = NULL, last_activity_at = NULL
+         WHERE id = ?`,
+        [userId]
+      );
+
+      terminateUserSockets(userId, "Logged out successfully.");
+
+      await logAuditEvent({
+        action: "USER_LOGOUT",
+        performedById: userId,
+        performedByUsername: username || "user",
+        newValues: { logout_time: new Date().toISOString() },
+        metadata: { ip: req.ip },
+      });
+    } else if (username) {
+      await pool.execute(
+        `UPDATE users
+         SET is_logged_in = 0, current_session_id = NULL, last_activity_at = NULL
+         WHERE username = ?`,
+        [username]
+      );
+    }
+
     res.status(200).json({ message: "Logged out successfully." });
   } catch (err) {
     console.error("[auth/logout] Error:", err);
-    res.status(500).json({ message: "An unexpected error occurred." });
+    res.status(200).json({ message: "Logged out." });
   }
 });
 
@@ -175,6 +273,9 @@ router.post("/refresh", authenticate, async (req: Request, res: Response) => {
     res.status(500).json({ message: "Server configuration error." });
     return;
   }
+
+  // Update last_activity_at in DB
+  pool.execute("UPDATE users SET is_logged_in = 1, last_activity_at = NOW() WHERE id = ?", [user.id]).catch(() => {});
 
   const newToken = jwt.sign(
     {

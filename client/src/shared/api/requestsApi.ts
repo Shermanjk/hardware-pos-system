@@ -19,6 +19,7 @@ export interface UnifiedRequest {
   system_quantity?: number;
   physical_quantity?: number;
   customer_name?: string;
+  customer_id?: number;
   total_amount?: number;
   unit_price?: number;
   quantity_type?: 'WHOLE_UNIT' | 'WEIGHTED';
@@ -77,6 +78,7 @@ export async function approveRequest(type: string, id: number): Promise<void> {
 
 export async function approveReturnRequest(id: number, payload: {
   resolution: "refund" | "exchange" | "store_credit" | "rejected";
+  customer_id?: number;
   exchange_product_id?: number;
   exchange_quantity?: number;
   additional_payment?: number;

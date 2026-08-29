@@ -5,12 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "@/shared/api/usersApi";
-import { createUser, deactivateUser, getUsers, resetPassword, updateUser } from "@/shared/api/usersApi";
+import { createUser, deactivateUser, forceLogoutUser, getUsers, resetPassword, updateUser } from "@/shared/api/usersApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import axios from "axios";
-import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, Plus, Printer, RotateCcw, Search, ShieldOff, Sparkles, UserCog, UserPlus, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Edit2, Eye, EyeOff, KeyRound, Lock, LogOut, Plus, PowerOff, Printer, RotateCcw, Search, ShieldOff, Sparkles, UserCog, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -53,13 +54,25 @@ export function generateNextEmployeeId(existingUsers: UserRecord[]): string {
   return candidate;
 }
 
-function formatLastLogin(record: UserRecord): string {
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr || dateStr === "0") return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatLastActivity(record: UserRecord): string {
+  if (record.is_online || record.is_logged_in) {
+    return "Active Now";
+  }
+  if (record.last_activity_at) {
+    return formatDateTime(record.last_activity_at);
+  }
   if (record.password_changed_at && record.password_changed_at !== "0") {
-    const d = new Date(record.password_changed_at);
-    if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    return formatDateTime(record.password_changed_at);
   }
   if (record.must_change_password) return "Never logged in";
-  return "Active";
+  return "Offline";
 }
 
 function extractErrors(err: unknown): Record<string, string> {
@@ -434,7 +447,7 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
     setErrors({});
     const payload: UpdateUserPayload = {
       full_name: fullName.trim() || undefined,
-      role,
+      role: user.role === "Admin" ? undefined : role,
       status,
     };
     setIsLoading(true);
@@ -484,13 +497,19 @@ function EditUserModal({ user, onClose, onUpdated }: EditUserModalProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="mb-1.5 block font-semibold">Role <span className="text-red-500">*</span></Label>
-                <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Cashier">Cashier</SelectItem>
-                    <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
-                  </SelectContent>
-                </Select>
+                {user?.role === "Admin" ? (
+                  <div className="h-10 px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-sm font-semibold text-slate-700 flex items-center">
+                    Administrator
+                  </div>
+                ) : (
+                  <Select value={role} onValueChange={(v) => setRole(v as typeof role)} disabled={isLoading}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cashier">Cashier</SelectItem>
+                      <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label className="mb-1.5 block font-semibold">Status <span className="text-red-500">*</span></Label>
@@ -686,6 +705,88 @@ function DeactivateDialog({ user, onClose, onDeactivated }: DeactivateDialogProp
   );
 }
 
+// ─── Force Logout Confirmation Dialog ────────────────────────────────────────
+
+interface ForceLogoutDialogProps {
+  user: UserRecord | null;
+  onClose: () => void;
+  onLoggedOut: (user: UserRecord) => void;
+}
+
+function ForceLogoutDialog({ user, onClose, onLoggedOut }: ForceLogoutDialogProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+
+  useEffect(() => { if (user) setError(null); }, [user]);
+
+  const handleConfirm = async () => {
+    if (!user) return;
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await forceLogoutUser(user.id);
+      toast.success(res.message || "User session released successfully.");
+      onLoggedOut(res.user ?? { ...user, is_logged_in: false, is_online: false });
+      onClose();
+    } catch (err) {
+      const errs = extractErrors(err);
+      setError(errs.general ?? "Failed to release user session.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!user} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Release Active Session</DialogTitle>
+        {/* Amber header */}
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-500 rounded-t-lg">
+          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+            <LogOut className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Release Active Session</h2>
+            <p className="text-xs text-amber-100 mt-0.5">Force logout user from all active computers</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* User info card */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm space-y-1">
+            <p className="font-semibold text-gray-900">{user?.full_name}</p>
+            <p className="text-xs text-gray-500">{user?.role} · <span className="font-mono">{user?.username}</span></p>
+            {user?.logged_in_ip && (
+              <p className="text-xs text-slate-500 font-mono">Terminal IP: {user.logged_in_ip}</p>
+            )}
+          </div>
+          <p className="text-sm text-gray-700">
+            Are you sure you want to release the active session for <strong>{user?.full_name}</strong>? This will immediately log them out from any active PC and allow them to sign in on another device.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={isLoading}
+            className="bg-amber-600 hover:bg-amber-700 text-white gap-2 shadow-sm"
+          >
+            {isLoading && <LoadingSpinner size={16} className="text-white" />}
+            {isLoading ? "Releasing…" : "Force Logout"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Users Page ──────────────────────────────────────────────────────────
 
 export default function Users() {
@@ -696,10 +797,11 @@ export default function Users() {
   const [roleFilter,  setRoleFilter]  = useState("all");
 
   // Modal / dialog state
-  const [showCreate,       setShowCreate]       = useState(false);
-  const [editTarget,       setEditTarget]       = useState<UserRecord | null>(null);
-  const [resetTarget,      setResetTarget]      = useState<UserRecord | null>(null);
-  const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [showCreate,         setShowCreate]         = useState(false);
+  const [editTarget,         setEditTarget]         = useState<UserRecord | null>(null);
+  const [resetTarget,        setResetTarget]        = useState<UserRecord | null>(null);
+  const [deactivateTarget,   setDeactivateTarget]   = useState<UserRecord | null>(null);
+  const [forceLogoutTarget,  setForceLogoutTarget]  = useState<UserRecord | null>(null);
 
   // ─── Load users ─────────────────────────────────────────────────────────────
   const loadUsers = useCallback(async () => {
@@ -718,6 +820,9 @@ export default function Users() {
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
+  // Auto-refresh users list when dashboard / entity updates arrive over WebSocket
+  useRealtimeSync(["dashboard"], loadUsers);
+
   // ─── Callbacks ──────────────────────────────────────────────────────────────
   const handleCreated = (newUser: UserRecord) => {
     setUsers((prev) => [...prev, newUser]);
@@ -731,6 +836,10 @@ export default function Users() {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   };
 
+  const handleForceLoggedOut = (updated: UserRecord) => {
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+  };
+
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -738,7 +847,7 @@ export default function Users() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-display font-bold text-gray-900">Users</h1>
-          <p className="text-gray-600 mt-1">Manage employee accounts and permissions</p>
+          <p className="text-gray-600 mt-1">Manage employee accounts, single-session access, and permissions</p>
         </div>
         <Button className="gap-2" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4" /> Add User
@@ -748,48 +857,26 @@ export default function Users() {
       {/* Load error banner */}
       {loadError && (
         <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-red-700 font-medium">Failed to load users</p>
-            <p className="text-sm text-red-600 mt-0.5">{loadError}</p>
+          <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Failed to load users</p>
+            <p className="text-xs text-red-600 mt-0.5">{loadError}</p>
           </div>
-          <button onClick={loadUsers} className="text-red-600 hover:text-red-800 text-sm font-medium">
-            Retry
-          </button>
-          <button onClick={() => setLoadError(null)} className="text-red-400 hover:text-red-600">
-            <X className="h-4 w-4" />
-          </button>
         </div>
       )}
 
-      {/* Search & Filters */}
-      <div className="bg-white rounded-xl border border-slate-300 shadow-sm p-4.5">
-        <div className="flex flex-wrap gap-3.5 items-center">
-          <div className="flex-1 min-w-56 flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
-            <Search className="h-4 w-4 text-slate-400 shrink-0" />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex flex-1 gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 flex items-center bg-white border border-slate-300 hover:border-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 rounded-lg px-3 py-2 shadow-xs transition-all">
+            <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search user by name, username, or employee ID…"
               className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
             />
-            {search && (
-              <button onClick={() => setSearch("")} className="text-slate-400 hover:text-slate-600">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-48 bg-white border-slate-300 hover:border-slate-400 text-slate-800 h-10 shadow-xs">
-              <SelectValue placeholder="All Roles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              <SelectItem value="Admin">Admin</SelectItem>
-              <SelectItem value="Cashier">Cashier</SelectItem>
-              <SelectItem value="Inventory Clerk">Inventory Clerk</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -802,7 +889,8 @@ export default function Users() {
                 <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Employee Name</th>
                 <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Username</th>
                 <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Assigned Role</th>
-                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Account Status</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Account</th>
+                <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Live Session</th>
                 <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide">Last Activity</th>
                 <th className="py-3.5 px-5 font-bold text-slate-700 text-xs uppercase tracking-wide text-center">Actions</th>
               </tr>
@@ -815,6 +903,7 @@ export default function Users() {
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-16" /></td>
+                    <td className="py-3.5 px-5"><Skeleton className="h-4 w-20" /></td>
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-28" /></td>
                     <td className="py-3.5 px-5"><Skeleton className="h-4 w-24" /></td>
                   </tr>
@@ -825,7 +914,7 @@ export default function Users() {
                   return matchSearch && matchRole;
                 }).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-20 text-center">
+                  <td colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
                         <Plus className="h-7 w-7 text-slate-400" />
@@ -844,72 +933,115 @@ export default function Users() {
                     const matchRole = roleFilter === "all" || u.role === roleFilter;
                     return matchSearch && matchRole;
                   })
-                  .map((user) => (
-                  <tr key={user.id} className="hover:bg-blue-50/50 transition-colors">
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-slate-900">{user.full_name}</p>
-                        {user.employee_id && (
-                          <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-1.5 py-0.5 rounded">
-                            {user.employee_id}
+                  .map((user) => {
+                    const isOnline = Boolean(user.is_online || user.is_logged_in);
+                    return (
+                    <tr key={user.id} className="hover:bg-blue-50/50 transition-colors">
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-900">{user.full_name}</p>
+                          {user.employee_id && (
+                            <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-1.5 py-0.5 rounded">
+                              {user.employee_id}
+                            </span>
+                          )}
+                        </div>
+                        {user.must_change_password === true && (
+                          <span className="inline-block px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-200 mt-0.5">
+                            Temp Password
                           </span>
                         )}
-                      </div>
-                      {user.must_change_password === true && (
-                        <span className="inline-block px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-200 mt-0.5">
-                          Temp Password
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
+                          {user.username}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
-                        {user.username}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                        user.status === "Active"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                          : "bg-slate-100 text-slate-500 border-slate-200"
-                      }`}>
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5 text-sm text-slate-500 font-medium">{formatLastLogin(user)}</td>
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          title="Edit user"
-                          onClick={() => setEditTarget(user)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          title="Reset password"
-                          onClick={() => setResetTarget(user)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
-                        {user.status === "Active" && (
-                          <button
-                            title="Deactivate account"
-                            onClick={() => setDeactivateTarget(user)}
-                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                          >
-                            <Lock className="h-4 w-4" />
-                          </button>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span className="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/60 px-2.5 py-1 rounded-md">
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          user.status === "Active"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-slate-100 text-slate-500 border-slate-200"
+                        }`}>
+                          {user.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-center">
+                        {isOnline ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            Online
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                            Offline
+                          </span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-xs font-semibold ${isOnline ? "text-emerald-700 font-bold" : "text-slate-800"}`}>
+                              {formatLastActivity(user)}
+                            </span>
+                            {user.logged_in_ip && isOnline && (
+                              <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1 rounded border border-slate-200" title={`Active IP: ${user.logged_in_ip}`}>
+                                {user.logged_in_ip}
+                              </span>
+                            )}
+                          </div>
+                          {user.last_login_at && (
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              Login: {formatDateTime(user.last_login_at)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center justify-center gap-1">
+                          {isOnline && (
+                            <button
+                              title="Release active session / Force logout"
+                              onClick={() => setForceLogoutTarget(user)}
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-100 transition-colors"
+                            >
+                              <LogOut className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            title="Edit user"
+                            onClick={() => setEditTarget(user)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            title="Reset password"
+                            onClick={() => setResetTarget(user)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                          {user.status === "Active" && (
+                            <button
+                              title="Deactivate account"
+                              onClick={() => setDeactivateTarget(user)}
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Lock className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -13,6 +13,12 @@ export interface UserRecord {
   must_change_password: boolean;
   password_changed_at: string | null;
   updated_at: string | null;
+  is_logged_in?: boolean;
+  is_online?: boolean;
+  last_login_at?: string | null;
+  last_activity_at?: string | null;
+  logged_in_ip?: string | null;
+  logged_in_device?: string | null;
 }
 
 export interface CreateUserPayload {
@@ -73,6 +79,14 @@ export async function resetPassword(id: number): Promise<{ tempPassword: string 
 
 export async function deactivateUser(id: number): Promise<UserRecord> {
   const response = await httpClient.post<UserRecord>(`/api/users/${id}/deactivate`, {});
+  return response.data;
+}
+
+export async function forceLogoutUser(id: number): Promise<{ message: string; user?: UserRecord }> {
+  const response = await httpClient.post<{ message: string; user?: UserRecord }>(
+    `/api/users/${id}/force-logout`,
+    {}
+  );
   return response.data;
 }
 
