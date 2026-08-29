@@ -257,10 +257,10 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   // Customer Info
   const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
   const custName = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
-  const custAddr = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "--------------------";
-  const custTin = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "--------------------";
-  const custBus = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "--------------------";
-  const custScPwdId = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "--------------------";
+  const custAddr = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "____________________";
+  const custTin = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "____________________";
+  const custBus = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "____________________";
+  const custScPwdId = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "____________________";
 
   b.row("SOLD TO:", custName);
   if (scPwdType !== "NONE") {

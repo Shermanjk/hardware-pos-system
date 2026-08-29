@@ -248,9 +248,9 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   // Customer Section
   const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
   const custName = customer.name && customer.name.trim() && customer.name.trim().toUpperCase() !== "N/A" ? customer.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
-  const custTin = !isStraightLine(customer.tin) ? customer.tin!.trim().toUpperCase() : "--------------------";
-  const custAddr = !isStraightLine(customer.address) ? customer.address!.trim().toUpperCase() : "--------------------";
-  const custScPwdId = !isStraightLine(customer.scPwdId) ? customer.scPwdId!.trim().toUpperCase() : "--------------------";
+  const custTin = !isStraightLine(customer.tin) ? customer.tin!.trim().toUpperCase() : "____________________";
+  const custAddr = !isStraightLine(customer.address) ? customer.address!.trim().toUpperCase() : "____________________";
+  const custScPwdId = !isStraightLine(customer.scPwdId) ? customer.scPwdId!.trim().toUpperCase() : "____________________";
 
   lines.push(padLine("Sold To:", custName));
   if (customer.scPwdType && customer.scPwdType !== "NONE") {
