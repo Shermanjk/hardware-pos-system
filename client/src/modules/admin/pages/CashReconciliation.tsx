@@ -1,7 +1,7 @@
 
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -134,9 +134,9 @@ function DetailModal({
   };
 
   return (
-    <Dialog open={!!sessionId} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
-        <DialogTitle className="sr-only">Session Detail</DialogTitle>
+    <Sheet open={!!sessionId} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-3xl p-0 gap-0 overflow-hidden flex flex-col border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Reconciliation Detail</SheetTitle>
 
         {/* Header */}
         <div className="px-6 py-4 bg-slate-800 text-white shrink-0">
@@ -212,8 +212,8 @@ function DetailModal({
             <Button variant="outline" onClick={onClose}>Close</Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

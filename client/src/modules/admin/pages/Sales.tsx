@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -155,11 +155,11 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
     : null;
 
   return (
-    <Dialog open={!!invoiceNumber} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
-        <DialogTitle className="sr-only">Sale Details</DialogTitle>
+    <Sheet open={!!invoiceNumber} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Sale Details</SheetTitle>
         {/* Slate header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Receipt className="h-5 w-5 text-white" />
           </div>
@@ -456,8 +456,8 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
           )}
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

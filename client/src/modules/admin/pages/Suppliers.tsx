@@ -3,6 +3,7 @@ import {
     Dialog, DialogContent,
     DialogTitle
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +17,7 @@ import axios from "axios";
 import {
     AlertCircle,
     Edit2,
+    Eye,
     Mail, MapPin, Package,
     Phone,
     Plus,
@@ -358,11 +360,11 @@ function ViewModal({ supplier, onClose, onEdit }: {
 }) {
   if (!supplier) return null;
   return (
-    <Dialog open={!!supplier} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Supplier Details</DialogTitle>
+    <Sheet open={!!supplier} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Supplier Details - {supplier.supplier_name}</SheetTitle>
         {/* Slate header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Truck className="h-5 w-5 text-white" />
           </div>
@@ -372,7 +374,7 @@ function ViewModal({ supplier, onClose, onEdit }: {
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
             <p className="text-lg font-bold text-gray-900">{supplier.supplier_name}</p>
             {statusBadge(supplier.status)}
@@ -420,15 +422,15 @@ function ViewModal({ supplier, onClose, onEdit }: {
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
             onClick={() => { onClose(); onEdit(supplier); }}>
             <Edit2 className="h-4 w-4" /> Edit
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -677,7 +679,7 @@ export default function Suppliers() {
                           onClick={() => setViewTarget(supplier)}
                           className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                         >
-                          <Search className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </button>
                         <button
                           title="Edit"

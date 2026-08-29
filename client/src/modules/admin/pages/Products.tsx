@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -663,11 +664,11 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
   if (!product) return null;
   const status = deriveStatus(product.quantity, product.reorder_level);
   return (
-    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Product Details</DialogTitle>
+    <Sheet open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Product Details - {product.product_name}</SheetTitle>
         {/* Slate header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Package className="h-5 w-5 text-white" />
           </div>
@@ -687,7 +688,7 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
           {statusBadge(status)}
         </div>
 
-        <div className="px-6 py-5 space-y-4 overflow-y-auto">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           {/* Core info grid */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm bg-gray-50 rounded-xl p-4 border border-gray-200">
             <div><span className="text-xs text-gray-500 block mb-0.5">Category</span><span className="font-medium text-gray-900">{product.category || "—"}</span></div>
@@ -776,7 +777,7 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
           )}
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2 shrink-0">
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>Close</Button>
             <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { onClose(); onEdit(product); }}>
@@ -784,8 +785,8 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -108,9 +109,9 @@ function DetailModal({ row, onClose }: { row: AuthHistoryRow | null; onClose: ()
   const meta = row ? (TYPE_META[row.auth_type] ?? { label: row.auth_type, color: "bg-slate-500" }) : null;
 
   return (
-    <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
-        <DialogTitle className="sr-only">Authorization Detail</DialogTitle>
+    <Sheet open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Authorization Detail</SheetTitle>
         <div className="flex items-center gap-3 px-6 py-4 bg-slate-600 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <ShieldCheck className="h-5 w-5 text-white" />
@@ -208,8 +209,8 @@ function DetailModal({ row, onClose }: { row: AuthHistoryRow | null; onClose: ()
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
