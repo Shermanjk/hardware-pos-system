@@ -99,7 +99,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
   const storeTIN = `${tinFormatted}-${branchCode}`;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
-  const currSym                = settings.currency === "PHP" ? "P" : settings.currency;
+  const currSym                = "";
   const posMin                 = settings.pos_min    || "";
   const posSerial              = settings.pos_serial || "";
 
@@ -131,23 +131,23 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     const totalReturnVal = cashRefund + creditRefund;
 
     resolutionHTML = `
-    <div class="row"><span>TOTAL RETURN VALUE:</span><span>${currSym} ${fmtPeso(totalReturnVal)}</span></div>
-    ${creditRefund > 0 ? `<div class="row"><span>CREDIT DEBT REDUCED:</span><span>${currSym} ${fmtPeso(creditRefund)}</span></div>` : ''}
-    <div class="row"><span>CASH REFUNDED:</span><span>${currSym} ${fmtPeso(cashRefund)}</span></div>
+    <div class="row"><span>TOTAL RETURN VALUE:</span><span>${fmtPeso(totalReturnVal)}</span></div>
+    ${creditRefund > 0 ? `<div class="row"><span>CREDIT DEBT REDUCED:</span><span>${fmtPeso(creditRefund)}</span></div>` : ''}
+    <div class="row"><span>CASH REFUNDED:</span><span>${fmtPeso(cashRefund)}</span></div>
     ${data.customer_balance !== undefined && data.customer_balance !== null ? `
     <div class="divider"></div>
-    <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${currSym} ${fmtPeso(data.customer_balance)}</span></div>
+    <div class="row"><span>REMAINING UTANG BALANCE:</span><span>${fmtPeso(data.customer_balance)}</span></div>
     ` : ''}`;
   } else if (data.resolution === "exchange") {
     resolutionHTML = `
     ${data.exchange_barcode ? `<div class="section">EXCHANGE BARCODE: ${data.exchange_barcode}</div>` : ''}
     ${data.exchange_quantity ? `<div class="section">EXCHANGE QUANTITY: ${data.exchange_quantity}</div>` : ''}
-    ${data.additional_payment && data.additional_payment > 0 ? `<div class="section">ADDITIONAL PAYMENT: ${currSym} ${fmtPeso(data.additional_payment)}</div>` : ''}
-    ${data.refund_difference && data.refund_difference > 0 ? `<div class="section">REFUND DIFFERENCE: ${currSym} ${fmtPeso(data.refund_difference)}</div>` : ''}`;
+    ${data.additional_payment && data.additional_payment > 0 ? `<div class="section">ADDITIONAL PAYMENT: ${fmtPeso(data.additional_payment)}</div>` : ''}
+    ${data.refund_difference && data.refund_difference > 0 ? `<div class="section">REFUND DIFFERENCE: ${fmtPeso(data.refund_difference)}</div>` : ''}`;
   } else if (data.resolution === "store_credit") {
     resolutionHTML = `
-    <div class="section">CREDIT ISSUED: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>
-    <div class="section">AVAILABLE BALANCE: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</div>`;
+    <div class="section">CREDIT ISSUED: ${fmtPeso(data.refund_amount ?? 0)}</div>
+    <div class="section">AVAILABLE BALANCE: ${fmtPeso(data.refund_amount ?? 0)}</div>`;
   } else if (data.resolution === "rejected") {
     resolutionHTML = `<div class="section">RETURN REJECTED</div>`;
   }
@@ -296,7 +296,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
       </tbody>
     </table>
     <div class="divider"></div>
-    <div class="row"><span>ITEMS: ${totalItems}</span><span>TOTAL REFUND: ${currSym} ${fmtPeso(data.refund_amount ?? 0)}</span></div>
+    <div class="row"><span>ITEMS: ${totalItems}</span><span>TOTAL REFUND: ${fmtPeso(data.refund_amount ?? 0)}</span></div>
     <div class="divider"></div>
     <div class="center bold">RESOLUTION: ${data.resolution.toUpperCase()}</div>
     <div class="divider"></div>

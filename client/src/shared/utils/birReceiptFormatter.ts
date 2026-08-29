@@ -276,42 +276,42 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   lines.push(divider());
 
   // Totals & Discounts
-  lines.push(padLine(`Item Count: ${totalQty}`, `P ${fmtPeso(params.subtotal)}`));
+  lines.push(padLine(`Item Count: ${totalQty}`, `${fmtPeso(params.subtotal)}`));
   if (discount && discount.amount > 0) {
     const discLabel = `Less: ${discount.name}${discount.percentage ? ` (${discount.percentage}%)` : ""}`;
-    lines.push(padLine(discLabel, `-P ${fmtPeso(discount.amount)}`));
+    lines.push(padLine(discLabel, `-${fmtPeso(discount.amount)}`));
   }
   lines.push(doubleDivider());
-  lines.push(padLine("TOTAL AMOUNT DUE", `P ${fmtPeso(params.totalAmountDue)}`));
+  lines.push(padLine("TOTAL AMOUNT DUE", `${fmtPeso(params.totalAmountDue)}`));
   lines.push(doubleDivider());
 
   // Payment Breakdown
   lines.push("PAYMENT DETAILS:");
   lines.push(padLine("Payment Method:", payment.method));
   if (payment.method === "CASH") {
-    lines.push(padLine("Cash Tendered:", `P ${fmtPeso(payment.tendered)}`));
-    lines.push(padLine("Change Due:", `P ${fmtPeso(payment.change)}`));
+    lines.push(padLine("Cash Tendered:", `${fmtPeso(payment.tendered)}`));
+    lines.push(padLine("Change Due:", `${fmtPeso(payment.change)}`));
   } else {
     if (payment.downPayment && payment.downPayment > 0) {
-      lines.push(padLine("Down Payment (Cash):", `P ${fmtPeso(payment.downPayment)}`));
+      lines.push(padLine("Down Payment (Cash):", `${fmtPeso(payment.downPayment)}`));
     }
     if (payment.chargedToAccount !== undefined) {
-      lines.push(padLine("Charged to Account:", `P ${fmtPeso(payment.chargedToAccount)}`));
+      lines.push(padLine("Charged to Account:", `${fmtPeso(payment.chargedToAccount)}`));
     }
     if (payment.creditBalance !== undefined) {
-      lines.push(padLine("Total Account Balance:", `P ${fmtPeso(payment.creditBalance)}`));
+      lines.push(padLine("Total Account Balance:", `${fmtPeso(payment.creditBalance)}`));
     }
   }
   lines.push(divider());
 
   // BIR Tax Breakdown (Strict 4-Line Output)
   lines.push(centerLine("TAX BREAKDOWN"));
-  lines.push(padLine("VATable Sales:", `P ${fmtPeso(vatBreakdown.vatableSales || 0)}`));
-  lines.push(padLine("12% VAT Amount:", `P ${fmtPeso(vatBreakdown.vatAmount || 0)}`));
-  lines.push(padLine("VAT-Exempt Sales:", `P ${fmtPeso(vatBreakdown.vatExemptSales || 0)}`));
-  lines.push(padLine("Zero-Rated Sales:", `P ${fmtPeso(vatBreakdown.zeroRatedSales || 0)}`));
+  lines.push(padLine("VATable Sales:", `${fmtPeso(vatBreakdown.vatableSales || 0)}`));
+  lines.push(padLine("12% VAT Amount:", `${fmtPeso(vatBreakdown.vatAmount || 0)}`));
+  lines.push(padLine("VAT-Exempt Sales:", `${fmtPeso(vatBreakdown.vatExemptSales || 0)}`));
+  lines.push(padLine("Zero-Rated Sales:", `${fmtPeso(vatBreakdown.zeroRatedSales || 0)}`));
   if (vatBreakdown.nonVatSales && Number(vatBreakdown.nonVatSales) > 0) {
-    lines.push(padLine("Non-VAT Sales:", `P ${fmtPeso(vatBreakdown.nonVatSales)}`));
+    lines.push(padLine("Non-VAT Sales:", `${fmtPeso(vatBreakdown.nonVatSales)}`));
   }
   lines.push(divider());
 
@@ -369,29 +369,29 @@ export function formatXReadingText(params: XReadingParams): string {
   lines.push(divider());
 
   lines.push(centerLine("SHIFT SALES SUMMARY"));
-  lines.push(padLine("Gross Shift Sales:", `P ${fmtPeso(params.shiftGross)}`));
-  lines.push(padLine("Less: Discounts:", `-P ${fmtPeso(params.shiftDiscounts)}`));
-  lines.push(padLine("Less: Refunds:", `-P ${fmtPeso(params.shiftRefunds)}`));
+  lines.push(padLine("Gross Shift Sales:", `${fmtPeso(params.shiftGross)}`));
+  lines.push(padLine("Less: Discounts:", `-${fmtPeso(params.shiftDiscounts)}`));
+  lines.push(padLine("Less: Refunds:", `-${fmtPeso(params.shiftRefunds)}`));
   lines.push(divider());
-  lines.push(padLine("NET SHIFT SALES:", `P ${fmtPeso(params.shiftNet)}`));
+  lines.push(padLine("NET SHIFT SALES:", `${fmtPeso(params.shiftNet)}`));
   lines.push(doubleDivider());
 
   lines.push(centerLine("CASH DRAWER RECONCILIATION"));
-  lines.push(padLine("Opening Cash Float:", `P ${fmtPeso(params.openingCash)}`));
-  lines.push(padLine("Cash Sales Inflow:", `P ${fmtPeso(params.cashSales)}`));
+  lines.push(padLine("Opening Cash Float:", `${fmtPeso(params.openingCash)}`));
+  lines.push(padLine("Cash Sales Inflow:", `${fmtPeso(params.cashSales)}`));
   if (params.creditCollections > 0) {
-    lines.push(padLine("Credit (Utang) Paid:", `P ${fmtPeso(params.creditCollections)}`));
+    lines.push(padLine("Credit (Utang) Paid:", `${fmtPeso(params.creditCollections)}`));
   }
   if (params.cashRefunds > 0) {
-    lines.push(padLine("Cash Refunds Out:", `-P ${fmtPeso(params.cashRefunds)}`));
+    lines.push(padLine("Cash Refunds Out:", `-${fmtPeso(params.cashRefunds)}`));
   }
   lines.push(divider());
-  lines.push(padLine("EXPECTED CASH IN DRAWER:", `P ${fmtPeso(params.expectedCash)}`));
+  lines.push(padLine("EXPECTED CASH IN DRAWER:", `${fmtPeso(params.expectedCash)}`));
 
   if (params.actualCash !== undefined && params.actualCash !== null) {
-    lines.push(padLine("ACTUAL COUNTED CASH:", `P ${fmtPeso(params.actualCash)}`));
+    lines.push(padLine("ACTUAL COUNTED CASH:", `${fmtPeso(params.actualCash)}`));
     const varLabel = (params.variance || 0) < 0 ? "SHORTAGE:" : "OVERAGE:";
-    lines.push(padLine(varLabel, `P ${fmtPeso(Math.abs(params.variance || 0))}`));
+    lines.push(padLine(varLabel, `${fmtPeso(Math.abs(params.variance || 0))}`));
     lines.push(padLine("Status:", params.status || "Balanced"));
   }
   lines.push(doubleDivider());
@@ -446,30 +446,30 @@ export function formatZReadingText(params: ZReadingParams): string {
   lines.push(divider());
 
   lines.push(centerLine("DAILY GROSS SALES"));
-  lines.push(padLine("Gross Sales:", `P ${fmtPeso(params.dailyGrossSales)}`));
-  lines.push(padLine("Less: Returns:", `-P ${fmtPeso(params.totalReturns)}`));
-  lines.push(padLine("Less: Voids:", `-P ${fmtPeso(params.totalVoids)}`));
-  lines.push(padLine("Less: SC 20% Discount:", `-P ${fmtPeso(params.scDiscount)}`));
-  lines.push(padLine("Less: PWD 20% Discount:", `-P ${fmtPeso(params.pwdDiscount)}`));
-  lines.push(padLine("Less: Other Discounts:", `-P ${fmtPeso(params.regularDiscount)}`));
+  lines.push(padLine("Gross Sales:", `${fmtPeso(params.dailyGrossSales)}`));
+  lines.push(padLine("Less: Returns:", `-${fmtPeso(params.totalReturns)}`));
+  lines.push(padLine("Less: Voids:", `-${fmtPeso(params.totalVoids)}`));
+  lines.push(padLine("Less: SC 20% Discount:", `-${fmtPeso(params.scDiscount)}`));
+  lines.push(padLine("Less: PWD 20% Discount:", `-${fmtPeso(params.pwdDiscount)}`));
+  lines.push(padLine("Less: Other Discounts:", `-${fmtPeso(params.regularDiscount)}`));
   lines.push(divider());
-  lines.push(padLine("NET SALES FOR THE DAY:", `P ${fmtPeso(params.netSales)}`));
+  lines.push(padLine("NET SALES FOR THE DAY:", `${fmtPeso(params.netSales)}`));
   lines.push(doubleDivider());
 
   // BIR Tax Breakdown (Strict 4-Line Output)
   lines.push(centerLine("BIR TAX BREAKDOWN"));
-  lines.push(padLine("VATable Sales:", `P ${fmtPeso(params.vatableSales || 0)}`));
-  lines.push(padLine("12% VAT Amount:", `P ${fmtPeso(params.vatAmount || 0)}`));
-  lines.push(padLine("VAT-Exempt Sales:", `P ${fmtPeso(params.vatExemptSales || 0)}`));
-  lines.push(padLine("Zero-Rated Sales:", `P ${fmtPeso(params.zeroRatedSales || 0)}`));
+  lines.push(padLine("VATable Sales:", `${fmtPeso(params.vatableSales || 0)}`));
+  lines.push(padLine("12% VAT Amount:", `${fmtPeso(params.vatAmount || 0)}`));
+  lines.push(padLine("VAT-Exempt Sales:", `${fmtPeso(params.vatExemptSales || 0)}`));
+  lines.push(padLine("Zero-Rated Sales:", `${fmtPeso(params.zeroRatedSales || 0)}`));
   if (params.nonVatSales > 0) {
-    lines.push(padLine("Non-VAT Sales:", `P ${fmtPeso(params.nonVatSales)}`));
+    lines.push(padLine("Non-VAT Sales:", `${fmtPeso(params.nonVatSales)}`));
   }
   lines.push(divider());
 
   lines.push(centerLine("PAYMENT METHOD BREAKDOWN"));
-  lines.push(padLine("Cash Sales:", `P ${fmtPeso(params.cashSales)}`));
-  lines.push(padLine("Credit / Charge Sales:", `P ${fmtPeso(params.creditSales)}`));
+  lines.push(padLine("Cash Sales:", `${fmtPeso(params.cashSales)}`));
+  lines.push(padLine("Credit / Charge Sales:", `${fmtPeso(params.creditSales)}`));
   lines.push(divider());
 
   lines.push(centerLine("AUDIT COUNTERS"));
@@ -480,10 +480,10 @@ export function formatZReadingText(params: ZReadingParams): string {
 
   lines.push(centerLine("ACCUMULATED GRAND TOTALS"));
   lines.push(centerLine("(NON-RESETTABLE)"));
-  lines.push(padLine("Previous Grand Total:", `P ${fmtPeso(params.oldGrandTotal)}`));
-  lines.push(padLine("Current Day Gross Sales:", `P ${fmtPeso(params.dailyGrossSales)}`));
+  lines.push(padLine("Previous Grand Total:", `${fmtPeso(params.oldGrandTotal)}`));
+  lines.push(padLine("Current Day Gross Sales:", `${fmtPeso(params.dailyGrossSales)}`));
   lines.push(divider());
-  lines.push(padLine("NEW GRAND TOTAL:", `P ${fmtPeso(params.newGrandTotal)}`));
+  lines.push(padLine("NEW GRAND TOTAL:", `${fmtPeso(params.newGrandTotal)}`));
   lines.push(doubleDivider());
 
   const accNo = settings.accreditation_no || "000-000000000-000000";

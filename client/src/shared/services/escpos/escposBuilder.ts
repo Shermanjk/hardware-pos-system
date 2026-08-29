@@ -200,7 +200,7 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   } = params;
 
   const b = new EscPosBuilder();
-  const curr = settings.currency === "PHP" ? "P" : settings.currency || "P";
+  const curr = "";
   const storeName = settings.store_name || "HARDWARE STORE";
   const registeredName = settings.registered_taxpayer_name || "";
   const proprietor = settings.proprietor || "";
@@ -226,20 +226,22 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
     b.center(registeredName);
   }
   if (proprietor) {
-    b.center(`PROPRIETOR: ${proprietor}`);
+    b.center(`Proprietor - ${proprietor}`);
   }
   if (settings.address) {
     b.center(settings.address);
   }
-  b.center(`${isVat ? "VAT REGISTERED" : "NON-VAT REGISTERED"} | TIN: ${storeTIN}`);
+  b.center(`${isVat ? "VAT REG TIN" : "NON-VAT REG TIN"}: ${storeTIN}`);
   if (posMin || posSerial) {
-    b.center(`MIN: ${posMin || "N/A"} | S/N: ${posSerial || "N/A"}`);
+    b.center(`${posMin ? `MIN: ${posMin}` : ""}${posMin && posSerial ? " | " : ""}${posSerial ? `S/N: ${posSerial}` : ""}`);
   }
   if (ptuNo) {
-    b.center(`PTU / ACCN: ${ptuNo}${ptuDate}`);
+    b.center(`PTU No: ${ptuNo}${ptuDate}`);
   }
   if (settings.facebook || settings.contact_number) {
-    b.center(`Fb: ${settings.facebook || "N/A"} | Tel: ${settings.contact_number || "N/A"}`);
+    const fb = settings.facebook ? `Fb: ${settings.facebook}` : "";
+    const phone = settings.contact_number ? `Tel: ${settings.contact_number}` : "";
+    b.center([fb, phone].filter(Boolean).join(" | "));
   }
 
   b.doubleDivider();
@@ -247,20 +249,20 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.doubleDivider();
 
   // Transaction Meta
-  b.row("SI No:", (invoiceNumber || "").replace(/^INV-?/i, "").trim());
+  b.row("SI No:", cleanInvoiceNumber(invoiceNumber));
   b.row("Date:", dateStr);
   b.row("Time:", timeStr);
   b.divider();
 
   // Customer Info
-  b.align("left").textLine(`SOLD TO: ${customerInfo.name || "Walk-in Customer"}`);
+  b.row("SOLD TO:", customerInfo.name || "Walk-in Customer");
+  if (customerInfo.address) b.row("ADDRESS:", customerInfo.address);
+  if (customerInfo.tin) b.row("TIN:", customerInfo.tin);
+  if (customerInfo.businessStyle) b.row("BUS STYLE:", customerInfo.businessStyle);
   if (scPwdType !== "NONE") {
-    const scLabel = scPwdType === "SENIOR_CITIZEN" ? "SENIOR CITIZEN ID:" : "PWD ID:";
-    b.bold(true).textLine(`${scLabel} ${scPwdId || "N/A"}`).bold(false);
+    const scLabel = scPwdType === "SENIOR_CITIZEN" ? "SC ID:" : "PWD ID:";
+    b.row(scLabel, scPwdId || "N/A");
   }
-  if (customerInfo.tin) b.textLine(`TIN: ${customerInfo.tin}`);
-  if (customerInfo.address) b.textLine(`ADDRESS: ${customerInfo.address}`);
-  if (customerInfo.businessStyle) b.textLine(`BUSINESS STYLE: ${customerInfo.businessStyle}`);
   b.divider();
 
   // Items Header & Table
@@ -270,21 +272,21 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   for (const item of cartItems) {
     b.align("left").bold(true).textLine(item.name).bold(false);
     const qtyUnit = `${item.quantity} ${item.unit || "pc"}`.padEnd(10, " ");
-    const priceStr = `@${curr} ${fmtNum(item.unitPrice)}`;
-    const amtStr = `${curr} ${fmtNum(item.subtotal)}`;
+    const priceStr = `@${fmtNum(item.unitPrice)}`;
+    const amtStr = `${fmtNum(item.subtotal)}`;
     b.row(`${qtyUnit} ${priceStr}`, amtStr);
   }
   b.divider();
 
   const grossCents = cartItems.reduce((acc, item) => acc + Math.round(item.subtotal * 100), 0);
-  b.row(`ITEMS: ${totalQty}`, `TOTAL: ${curr} ${fmtCents(grossCents)}`);
+  b.row(`ITEMS: ${totalQty}`, `TOTAL: ${fmtCents(grossCents)}`);
 
   // Discount
   if (discountCents > 0) {
     const pctStr = discountPercentage ? ` (${discountPercentage}%)` : "";
     b.divider();
-    b.row(`DISCOUNT: ${discountName || "Discount"}${pctStr}:`, `- ${curr} ${fmtCents(discountCents)}`);
-    b.row("NET TOTAL:", `${curr} ${fmtCents(finalTotalCents)}`);
+    b.row(`DISCOUNT: ${discountName || "Discount"}${pctStr}:`, `- ${fmtCents(discountCents)}`);
+    b.row("NET TOTAL:", `${fmtCents(finalTotalCents)}`);
   }
 
   // Tax Breakdown
@@ -316,36 +318,36 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
 
   b.divider();
   b.align("center").bold(true).textLine("TAX BREAKDOWN").bold(false);
-  b.row("VATable Sales:", `${curr} ${fmtCents(vatableNetCents)}`);
-  b.row("12% VAT Amount:", `${curr} ${fmtCents(vatAmountCents)}`);
-  b.row("VAT-Exempt Sales:", `${curr} ${fmtCents(vatExemptCentsCalc)}`);
-  b.row("Zero-Rated Sales:", `${curr} ${fmtCents(zeroRatedCents)}`);
+  b.row("VATable Sales:", `${fmtCents(vatableNetCents)}`);
+  b.row("12% VAT Amount:", `${fmtCents(vatAmountCents)}`);
+  b.row("VAT-Exempt Sales:", `${fmtCents(vatExemptCentsCalc)}`);
+  b.row("Zero-Rated Sales:", `${fmtCents(zeroRatedCents)}`);
   if (!isVat) {
-    b.row("Non-VAT Sales:", `${curr} ${fmtCents(nonTaxableCents)}`);
+    b.row("Non-VAT Sales:", `${fmtCents(nonTaxableCents)}`);
   }
 
   // Payment Breakdown
   b.divider();
   if (params.paymentType === "CREDIT") {
-    b.bold(true).row("TOTAL AMOUNT DUE:", `${curr} ${fmtCents(finalTotalCents)}`).bold(false);
+    b.bold(true).row("TOTAL AMOUNT DUE:", `${fmtCents(finalTotalCents)}`).bold(false);
     b.row("Payment Method:", "CREDIT / CHARGE");
     if (params.downPaymentCents && params.downPaymentCents > 0) {
-      b.row("Down Payment (Cash):", `${curr} ${fmtCents(params.downPaymentCents)}`);
-      b.row("Charged to Account:", `${curr} ${fmtCents(finalTotalCents - params.downPaymentCents)}`);
+      b.row("Down Payment (Cash):", `${fmtCents(params.downPaymentCents)}`);
+      b.row("Charged to Account:", `${fmtCents(finalTotalCents - params.downPaymentCents)}`);
     } else {
-      b.row("Charged to Account:", `${curr} ${fmtCents(finalTotalCents)}`);
+      b.row("Charged to Account:", `${fmtCents(finalTotalCents)}`);
     }
     if (params.creditBalance !== undefined && params.creditBalance !== null) {
-      b.bold(true).row("Total Account Balance:", `${curr} ${fmtCents(params.creditBalance)}`).bold(false);
+      b.bold(true).row("Total Account Balance:", `${fmtCents(params.creditBalance)}`).bold(false);
     }
     b.feed(1);
     b.center("________________________________________");
     b.center("CUSTOMER ACKNOWLEDGEMENT / SIGNATURE");
   } else {
     const dispChange = changeCents !== null ? changeCents : cashCents >= finalTotalCents ? cashCents - finalTotalCents : 0;
-    b.bold(true).row("TOTAL AMOUNT DUE:", `${curr} ${fmtCents(finalTotalCents)}`).bold(false);
-    b.row("Cash Tendered:", `${curr} ${fmtCents(cashCents)}`);
-    b.row("Change:", `${curr} ${fmtCents(dispChange)}`);
+    b.bold(true).row("TOTAL AMOUNT DUE:", `${fmtCents(finalTotalCents)}`).bold(false);
+    b.row("Cash Tendered:", `${fmtCents(cashCents)}`);
+    b.row("Change:", `${fmtCents(dispChange)}`);
   }
 
   b.divider();
@@ -373,7 +375,6 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
 export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptParams): Uint8Array {
   const { receiptNumber, customerName, customerCode, amountPaidCents, newBalanceCents, cashierName, notes, settings } = params;
   const b = new EscPosBuilder();
-  const curr = settings.currency === "PHP" ? "P" : settings.currency || "P";
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -397,8 +398,8 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
   if (notes) b.row("Notes:", notes);
   b.divider();
 
-  b.bold(true).row("AMOUNT PAID:", `${curr} ${fmtCents(amountPaidCents)}`).bold(false);
-  b.bold(true).row("REMAINING BALANCE:", `${curr} ${fmtCents(newBalanceCents)}`).bold(false);
+  b.bold(true).row("AMOUNT PAID:", `${fmtCents(amountPaidCents)}`).bold(false);
+  b.bold(true).row("REMAINING BALANCE:", `${fmtCents(newBalanceCents)}`).bold(false);
   b.divider();
 
   b.row("Received By:", cashierName);
@@ -420,7 +421,6 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
 export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   const settings = data.settings;
   const b = new EscPosBuilder();
-  const curr = settings.currency === "PHP" ? "P" : settings.currency || "P";
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -444,8 +444,8 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   for (const item of data.items) {
     b.align("left").bold(true).textLine(item.product_name).bold(false);
     const qtyStr = `${item.quantity_returned} pc`.padEnd(10, " ");
-    const upStr = `@${curr} ${fmtNum(item.unit_price)}`;
-    const amtStr = `${curr} ${fmtNum(item.unit_price * item.quantity_returned)}`;
+    const upStr = `@${fmtNum(item.unit_price)}`;
+    const amtStr = `${fmtNum(item.unit_price * item.quantity_returned)}`;
     b.row(`${qtyStr} ${upStr}`, amtStr);
   }
   b.divider();
@@ -453,20 +453,20 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   if (data.resolution === "refund") {
     const cashRefund = Number(data.cash_refund_amount ?? data.refund_amount ?? 0);
     const creditRefund = Number(data.credit_refund_amount ?? 0);
-    b.row("TOTAL RETURN VALUE:", `${curr} ${fmtNum(cashRefund + creditRefund)}`);
-    if (creditRefund > 0) b.row("CREDIT DEBT REDUCED:", `${curr} ${fmtNum(creditRefund)}`);
-    b.bold(true).row("CASH REFUNDED:", `${curr} ${fmtNum(cashRefund)}`).bold(false);
+    b.row("TOTAL RETURN VALUE:", `${fmtNum(cashRefund + creditRefund)}`);
+    if (creditRefund > 0) b.row("CREDIT DEBT REDUCED:", `${fmtNum(creditRefund)}`);
+    b.bold(true).row("CASH REFUNDED:", `${fmtNum(cashRefund)}`).bold(false);
     if (data.customer_balance !== undefined && data.customer_balance !== null) {
-      b.row("REMAINING BALANCE:", `${curr} ${fmtNum(data.customer_balance)}`);
+      b.row("REMAINING BALANCE:", `${fmtNum(data.customer_balance)}`);
     }
   } else if (data.resolution === "exchange") {
     b.align("left").textLine(`EXCHANGE BARCODE: ${data.exchange_barcode || "N/A"}`);
     b.textLine(`EXCHANGE QTY: ${data.exchange_quantity || 1}`);
     if (data.additional_payment && data.additional_payment > 0) {
-      b.row("ADDITIONAL PAYMENT:", `${curr} ${fmtNum(data.additional_payment)}`);
+      b.row("ADDITIONAL PAYMENT:", `${fmtNum(data.additional_payment)}`);
     }
     if (data.refund_difference && data.refund_difference > 0) {
-      b.row("REFUND DIFFERENCE:", `${curr} ${fmtNum(data.refund_difference)}`);
+      b.row("REFUND DIFFERENCE:", `${fmtNum(data.refund_difference)}`);
     }
   }
 
