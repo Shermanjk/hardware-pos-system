@@ -357,14 +357,8 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.center(`Accreditation No: ${accNo}${accDate}`);
   b.divider();
 
-  if (posMin) {
-    b.align("center").bold(true).textLine("THIS SERVES AS AN OFFICIAL SALES INVOICE").bold(false);
-    b.center("Thank you for your business!");
-  } else {
-    b.center("*** THIS DOCUMENT IS NOT VALID FOR ***");
-    b.center("***      CLAIM OF INPUT TAX        ***");
-    b.center("*** THIS IS NOT AN OFFICIAL INVOICE ***");
-  }
+  b.align("center").bold(true).textLine("THIS SERVES AS AN OFFICIAL SALES INVOICE").bold(false);
+  b.center("Thank you for your business!");
 
   b.doubleDivider();
   b.cashDrawer(); // Pop cash drawer
@@ -480,7 +474,6 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   b.row("PROCESSED BY:", data.processed_by_name);
   b.divider();
   b.center("Thank you for your business.");
-  b.center('"This document is not valid for claiming input taxes."');
   b.doubleDivider();
 
   b.cut(true);

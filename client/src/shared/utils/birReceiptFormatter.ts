@@ -333,14 +333,8 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   }
   lines.push(doubleDivider());
 
-  if (isTestMode || !settings.pos_min) {
-    lines.push(centerLine("*** THIS DOCUMENT IS NOT VALID FOR ***"));
-    lines.push(centerLine("***      CLAIM OF INPUT TAX        ***"));
-    lines.push(centerLine("*** THIS IS NOT AN OFFICIAL INVOICE ***"));
-  } else {
-    lines.push(centerLine("THIS SERVES AS AN OFFICIAL SALES INVOICE"));
-    lines.push(centerLine("Thank you for your business!"));
-  }
+  lines.push(centerLine("THIS SERVES AS AN OFFICIAL SALES INVOICE"));
+  lines.push(centerLine("Thank you for your business!"));
   lines.push(doubleDivider());
 
   return lines.join("\n");

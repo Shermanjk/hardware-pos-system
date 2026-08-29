@@ -396,15 +396,8 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="center">We sincerely appreciate your trust</div>
     <div class="center">and look forward to serving you again!</div>
     <div style="margin-top: 3px;"></div>
-    ${posMin ? `
     <div class="center" style="font-size: 11px;">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
-    <div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer || "Please keep this invoice for warranty & records."}</div>
-    ` : `
-    <div class="center" style="font-size: 10.5px;">*** THIS DOCUMENT IS NOT VALID FOR ***</div>
-    <div class="center" style="font-size: 10.5px;">***      CLAIM OF INPUT TAX        ***</div>
-    <div class="center" style="font-size: 10.5px;">*** THIS IS NOT AN OFFICIAL INVOICE ***</div>
     ${settings.receipt_footer ? `<div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer}</div>` : ''}
-    `}
     <div class="divider"></div>
   </div>
 </body>
@@ -579,15 +572,8 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push("   We sincerely appreciate your trust");
   lines.push("  and look forward to serving you again!");
   lines.push("----------------------------------------");
-  if (posMin) {
-    lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
-    lines.push(`    ${settings.receipt_footer || "Please keep this invoice for warranty."}`);
-  } else {
-    lines.push("    *** THIS DOCUMENT IS NOT VALID FOR ***");
-    lines.push("    ***      CLAIM OF INPUT TAX        ***");
-    lines.push("    *** THIS IS NOT AN OFFICIAL INVOICE ***");
-    if (settings.receipt_footer) lines.push(`         ${settings.receipt_footer}`);
-  }
+  lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
+  if (settings.receipt_footer) lines.push(`    ${settings.receipt_footer}`);
   lines.push("----------------------------------------\n");
 
   return lines.join("\n");

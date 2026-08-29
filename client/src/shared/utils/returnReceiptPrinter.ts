@@ -78,8 +78,6 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push("  and look forward to serving you again!");
   lines.push("----------------------------------------");
   lines.push("       SALES RETURN RECEIPT");
-  lines.push(" This document is not valid for claiming");
-  lines.push("             input taxes.");
   lines.push("----------------------------------------\n");
 
   return lines.join("\n");
@@ -312,7 +310,6 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="center">and look forward to serving you again!</div>
     <div style="margin-top: 3px;"></div>
     <div class="center" style="font-size: 11px;">This is your SALES RETURN RECEIPT.</div>
-    <div class="center" style="font-size: 10.5px;">"This document is not valid for claiming input taxes."</div>
     <div class="divider"></div>
   </div>
 </body>

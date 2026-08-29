@@ -1,5 +1,5 @@
 @echo off
-title Isra POS Kiosk
+title Isra POS System
 
 :: 1. Silently start Print Agent if installed locally (0 windows opened)
 if exist "%~dp0print-agent\Start_Print_Agent.vbs" (
