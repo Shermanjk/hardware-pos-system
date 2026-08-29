@@ -171,8 +171,12 @@ function formatTIN(settings: StoreSettings): string {
     cleanTin.length === 9
       ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
       : settings.tin || "000-000-000";
-  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "").padStart(3, "0");
-  return `${tinFormatted}-${branchCode}`;
+  const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
+  if (rawBranch) {
+    const branchCode = rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0");
+    return `${tinFormatted}-${branchCode}`;
+  }
+  return tinFormatted;
 }
 
 // ─── Receipt Byte Builders ───────────────────────────────────────────────────

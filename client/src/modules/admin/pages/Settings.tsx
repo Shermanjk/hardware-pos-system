@@ -178,7 +178,7 @@ function GeneralTab({ initial, onSettingsChange }: { initial: StoreSettings | nu
 
 function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | null; onSettingsChange: (s: StoreSettings) => void }) {
   const [saved, setSaved] = useState<Record<string, string>>({
-    proprietor: "", registered_taxpayer_name: "", tin: "", branch_code: "00000",
+    proprietor: "", registered_taxpayer_name: "", tin: "", branch_code: "",
     business_license: "", document_type: "", pos_min: "", pos_serial: "", ptu_or_accn_no: "",
     ptu_date_issued: "", accreditation_no: "", accreditation_date_issued: "",
   });
@@ -191,7 +191,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         proprietor:                initial.proprietor                ?? "",
         registered_taxpayer_name:  initial.registered_taxpayer_name  ?? "",
         tin:                       initial.tin                       ?? "",
-        branch_code:               initial.branch_code               ?? "00000",
+        branch_code:               initial.branch_code               ?? "",
         business_license:          initial.business_license          ?? "",
         document_type:             initial.document_type             ?? "SALES INVOICE",
         pos_min:                   initial.pos_min                   ?? "",
@@ -258,10 +258,10 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               onSave={handleSave}
             />
             <EditableField
-              label="Branch Code (3–5 Digits)"
+              label="Branch Code (Optional, 3–5 Digits)"
               fieldKey="branch_code"
               savedValue={saved.branch_code}
-              placeholder="e.g. 00000"
+              placeholder="e.g. 00000 (leave blank if none)"
               onSave={handleSave}
             />
           </div>

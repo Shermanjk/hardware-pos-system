@@ -104,8 +104,8 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
-  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
-  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
+  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const accNo = settings.accreditation_no || "000-000000000-000000";
@@ -433,8 +433,8 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
-  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
-  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
+  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
@@ -650,8 +650,8 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
-  const branchCode = (settings.branch_code || "00000").replace(/[^0-9]/g, "");
-  const storeTIN = `${tinFormatted}-${branchCode}`;
+  const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
+  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const accNo = settings.accreditation_no || "000-000000000-000000";

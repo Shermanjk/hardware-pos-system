@@ -43,14 +43,14 @@ const settingsSchema = z.object({
     .nullable()
     .transform((val) => {
       if (val === undefined) return undefined;
-      if (val === null || val === "") return "00000";
+      if (val === null || val.trim() === "") return "";
       const digits = val.replace(/\D/g, "");
-      if (!digits) return "00000";
+      if (!digits) return "";
       if (digits.length > 5) return digits.slice(0, 5);
-      return digits.padStart(Math.max(3, digits.length), "0");
+      return digits;
     })
-    .refine((val) => val === undefined || val === null || (val.length >= 3 && val.length <= 5), {
-      message: "Branch Code must be 3 to 5 digits (e.g. 00000)",
+    .refine((val) => val === undefined || val === null || val === "" || (val.length >= 3 && val.length <= 5), {
+      message: "Branch Code must be empty or 3 to 5 digits (e.g. 00000)",
     }),
   business_license:          z.string().max(100).optional().nullable(),
   document_type:             z.string().max(60).optional().nullable(),
@@ -74,7 +74,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.set("Cache-Control", "no-store");
     res.status(200).json({
       ...row,
-      branch_code:               row.branch_code ?? "00000",
+      branch_code:               row.branch_code ?? "",
       ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
       ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
       accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
@@ -221,7 +221,7 @@ router.put("/", async (req: Request, res: Response) => {
 
     res.status(200).json({
       ...row,
-      branch_code:               row.branch_code ?? "00000",
+      branch_code:               row.branch_code ?? "",
       ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
       ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
       accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
