@@ -136,9 +136,12 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     return (cents / 100).toFixed(2);
   };
 
-  const tinVal = customerInfo.tin && customerInfo.tin !== "N/A" ? customerInfo.tin : "";
-  const addrVal = customerInfo.address && customerInfo.address !== "N/A" ? customerInfo.address : "";
-  const busVal = customerInfo.businessStyle && customerInfo.businessStyle !== "N/A" ? customerInfo.businessStyle : "";
+  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
+  const tinVal = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "--------------------";
+  const addrVal = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "--------------------";
+  const busVal = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "--------------------";
+  const scPwdIdVal = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "--------------------";
+  const custNameVal = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
 
   const itemsHTML = cartItems.map(item => {
     const qty = item.quantity;
@@ -381,11 +384,11 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="row"><span>Change:</span><span>${fmtCents(displayChangeCents)}</span></div>
     `}
     <div class="divider"></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${(customerInfo.name || "Walk-In Customer").toUpperCase()}</span></div>
-    ${scPwdType !== "NONE" ? `<div class="row"><span style="width: 80px; flex-shrink: 0;">${scPwdLabel}:</span><span style="flex: 1; text-align: left;">${(scPwdId || "N/A").toUpperCase()}</span></div>` : ''}
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">TIN:</span><span style="flex: 1; text-align: left;">${tinVal ? tinVal.toUpperCase() : "--------------------"}</span></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">ADDRESS:</span><span style="flex: 1; text-align: left;">${addrVal ? addrVal.toUpperCase() : "--------------------"}</span></div>
-    <div class="row"><span style="width: 80px; flex-shrink: 0;">BUS STYLE:</span><span style="flex: 1; text-align: left;">${busVal ? busVal.toUpperCase() : "--------------------"}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">SOLD TO:</span><span style="flex: 1; text-align: left;">${custNameVal}</span></div>
+    ${scPwdType !== "NONE" ? `<div class="row"><span style="width: 80px; flex-shrink: 0;">${scPwdLabel}:</span><span style="flex: 1; text-align: left;">${scPwdIdVal}</span></div>` : ''}
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">TIN:</span><span style="flex: 1; text-align: left;">${tinVal}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">ADDRESS:</span><span style="flex: 1; text-align: left;">${addrVal}</span></div>
+    <div class="row"><span style="width: 80px; flex-shrink: 0;">BUS STYLE:</span><span style="flex: 1; text-align: left;">${busVal}</span></div>
     <div class="divider"></div>
     <div class="section">CASHIER: ${(cashierName || "—").toUpperCase()}</div>
     <div class="divider"></div>
@@ -398,7 +401,6 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div style="margin-top: 3px;"></div>
     <div class="center" style="font-size: 11px;">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
     ${settings.receipt_footer ? `<div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer}</div>` : ''}
-    <div class="divider"></div>
   </div>
 </body>
 </html>`;
@@ -554,12 +556,19 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     lines.push(`Change:                        ${fmt(displayChangeCents)}`);
   }
 
+  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
+  const custName = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
+  const custTin = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "--------------------";
+  const custAddr = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "--------------------";
+  const custBus = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "--------------------";
+  const custScPwdId = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "--------------------";
+
   lines.push("----------------------------------------");
-  lines.push(`SOLD TO: ${(customerInfo.name || "Walk-in Customer").toUpperCase()}`);
-  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${(scPwdId || "N/A").toUpperCase()}`);
-  lines.push(`TIN: ${(customerInfo.tin || "N/A").toUpperCase()}`);
-  lines.push(`ADDRESS: ${(customerInfo.address || "N/A").toUpperCase()}`);
-  lines.push(`BUSINESS STYLE: ${(customerInfo.businessStyle || "N/A").toUpperCase()}`);
+  lines.push(`SOLD TO: ${custName}`);
+  if (scPwdType !== "NONE") lines.push(`${scPwdLabel}: ${custScPwdId}`);
+  lines.push(`TIN: ${custTin}`);
+  lines.push(`ADDRESS: ${custAddr}`);
+  lines.push(`BUSINESS STYLE: ${custBus}`);
   lines.push("----------------------------------------");
   lines.push(`CASHIER: ${(cashierName || "—").toUpperCase()}`);
   lines.push("----------------------------------------");
@@ -574,7 +583,6 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push("----------------------------------------");
   lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
   if (settings.receipt_footer) lines.push(`    ${settings.receipt_footer}`);
-  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
@@ -621,7 +629,6 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   lines.push("       Thank you for your payment!");
   lines.push("   We sincerely appreciate your trust");
   lines.push("  and look forward to serving you again!");
-  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
@@ -748,7 +755,6 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     <div class="center">Thank you for your payment!</div>
     <div class="center">We sincerely appreciate your trust</div>
     <div class="center">and look forward to serving you again!</div>
-    <div class="divider"></div>
   </div>
 </body>
 </html>`;

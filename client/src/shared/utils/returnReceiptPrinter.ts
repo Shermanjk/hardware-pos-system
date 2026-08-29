@@ -76,9 +76,7 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push("       Thank you for your business.");
   lines.push("   We sincerely appreciate your trust");
   lines.push("  and look forward to serving you again!");
-  lines.push("----------------------------------------");
   lines.push("       SALES RETURN RECEIPT");
-  lines.push("----------------------------------------\n");
 
   return lines.join("\n");
 }
@@ -310,7 +308,6 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="center">and look forward to serving you again!</div>
     <div style="margin-top: 3px;"></div>
     <div class="center" style="font-size: 11px;">This is your SALES RETURN RECEIPT.</div>
-    <div class="divider"></div>
   </div>
 </body>
 </html>`;

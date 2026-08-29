@@ -129,9 +129,9 @@ export class EscPosBuilder {
     return this;
   }
 
-  /** Auto-cut paper (Feed 3 lines then partial or full cut) */
+  /** Auto-cut paper (Feed 1 line then partial or full cut) */
   cut(partial = true): this {
-    this.feed(3);
+    this.feed(1);
     // GS V B 0 (Feed and Cut)
     this.buffer.push(GS, 0x56, partial ? 0x42 : 0x41, 0x00);
     return this;
@@ -255,14 +255,21 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.divider();
 
   // Customer Info
-  b.row("SOLD TO:", (customerInfo.name || "Walk-in Customer").toUpperCase());
-  if (customerInfo.address) b.row("ADDRESS:", customerInfo.address.toUpperCase());
-  if (customerInfo.tin) b.row("TIN:", customerInfo.tin.toUpperCase());
-  if (customerInfo.businessStyle) b.row("BUS STYLE:", customerInfo.businessStyle.toUpperCase());
+  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
+  const custName = customerInfo.name && customerInfo.name.trim() && customerInfo.name.trim().toUpperCase() !== "N/A" ? customerInfo.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
+  const custAddr = !isStraightLine(customerInfo.address) ? customerInfo.address!.trim().toUpperCase() : "--------------------";
+  const custTin = !isStraightLine(customerInfo.tin) ? customerInfo.tin!.trim().toUpperCase() : "--------------------";
+  const custBus = !isStraightLine(customerInfo.businessStyle) ? customerInfo.businessStyle!.trim().toUpperCase() : "--------------------";
+  const custScPwdId = !isStraightLine(scPwdId) ? scPwdId!.trim().toUpperCase() : "--------------------";
+
+  b.row("SOLD TO:", custName);
   if (scPwdType !== "NONE") {
     const scLabel = scPwdType === "SENIOR_CITIZEN" ? "OSCA ID:" : "PWD ID:";
-    b.row(scLabel, (scPwdId || "N/A").toUpperCase());
+    b.row(scLabel, custScPwdId);
   }
+  b.row("TIN:", custTin);
+  b.row("ADDRESS:", custAddr);
+  b.row("BUS STYLE:", custBus);
   b.divider();
 
   // Items Header & Table
@@ -362,7 +369,6 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.align("center").bold(true).textLine("THIS SERVES AS AN OFFICIAL SALES INVOICE").bold(false);
   b.center("Thank you for your business!");
 
-  b.doubleDivider();
   b.cashDrawer(); // Pop cash drawer
   b.cut(true);     // Auto-cut paper
 
@@ -393,21 +399,20 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
   b.row("Time:", timeStr);
   b.divider();
 
-  b.bold(true).row("Received From:", customerName).bold(false);
-  if (customerCode) b.row("Customer Code:", customerCode);
-  if (notes) b.row("Notes:", notes);
+  b.bold(true).row("Received From:", (customerName || "").toUpperCase()).bold(false);
+  if (customerCode) b.row("Customer Code:", customerCode.toUpperCase());
+  if (notes) b.row("Notes:", notes.toUpperCase());
   b.divider();
 
   b.bold(true).row("AMOUNT PAID:", `${fmtCents(amountPaidCents)}`).bold(false);
   b.bold(true).row("REMAINING BALANCE:", `${fmtCents(newBalanceCents)}`).bold(false);
   b.divider();
 
-  b.row("Received By:", cashierName);
+  b.row("Received By:", (cashierName || "").toUpperCase());
   b.divider();
   b.center("Thank you for your payment!");
   b.center("We sincerely appreciate your trust");
   b.center("and look forward to serving you again!");
-  b.doubleDivider();
 
   b.cashDrawer();
   b.cut(true);
@@ -474,7 +479,6 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   b.row("PROCESSED BY:", data.processed_by_name);
   b.divider();
   b.center("Thank you for your business.");
-  b.doubleDivider();
 
   b.cut(true);
   return b.getBytes();

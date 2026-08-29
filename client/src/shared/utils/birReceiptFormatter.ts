@@ -246,17 +246,19 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   lines.push(divider());
 
   // Customer Section
-  lines.push(padLine("Sold To:", (customer.name || "Walk-in Customer").toUpperCase()));
-  if (customer.tin) {
-    lines.push(padLine("TIN:", customer.tin.toUpperCase()));
-  }
-  if (customer.address) {
-    lines.push(padLine("Address:", customer.address.toUpperCase()));
-  }
+  const isStraightLine = (val?: string | null) => !val || !val.trim() || val.trim().toUpperCase() === "N/A" || val.trim().toUpperCase() === "NONE";
+  const custName = customer.name && customer.name.trim() && customer.name.trim().toUpperCase() !== "N/A" ? customer.name.trim().toUpperCase() : "WALK-IN CUSTOMER";
+  const custTin = !isStraightLine(customer.tin) ? customer.tin!.trim().toUpperCase() : "--------------------";
+  const custAddr = !isStraightLine(customer.address) ? customer.address!.trim().toUpperCase() : "--------------------";
+  const custScPwdId = !isStraightLine(customer.scPwdId) ? customer.scPwdId!.trim().toUpperCase() : "--------------------";
+
+  lines.push(padLine("Sold To:", custName));
   if (customer.scPwdType && customer.scPwdType !== "NONE") {
     const label = customer.scPwdType === "SENIOR_CITIZEN" ? "OSCA ID:" : "PWD ID:";
-    lines.push(padLine(label, (customer.scPwdId || "N/A").toUpperCase()));
+    lines.push(padLine(label, custScPwdId));
   }
+  lines.push(padLine("TIN:", custTin));
+  lines.push(padLine("Address:", custAddr));
   lines.push(divider());
 
   // Item List
@@ -332,10 +334,8 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
     lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
   }
   lines.push(doubleDivider());
-
   lines.push(centerLine("THIS SERVES AS AN OFFICIAL SALES INVOICE"));
   lines.push(centerLine("Thank you for your business!"));
-  lines.push(doubleDivider());
 
   return lines.join("\n");
 }
@@ -404,7 +404,6 @@ export function formatXReadingText(params: XReadingParams): string {
   lines.push(doubleDivider());
   lines.push(centerLine("*** THIS IS NOT A Z-READING ***"));
   lines.push(centerLine("*** DOES NOT RESET GRAND TOTALS ***"));
-  lines.push(doubleDivider());
 
   return lines.join("\n");
 }
@@ -492,7 +491,6 @@ export function formatZReadingText(params: ZReadingParams): string {
   if (settings.accreditation_date_issued) {
     lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
   }
-  lines.push(doubleDivider());
   return lines.join("\n");
 }
 

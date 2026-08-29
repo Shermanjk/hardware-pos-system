@@ -65,7 +65,7 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
     const elementHeight = Math.max(receiptEl.scrollHeight, receiptEl.offsetHeight);
 
     // Adjust iframe to exact height to prevent DOM boundary clipping
-    iframe.style.height = `${elementHeight + 40}px`;
+    iframe.style.height = `${elementHeight + 8}px`;
 
     // 3. Rasterize with explicit bounding box and viewport height mapping
     // CRITICAL: windowWidth MUST be the full iframe viewport (302px = 80mm @ 96dpi),
@@ -81,7 +81,7 @@ export async function rasterizeReceiptHtml(html: string): Promise<RasterizedRece
       width: elementWidth,
       height: elementHeight,
       windowWidth: iframeViewportWidth,
-      windowHeight: elementHeight + 100,
+      windowHeight: elementHeight + 8,
       x: 0,
       y: 0,
       scrollX: 0,
