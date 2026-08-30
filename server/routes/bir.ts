@@ -52,7 +52,7 @@ router.get(
            COUNT(*) AS total_issued_invoices,
            MIN(invoice_number) AS beg_invoice_no,
            MAX(invoice_number) AS end_invoice_no,
-           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales
+           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0)), 0) AS gross_sales
          FROM sales
          WHERE created_at > ?
            AND created_at <= ?
@@ -146,7 +146,7 @@ router.get(
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
-           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0) + COALESCE(s.discount, 0)), 0) AS total_voids
+           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0)), 0) AS total_voids
          FROM sale_voids sv
          JOIN sales s ON s.id = sv.sale_id
          WHERE sv.resolved_at > ?
@@ -244,7 +244,7 @@ router.post(
            COUNT(*) AS total_issued_invoices,
            MIN(invoice_number) AS beg_invoice_no,
            MAX(invoice_number) AS end_invoice_no,
-           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales
+           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0)), 0) AS gross_sales
          FROM sales
          WHERE created_at > ?
            AND created_at <= ?
@@ -338,7 +338,7 @@ router.post(
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
-           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0) + COALESCE(s.discount, 0)), 0) AS total_voids
+           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0)), 0) AS total_voids
          FROM sale_voids sv
          JOIN sales s ON s.id = sv.sale_id
          WHERE sv.resolved_at > ?
@@ -571,7 +571,7 @@ router.get(
       const [salesRows] = await pool.execute<any[]>(
         `SELECT
            COUNT(*) AS transaction_count,
-           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS shift_gross,
+           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0)), 0) AS shift_gross,
            COALESCE(SUM(vat_amount), 0) AS total_vat,
            COALESCE(SUM(discount), 0) AS total_discounts,
            COALESCE(SUM(total_amount), 0) AS total_sales_amount,
