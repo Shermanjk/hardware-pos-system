@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   createZReading,
+  getZReading,
   downloadESalesCsv,
   getZReadingPreview,
   getZReadings,
@@ -89,45 +90,50 @@ export default function ZReadingReport() {
       toast.success(`Z-Reading #${res.z_counter_formatted} successfully committed!`);
       setShowConfirmModal(false);
 
-      // Auto-fetch latest and print
+      // Auto-fetch latest data and authoritative record
+      const [fullZ, settings] = await Promise.all([
+        getZReading(res.id).catch(() => null),
+        getSettings().catch(() => storeSettings),
+      ]);
       await loadData();
 
-      // Print thermal receipt
-      if (preview && storeSettings) {
+      // Print thermal receipt from committed database record
+      if (fullZ && (settings || storeSettings)) {
+        const effectiveSettings = (settings || storeSettings)!;
         const printText = formatZReadingText({
-          zCounterNo: res.z_counter_no,
-          resetCounterNo: res.reset_counter_no,
-          readingDate: preview.reading_date,
-          openedAt: preview.opened_at,
-          closedAt: new Date(),
-          generatedByName: "Authorized Admin",
-          begInvoiceNo: preview.beg_invoice_no,
-          endInvoiceNo: preview.end_invoice_no,
-          begVoidNo: preview.beg_void_no,
-          endVoidNo: preview.end_void_no,
-          begReturnNo: preview.beg_return_no,
-          endReturnNo: preview.end_return_no,
-          oldGrandTotal: res.old_grand_total,
-          dailyGrossSales: res.daily_gross_sales,
-          newGrandTotal: res.new_grand_total,
-          vatableSales: preview.vatable_sales,
-          vatAmount: preview.vat_amount,
-          vatExemptSales: preview.vat_exempt_sales,
-          zeroRatedSales: preview.zero_rated_sales,
-          nonVatSales: preview.non_vat_sales,
-          scDiscount: preview.sc_discount,
-          pwdDiscount: preview.pwd_discount,
-          regularDiscount: preview.regular_discount,
-          totalDiscounts: preview.total_discounts,
-          totalReturns: preview.total_returns,
-          totalVoids: preview.total_voids,
-          netSales: preview.net_sales,
-          cashSales: preview.cash_sales,
-          creditSales: preview.credit_sales,
-          transactionCount: preview.transaction_count,
-          voidCount: preview.void_count,
-          returnCount: preview.return_count,
-          settings: storeSettings,
+          zCounterNo: fullZ.z_counter_no,
+          resetCounterNo: fullZ.reset_counter_no,
+          readingDate: fullZ.reading_date,
+          openedAt: fullZ.opened_at,
+          closedAt: fullZ.closed_at,
+          generatedByName: fullZ.generated_by_name || fullZ.generated_by_username || "Admin",
+          begInvoiceNo: fullZ.beg_invoice_no,
+          endInvoiceNo: fullZ.end_invoice_no,
+          begVoidNo: fullZ.beg_void_no,
+          endVoidNo: fullZ.end_void_no,
+          begReturnNo: fullZ.beg_return_no,
+          endReturnNo: fullZ.end_return_no,
+          oldGrandTotal: Number(fullZ.old_grand_total),
+          dailyGrossSales: Number(fullZ.daily_gross_sales),
+          newGrandTotal: Number(fullZ.new_grand_total),
+          vatableSales: Number(fullZ.vatable_sales),
+          vatAmount: Number(fullZ.vat_amount),
+          vatExemptSales: Number(fullZ.vat_exempt_sales),
+          zeroRatedSales: Number(fullZ.zero_rated_sales),
+          nonVatSales: Number(fullZ.non_vat_sales),
+          scDiscount: Number(fullZ.sc_discount),
+          pwdDiscount: Number(fullZ.pwd_discount),
+          regularDiscount: Number(fullZ.regular_discount),
+          totalDiscounts: Number(fullZ.total_discounts),
+          totalReturns: Number(fullZ.total_returns),
+          totalVoids: Number(fullZ.total_voids),
+          netSales: Number(fullZ.net_sales),
+          cashSales: Number(fullZ.cash_sales),
+          creditSales: Number(fullZ.credit_sales),
+          transactionCount: Number(fullZ.transaction_count),
+          voidCount: Number(fullZ.void_count),
+          returnCount: Number(fullZ.return_count),
+          settings: effectiveSettings,
         });
         printThermalMonospace(printText);
       }

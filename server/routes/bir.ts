@@ -46,13 +46,25 @@ router.get(
         nextResetCounterNo += 1;
       }
 
-      // 2. Query completed, non-voided sales in this cutoff window
+      // 2. Query all issued invoices in this cutoff window for continuous sequence & gross sales
+      const [allInvoicesRows] = await pool.execute<any[]>(
+        `SELECT
+           COUNT(*) AS total_issued_invoices,
+           MIN(invoice_number) AS beg_invoice_no,
+           MAX(invoice_number) AS end_invoice_no,
+           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales
+         FROM sales
+         WHERE created_at > ?
+           AND created_at <= ?
+           AND payment_status = 'completed'`,
+        [startTime, endTime]
+      );
+      const allInvoicesSummary = allInvoicesRows[0];
+
+      // 2b. Query completed, non-voided sales in this cutoff window for valid revenue breakdown
       const [salesRows] = await pool.execute<any[]>(
         `SELECT
            COUNT(*) AS transaction_count,
-           MIN(invoice_number) AS beg_invoice_no,
-           MAX(invoice_number) AS end_invoice_no,
-           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales,
            COALESCE(SUM(subtotal), 0) AS total_subtotal,
            COALESCE(SUM(vat_amount), 0) AS total_vat,
            COALESCE(SUM(vat_exempt_amount), 0) AS total_vat_exempt_base,
@@ -134,7 +146,7 @@ router.get(
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
-           COALESCE(SUM(s.total_amount), 0) AS total_voids
+           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0) + COALESCE(s.discount, 0)), 0) AS total_voids
          FROM sale_voids sv
          JOIN sales s ON s.id = sv.sale_id
          WHERE sv.resolved_at > ?
@@ -144,7 +156,7 @@ router.get(
       );
       const voidSummary = voidRows[0];
 
-      const dailyGrossSales = round2(Number(salesSummary.gross_sales));
+      const dailyGrossSales = round2(Number(allInvoicesSummary.gross_sales));
       const newGrandTotal = round2(oldGrandTotal + dailyGrossSales);
       const totalDiscounts = round2(Number(salesSummary.total_discounts));
       const totalReturns = round2(Number(returnSummary.total_returns));
@@ -159,8 +171,8 @@ router.get(
           opened_at: startTime.toISOString(),
           closed_at: endTime.toISOString(),
           reading_date: endTime.toISOString().slice(0, 10),
-          beg_invoice_no: salesSummary.beg_invoice_no || null,
-          end_invoice_no: salesSummary.end_invoice_no || null,
+          beg_invoice_no: allInvoicesSummary.beg_invoice_no || null,
+          end_invoice_no: allInvoicesSummary.end_invoice_no || null,
           beg_return_no: returnSummary.beg_return_no || null,
           end_return_no: returnSummary.end_return_no || null,
           beg_void_no: voidSummary.beg_void_no || null,
@@ -226,13 +238,25 @@ router.post(
         nextResetCounterNo += 1;
       }
 
-      // 2. Query completed non-voided sales in this cutoff window
+      // 2. Query all issued invoices in this cutoff window for continuous sequence & gross sales
+      const [allInvoicesRows] = await conn.execute<any[]>(
+        `SELECT
+           COUNT(*) AS total_issued_invoices,
+           MIN(invoice_number) AS beg_invoice_no,
+           MAX(invoice_number) AS end_invoice_no,
+           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales
+         FROM sales
+         WHERE created_at > ?
+           AND created_at <= ?
+           AND payment_status = 'completed'`,
+        [startTime, endTime]
+      );
+      const allInvoicesSummary = allInvoicesRows[0];
+
+      // 2b. Query completed non-voided sales in this cutoff window for valid revenue breakdown
       const [salesRows] = await conn.execute<any[]>(
         `SELECT
            COUNT(*) AS transaction_count,
-           MIN(invoice_number) AS beg_invoice_no,
-           MAX(invoice_number) AS end_invoice_no,
-           COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS gross_sales,
            COALESCE(SUM(subtotal), 0) AS total_subtotal,
            COALESCE(SUM(vat_amount), 0) AS total_vat,
            COALESCE(SUM(vat_exempt_amount), 0) AS total_vat_exempt_base,
@@ -314,7 +338,7 @@ router.post(
            COUNT(*) AS void_count,
            MIN(s.invoice_number) AS beg_void_no,
            MAX(s.invoice_number) AS end_void_no,
-           COALESCE(SUM(s.total_amount), 0) AS total_voids
+           COALESCE(SUM(s.subtotal + COALESCE(s.vat_amount, 0) + COALESCE(s.discount, 0)), 0) AS total_voids
          FROM sale_voids sv
          JOIN sales s ON s.id = sv.sale_id
          WHERE sv.resolved_at > ?
@@ -324,7 +348,7 @@ router.post(
       );
       const voidSummary = voidRows[0];
 
-      const dailyGrossSales = round2(Number(salesSummary.gross_sales));
+      const dailyGrossSales = round2(Number(allInvoicesSummary.gross_sales));
       const newGrandTotal = round2(oldGrandTotal + dailyGrossSales);
       const totalDiscounts = round2(Number(salesSummary.total_discounts));
       const totalReturns = round2(Number(returnSummary.total_returns));
@@ -350,8 +374,8 @@ router.post(
           startTime,
           endTime,
           req.user!.id,
-          salesSummary.beg_invoice_no || null,
-          salesSummary.end_invoice_no || null,
+          allInvoicesSummary.beg_invoice_no || null,
+          allInvoicesSummary.end_invoice_no || null,
           voidSummary.beg_void_no || null,
           voidSummary.end_void_no || null,
           returnSummary.beg_return_no || null,
