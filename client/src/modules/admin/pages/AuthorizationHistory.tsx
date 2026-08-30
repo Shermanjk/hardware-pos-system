@@ -238,9 +238,9 @@ function ReportModal({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
-        <DialogTitle className="sr-only">Authorization Report</DialogTitle>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Authorization Report</SheetTitle>
         <div className="flex items-center gap-3 px-6 py-4 bg-indigo-600 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <FileBarChart2 className="h-5 w-5 text-white" />
@@ -263,29 +263,27 @@ function ReportModal({
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b-2 border-gray-200">
-                      {["Authorization Type", "Total", "Approved", "Rejected", "Pending", "Pass Rate"].map((h) => (
-                        <th key={h} className="py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wide text-left">{h}</th>
-                      ))}
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="py-2.5 px-4 text-left font-bold text-gray-700 text-xs uppercase">Action Type</th>
+                      <th className="py-2.5 px-4 text-left font-bold text-gray-700 text-xs uppercase">Total</th>
+                      <th className="py-2.5 px-4 text-left font-bold text-green-700 text-xs uppercase">Approved</th>
+                      <th className="py-2.5 px-4 text-left font-bold text-red-700 text-xs uppercase">Rejected</th>
+                      <th className="py-2.5 px-4 text-left font-bold text-amber-700 text-xs uppercase">Other</th>
+                      <th className="py-2.5 px-4 text-left font-bold text-indigo-700 text-xs uppercase">Pass Rate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {TYPE_ORDER.map((t) => {
-                      const s = report.by_type[t];
-                      if (!s) return null;
-                      const passNum = parseInt(s.pass_rate, 10);
-                      const passColor = isNaN(passNum) ? "text-gray-400"
-                        : passNum >= 80 ? "text-green-600"
-                        : passNum >= 50 ? "text-amber-600"
-                        : "text-red-600";
+                      const row = report.by_type[t];
+                      if (!row) return null;
                       return (
-                        <tr key={t} className="hover:bg-gray-50">
-                          <td className="py-3 px-4"><TypeBadge type={t} /></td>
-                          <td className="py-3 px-4 font-bold text-gray-900">{s.total}</td>
-                          <td className="py-3 px-4 text-green-700 font-semibold">{s.APPROVED}</td>
-                          <td className="py-3 px-4 text-red-700 font-semibold">{s.REJECTED}</td>
-                          <td className="py-3 px-4 text-amber-700">{s.PENDING + s.CANCELLED}</td>
-                          <td className={`py-3 px-4 font-bold tabular-nums ${passColor}`}>{s.pass_rate}</td>
+                        <tr key={t} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="py-2.5 px-4 font-semibold text-gray-900">{TYPE_META[t]?.label ?? t}</td>
+                          <td className="py-2.5 px-4 text-gray-700">{row.total}</td>
+                          <td className="py-2.5 px-4 text-green-700 font-medium">{row.APPROVED}</td>
+                          <td className="py-2.5 px-4 text-red-700 font-medium">{row.REJECTED}</td>
+                          <td className="py-2.5 px-4 text-amber-700">{row.PENDING + row.CANCELLED}</td>
+                          <td className="py-2.5 px-4 font-bold text-indigo-600">{row.pass_rate}</td>
                         </tr>
                       );
                     })}
@@ -312,8 +310,8 @@ function ReportModal({
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

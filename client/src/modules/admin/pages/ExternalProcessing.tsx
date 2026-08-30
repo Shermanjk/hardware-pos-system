@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Truck, Package, RefreshCw, AlertCircle, X, Search, Plus, Building2,
@@ -350,11 +351,11 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
-          <DialogTitle className="sr-only">Processing Companies</DialogTitle>
+      <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Processing Companies</SheetTitle>
           {/* Blue header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-blue-400 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-blue-400 rounded-t-lg shrink-0">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Building2 className="h-5 w-5 text-white" />
             </div>
@@ -364,7 +365,7 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
             </div>
           </div>
 
-          <div className="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
+          <div className="px-6 py-5 space-y-3 overflow-y-auto flex-1">
             {/* Add form */}
             {showAdd ? (
               <CompanyForm
@@ -434,44 +435,34 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
             )}
           </div>
 
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
             <Button variant="outline" onClick={onClose}>Close</Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Confirm delete nested dialog */}
       <Dialog open={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}>
         <DialogContent className="max-w-sm p-0 flex flex-col gap-0 overflow-hidden">
-          <DialogTitle className="sr-only">Remove Company</DialogTitle>
-          {/* Red header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-red-400 rounded-t-lg">
-            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-              <Trash2 className="h-5 w-5 text-white" />
+          <DialogTitle className="sr-only">Confirm Delete</DialogTitle>
+          <div className="p-6 space-y-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mx-auto text-red-600">
+              <Trash2 className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-white">Remove Company</h2>
-              <p className="text-xs text-red-100 mt-0.5">This action cannot be undone</p>
+            <div className="text-center">
+              <h3 className="font-bold text-gray-900 text-base">Delete Company?</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Are you sure you want to remove <strong>{confirmDelete?.name}</strong>? Delivery records linked to this company will not be deleted.
+              </p>
             </div>
           </div>
-
-          <div className="px-6 py-5 space-y-4">
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <p className="text-sm font-semibold text-gray-900">{confirmDelete?.name}</p>
-              {(confirmDelete?.address || confirmDelete?.contact) && (
-                <p className="text-xs text-gray-500 mt-0.5">{[confirmDelete?.address, confirmDelete?.contact].filter(Boolean).join(" · ")}</p>
-              )}
-            </div>
-            <p className="text-sm text-gray-700">
-              If this company has existing delivery records, it will be <strong>deactivated</strong> instead of permanently deleted.
-            </p>
-          </div>
-
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>Cancel</Button>
-            <Button onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700 text-white gap-2">
+          <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="gap-1.5">
               {deleting && <Spinner className="text-white" />}
-              {deleting ? "Removing…" : "Remove"}
+              {deleting ? "Deleting…" : "Delete Company"}
             </Button>
           </div>
         </DialogContent>
@@ -480,122 +471,92 @@ function ManageCompaniesDialog({ open, onClose, onChanged }: { open: boolean; on
   );
 }
 
-// ─── Delivery History ─────────────────────────────────────────────────────────
+// ─── Delivery History Tab ─────────────────────────────────────────────────────
 
-function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
+function DeliveryHistoryTab({ refreshKey }: { refreshKey: number }) {
   const [deliveries, setDeliveries] = useState<ExternalProcessingDelivery[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [selectedDelivery, setSelectedDelivery] = useState<ExternalProcessingDelivery | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      console.log("[DeliveryHistory] Loading deliveries with filters:", { search, dateFrom, dateTo });
-      const data = await getEprDeliveries({
-        search: search || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        limit: 100,
-      });
-      console.log("[DeliveryHistory] Loaded deliveries:", data);
+      const data = await getEprDeliveries();
       setDeliveries(data);
-    } catch (err) {
-      console.error("[DeliveryHistory] Failed to load deliveries:", err);
-      toast.error("Failed to load delivery records");
+    } catch {
+      toast.error("Failed to load delivery records.");
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo]);
+  }, []);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
+  const filtered = deliveries.filter((d) =>
+    d.product_name.toLowerCase().includes(search.toLowerCase()) ||
+    d.company_name.toLowerCase().includes(search.toLowerCase()) ||
+    d.delivery_reference.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <>
-      {/* Filters */}
-      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-2 items-end">
-        <div className="flex-1 min-w-[200px]">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-blue-400 transition-all">
-            <Search className="h-4 w-4 text-gray-400 shrink-0" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search ref, company, product…"
-              className="flex-1 bg-transparent text-sm focus:outline-none min-w-0 text-gray-800" />
-            {search && (
-              <button onClick={() => setSearch("")} className="text-gray-400 hover:text-gray-600">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by product, company, reference…"
+            className="pl-9"
+          />
         </div>
-        <div>
-          <Label className="text-xs font-semibold text-gray-500 mb-1 block">From</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 text-sm w-36" />
-        </div>
-        <div>
-          <Label className="text-xs font-semibold text-gray-500 mb-1 block">To</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-sm w-36" />
-        </div>
-        <div className="flex items-end gap-2">
-          {(search || dateFrom || dateTo) && (
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); }}>
-              <X className="h-3 w-3 mr-1" /> Clear
-            </Button>
-          )}
-          <button
-            onClick={load}
-            className="h-8 w-8 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
+        <Button variant="outline" size="sm" onClick={load} className="gap-2 shrink-0">
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </Button>
       </div>
 
       {loading ? (
-        <div className="py-10 text-center text-gray-400 flex items-center justify-center gap-2">
-          <Spinner className="text-blue-500" /> Loading…
+        <div className="py-16 text-center text-gray-400 flex items-center justify-center gap-2">
+          <Spinner className="text-blue-500" /> Loading deliveries…
         </div>
-      ) : deliveries.length === 0 ? (
-        <div className="py-10 text-center">
-          <Truck className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <p className="font-semibold text-gray-600">No delivery records found</p>
-          <p className="text-xs text-gray-400 mt-1">Switch to the Record tab to log a delivery.</p>
+      ) : filtered.length === 0 ? (
+        <div className="py-16 text-center bg-white rounded-xl border border-gray-200">
+          <Truck className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-gray-600">No delivery records found</p>
+          <p className="text-xs text-gray-400 mt-1">Record a delivery using the form on the left.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                {["Reference", "Delivery Date", "Product", "Quantity", "Processing Company", "Delivered By", "Recorded By"].map((h, i) => (
-                  <th key={i} className={`py-3.5 px-4 font-bold text-slate-700 text-xs uppercase tracking-wide whitespace-nowrap ${i === 3 ? "text-right" : "text-left"}`}>{h}</th>
-                ))}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Date</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Reference</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Product</th>
+                <th className="text-right px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Quantity</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Company</th>
+                <th className="text-left px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Delivered By</th>
+                <th className="text-center px-5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {deliveries.map((d, idx) => (
-                <tr 
-                  key={d.id} 
-                  className={`hover:bg-blue-50/50 transition-colors cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
-                  onClick={() => setSelectedDelivery(d)}
-                >
-                  <td className="py-3.5 px-4">
-                    <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">
-                      {d.delivery_reference}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">{fmtDate(d.delivery_date)}</td>
-                  <td className="py-3.5 px-4">
-                    <p className="font-bold text-slate-900">{d.product_name}</p>
-                    <p className="text-xs text-slate-400 font-medium">{d.unit_abbreviation}</p>
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-bold text-slate-900 font-mono tabular-nums">
+              {filtered.map((d) => (
+                <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-5 py-3.5 font-medium text-slate-900">{fmtDate(d.delivery_date)}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs text-slate-600">{d.delivery_reference}</td>
+                  <td className="px-5 py-3.5 font-bold text-slate-900">{d.product_name}</td>
+                  <td className="px-5 py-3.5 text-right font-bold text-slate-900 tabular-nums">
                     {Number(d.quantity).toLocaleString("en-PH", { maximumFractionDigits: 3 })}
+                    <span className="text-xs font-medium text-slate-500 ml-1">{d.unit_abbreviation}</span>
                   </td>
-                  <td className="py-3.5 px-4 text-sm font-semibold text-slate-800">{d.company_name}</td>
-                  <td className="py-3.5 px-4 text-sm text-slate-600 font-medium">{d.delivered_by || <span className="text-slate-300">—</span>}</td>
-                  <td className="py-3.5 px-4 text-xs text-slate-500">{d.recorded_by_name}</td>
+                  <td className="px-5 py-3.5 text-slate-700">{d.company_name}</td>
+                  <td className="px-5 py-3.5 text-slate-600">{d.delivered_by || <span className="text-slate-400">—</span>}</td>
+                  <td className="px-5 py-3.5 text-center">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedDelivery(d)} className="h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900">
+                      View
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -607,12 +568,12 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
         </div>
       )}
 
-      {/* View Detail Modal */}
-      <Dialog open={!!selectedDelivery} onOpenChange={(o) => { if (!o) setSelectedDelivery(null); }}>
-        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
-          <DialogTitle className="sr-only">Delivery Details</DialogTitle>
+      {/* View Detail Sheet */}
+      <Sheet open={!!selectedDelivery} onOpenChange={(o) => { if (!o) setSelectedDelivery(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Delivery Details</SheetTitle>
           {/* Slate header */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg">
+          <div className="flex items-center gap-3 px-6 py-4 bg-slate-500 rounded-t-lg shrink-0">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Truck className="h-5 w-5 text-white" />
             </div>
@@ -622,7 +583,7 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
             </div>
           </div>
           {selectedDelivery && (
-            <div className="px-6 py-5 space-y-4 text-sm">
+            <div className="px-6 py-5 space-y-4 text-sm overflow-y-auto flex-1">
               {/* Transaction info */}
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 bg-gray-50 rounded-lg p-4 border border-gray-200">
                 <div><span className="text-gray-500 text-xs block mb-0.5">Reference</span><span className="font-mono font-bold text-gray-900">{selectedDelivery.delivery_reference}</span></div>
@@ -642,11 +603,11 @@ function DeliveryHistory({ refreshKey }: { refreshKey: number }) {
               )}
             </div>
           )}
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
             <Button variant="outline" onClick={() => setSelectedDelivery(null)}>Close</Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

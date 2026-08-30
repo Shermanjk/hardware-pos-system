@@ -134,6 +134,17 @@ export interface EntityUpdateNotification {
   timestamp: string;
 }
 
+export interface RequestDecisionNotification {
+  type: "request_decision";
+  request_type: "stock_count_standard" | "stock_count_market" | "commodity_purchase" | "market_adjustment" | "void" | "return";
+  id: number;
+  reference?: string;
+  decision: "approved" | "rejected";
+  admin_name: string;
+  rejection_reason?: string | null;
+  clerk_user_id?: number;
+}
+
 // Keep the old name as an alias so existing callers don't break
 export type ReturnNotification = ReturnRequestNotification;
 
@@ -315,6 +326,19 @@ export function broadcastEntityUpdate(
     ...notification,
     timestamp: new Date().toISOString(),
   });
+  for (const client of Array.from(allClients)) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch {
+        /* silent */
+      }
+    }
+  }
+}
+
+export function broadcastRequestDecision(notification: RequestDecisionNotification): void {
+  const message = JSON.stringify(notification);
   for (const client of Array.from(allClients)) {
     if (client.readyState === WebSocket.OPEN) {
       try {

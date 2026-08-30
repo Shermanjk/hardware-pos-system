@@ -174,11 +174,11 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
           }}
         />
       )}
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">{isAdd ? "Add New Supplier" : "Edit Supplier"}</DialogTitle>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">{isAdd ? "Add New Supplier" : "Edit Supplier"}</SheetTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Truck className="h-5 w-5 text-white" />
           </div>
@@ -190,8 +190,8 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
             {errors.general && (
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -265,7 +265,7 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
             </div>
           </div>
 
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
@@ -273,8 +273,8 @@ function SupplierFormModal({ mode, open, initial, onClose, onSaved }: SupplierFo
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
     </>
   );
 }

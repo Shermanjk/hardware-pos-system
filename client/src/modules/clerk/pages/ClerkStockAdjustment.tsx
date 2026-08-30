@@ -5,8 +5,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-    Dialog, DialogContent,
-} from "@/components/ui/dialog";
+    Sheet, SheetContent, SheetTitle
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,7 +16,9 @@ import {
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import { formatQuantity } from "@/shared/utils/quantityFormat";
+import ClerkAuthModal from "../components/ClerkAuthModal";
 import {
     AlertCircle,
     CheckCircle2,
@@ -43,19 +45,32 @@ const ADJUSTMENT_TYPES = [
 
 // ─── Type badge helper ──────────────────────────────────────────────────────────
 function TypeBadge({ type }: { type: string }) {
-  const cfg = ADJUSTMENT_TYPES.find((t) => t.value === type) || ADJUSTMENT_TYPES[3];
-  const Icon = cfg.icon;
+  const normType = (type || "").toLowerCase();
+  let label = "Correction";
+  let Icon = RotateCcw;
+  let style = "bg-blue-50 text-blue-700 border-blue-200";
+
+  if (normType.includes("damag")) {
+    label = "Damaged";
+    Icon = Flame;
+    style = "bg-rose-50 text-rose-700 border-rose-200";
+  } else if (normType.includes("lost") || normType.includes("loss")) {
+    label = "Lost";
+    Icon = PackageX;
+    style = "bg-orange-50 text-orange-700 border-orange-200";
+  } else if (normType.includes("expir")) {
+    label = "Expired";
+    Icon = Clock4;
+    style = "bg-amber-50 text-amber-700 border-amber-200";
+  } else if (normType.includes("miscount") || normType.includes("count") || normType.includes("adjust") || normType.includes("correct")) {
+    label = "Correction";
+    Icon = RotateCcw;
+    style = "bg-blue-50 text-blue-700 border-blue-200";
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-      type === "Damaged"
-        ? "bg-rose-50 text-rose-700 border-rose-200"
-        : type === "Lost"
-        ? "bg-orange-50 text-orange-700 border-orange-200"
-        : type === "Expired"
-        ? "bg-amber-50 text-amber-700 border-amber-200"
-        : "bg-blue-50 text-blue-700 border-blue-200"
-    }`}>
-      <Icon className="h-3 w-3" />{cfg.label}
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style}`}>
+      <Icon className="h-3 w-3" />{label}
     </span>
   );
 }
@@ -89,9 +104,14 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  // BUG-13 FIX: Remove allProducts state — search via API instead of loading entire catalog
   const [searchLoading, setSearchLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auth modal state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authRequestType, setAuthRequestType] = useState<"market_adjustment" | "stock_count_standard">("stock_count_standard");
+  const [authPayload, setAuthPayload] = useState<any>(null);
+  const [authSummary, setAuthSummary] = useState<{ label: string; value: string }[]>([]);
 
   // ── Draft recovery ────────────────────────────────────────────────────────
   const adjDraft = useDraftRecovery<AdjustmentDraft>(DRAFT_KEYS.CLERK_STOCK_ADJUSTMENT);
@@ -190,27 +210,48 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      await submitStockAdjustment({
-        product_id: selectedProduct!.id,
-        type: adjType as "Damaged" | "Lost" | "Expired" | "Correction",
-        quantity: qtyNum,
-        reason,
+  const handleSubmitClick = () => {
+    if (!validate()) return;
+
+    const isMarketBased = (selectedProduct as any)?.pricing_type === "MARKET_BASED";
+    const diff = adjType === "Correction" ? qtyNum - currentQty : -qtyNum;
+    const diffText = diff >= 0 ? `+${diff}` : String(diff);
+
+    if (isMarketBased) {
+      setAuthRequestType("market_adjustment");
+      setAuthPayload({
+        type: "market_adjustment",
+        payload: {
+          product_id: selectedProduct!.id,
+          system_quantity: currentQty,
+          physical_quantity: previewQty,
+          reason: `${adjType}: ${reason.trim()}`,
+          remarks: reason.trim(),
+        },
       });
-      toast.success(`Adjustment saved — ${selectedProduct!.product_name} updated to ${previewQty} ${selectedProduct!.unit}`);
-      // ── Clear draft — adjustment committed to DB ──────────────────────────
-      adjDraft.commitDraft();
-      onClose();
-      onSaved();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Failed to save adjustment:", message.replace(/[\r\n\t]/g, " "));
-      toast.error("Failed to save adjustment");
-    } finally {
-      setLoading(false);
+    } else {
+      setAuthRequestType("stock_count_standard");
+      setAuthPayload({
+        type: "stock_count_standard",
+        payload: {
+          product_id: selectedProduct!.id,
+          system_quantity: currentQty,
+          physical_quantity: previewQty,
+          reason: adjType,
+          remarks: reason.trim(),
+        },
+      });
     }
+
+    setAuthSummary([
+      { label: "Product", value: selectedProduct!.product_name },
+      { label: "Current Stock", value: `${currentQty} ${selectedProduct!.unit}` },
+      { label: "Adjustment", value: `${diffText} ${selectedProduct!.unit} (${adjType})` },
+      { label: "New Stock", value: `${previewQty} ${selectedProduct!.unit}` },
+      { label: "Reason", value: reason.trim() },
+    ]);
+
+    setAuthModalOpen(true);
   };
 
   const typeConfig = ADJUSTMENT_TYPES.find((t) => t.value === adjType);
@@ -226,7 +267,15 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
             ? `${recoverableDraft.selectedProduct?.product_name ?? ""}${recoverableDraft.adjType ? ` · ${recoverableDraft.adjType}` : ""}${recoverableDraft.qty ? ` · Qty: ${recoverableDraft.qty}` : ""}${recoverableDraft.savedAt ? ` · Saved: ${new Date(recoverableDraft.savedAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}` : ""}`
             : undefined
         }
-        onRestore={() => setRecoverableDraft(null)}
+        onRestore={() => {
+            if (recoverableDraft) {
+                setSelectedProduct(recoverableDraft.selectedProduct);
+                setAdjType(recoverableDraft.adjType);
+                setQty(recoverableDraft.qty);
+                setReason(recoverableDraft.reason);
+            }
+            setRecoverableDraft(null);
+        }}
         onDiscard={() => {
           adjDraft.discardDraft();
           setSelectedProduct(prefillProduct || null);
@@ -234,8 +283,9 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
           setRecoverableDraft(null);
         }}
       />
-      <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); } }}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[92vh] flex flex-col">
+      <Sheet open={open} onOpenChange={(v) => { if (!v) { onClose(); } }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 overflow-hidden flex flex-col gap-0 border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Stock Adjustment</SheetTitle>
 
           {/* Colored header */}
           <div className="bg-amber-600 px-6 py-4 shrink-0">
@@ -305,27 +355,32 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                     )}
                   </div>
                   {lookupError && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />{lookupError}
-                    </div>
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {lookupError}
+                    </p>
                   )}
                   {errors.product && <p className="text-xs text-red-500">{errors.product}</p>}
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3 p-3 bg-blue-50 border border-blue-300 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-600 rounded-lg shrink-0"><Package className="h-4 w-4 text-white" /></div>
-                    <div>
-                      <p className="font-bold text-gray-900 text-sm">{selectedProduct.product_name}</p>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedProduct.barcode} · {selectedProduct.unit}</p>
-                      <p className="text-xs mt-1">
-                        Current stock: <strong className="text-blue-700 text-sm">{formatQuantity(selectedProduct.quantity, selectedProduct.unit_abbreviation, selectedProduct.quantity_type, selectedProduct.unit_allow_decimal)}</strong>
-                      </p>
+                <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{selectedProduct.product_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-mono text-gray-500">{selectedProduct.barcode}</span>
+                      <span className="text-xs text-gray-400">·</span>
+                      <span className="text-xs font-semibold text-amber-700">
+                        Current: {formatQuantity(selectedProduct.quantity, selectedProduct.unit, selectedProduct.quantity_type)}
+                      </span>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50 shrink-0"
-                    onClick={() => { setSelectedProduct(null); setErrors({}); }}>
-                    <X className="h-4 w-4" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-gray-500 hover:text-red-600 shrink-0 ml-2"
+                    onClick={() => { setSelectedProduct(null); setBarcodeInput(""); setSearchInput(""); setQty(""); }}
+                  >
+                    Change
                   </Button>
                 </div>
               )}
@@ -337,60 +392,84 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
               <div className="grid grid-cols-2 gap-2">
                 {ADJUSTMENT_TYPES.map((t) => {
                   const Icon = t.icon;
-                  const active = adjType === t.value;
+                  const isSelected = adjType === t.label;
                   return (
-                    <button key={t.value} type="button"
-                      onClick={() => { setAdjType(t.value); setErrors((e) => ({ ...e, type: "" })); }}
-                      className={`flex items-center gap-2.5 p-3 rounded-lg border-2 text-left transition-all ${
-                        active
-                          ? `border-current ${t.bg} ${t.color} shadow-sm`
-                          : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white text-gray-600"
-                      }`}>
-                      <Icon className={`h-4 w-4 flex-shrink-0 ${active ? t.color : "text-gray-400"}`} />
-                      <span className="text-sm font-semibold">{t.label}</span>
+                    <button
+                      key={t.label}
+                      type="button"
+                      onClick={() => { setAdjType(t.label); setErrors((e) => ({ ...e, type: "" })); }}
+                      className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200"
+                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-md mt-0.5 shrink-0 ${t.color}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-bold ${isSelected ? "text-amber-900" : "text-gray-800"}`}>{t.label}</p>
+                        <p className="text-[11px] text-gray-400 leading-tight mt-0.5">{t.description}</p>
+                      </div>
                     </button>
                   );
                 })}
               </div>
-              {typeConfig && (
-                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">{typeConfig.description}</p>
-              )}
               {errors.type && <p className="text-xs text-red-500">{errors.type}</p>}
             </div>
 
-            {/* ── Step 3: Quantity + Preview ── */}
+            {/* ── Step 3: Quantity ── */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 3 — Quantity <span className="text-red-500">*</span></p>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  {adjType === "Correction" ? "Set New Quantity" : "Quantity to Deduct"}
+                <label className="text-xs text-gray-600 mb-1 block font-medium">
+                  {adjType === "Correction"
+                    ? "Actual physical count (new stock quantity)"
+                    : "Quantity to deduct from inventory"
+                  }
                 </label>
-                <Input
-                  type="number" min={1}
-                  placeholder={adjType === "Correction" ? "Enter exact new quantity" : "How many units?"}
-                  value={qty}
-                  onChange={(e) => { setQty(e.target.value); setErrors((er) => ({ ...er, qty: "" })); }}
-                  className="h-11 text-base border-gray-300 focus:border-amber-400"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="0"
+                    value={qty}
+                    onChange={(e) => { setQty(e.target.value); setErrors((er) => ({ ...er, qty: "" })); }}
+                    className="h-10 text-base font-bold w-40 border-gray-300 focus:border-amber-400"
+                  />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {selectedProduct?.unit || "units"}
+                  </span>
+                </div>
                 {errors.qty && <p className="text-xs text-red-500 mt-1">{errors.qty}</p>}
               </div>
 
-              {selectedProduct && adjType && qty && qtyNum >= 1 && (
-                <div className={`flex items-center justify-between px-4 py-3 rounded-lg border-2 ${
-                  previewQty === 0 ? "bg-red-50 border-red-300" :
-                  previewQty <= (selectedProduct.reorder_level * 0.5) ? "bg-red-50 border-red-300" :
-                  previewQty <= selectedProduct.reorder_level ? "bg-amber-50 border-amber-300" :
-                  "bg-green-50 border-green-300"
-                }`}>
-                  <span className="text-sm font-semibold text-gray-700">New quantity:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400 line-through text-sm">{currentQty}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className={`text-2xl font-bold ${
-                      previewQty === 0 ? "text-red-600" :
-                      previewQty <= selectedProduct.reorder_level ? "text-amber-700" : "text-green-700"
-                    }`}>{previewQty}</span>
-                    <span className="text-gray-500 text-sm">{selectedProduct.unit}</span>
+              {/* Stock Preview Pill */}
+              {selectedProduct && qty && !isNaN(qtyNum) && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
+                  <div>
+                    <span className="text-gray-400 block">Current</span>
+                    <span className="font-bold text-gray-700">{formatQuantity(currentQty, selectedProduct.unit, selectedProduct.quantity_type)}</span>
+                  </div>
+                  <span className="text-gray-300 font-bold">→</span>
+                  <div>
+                    <span className="text-gray-400 block">
+                      {adjType === "Correction" ? "Correction" : "Adjustment"}
+                    </span>
+                    <span className={`font-bold ${adjType === "Correction" ? "text-blue-600" : "text-red-600"}`}>
+                      {adjType === "Correction"
+                        ? formatQuantity(qtyNum, selectedProduct.unit, selectedProduct.quantity_type)
+                        : `-${formatQuantity(qtyNum, selectedProduct.unit, selectedProduct.quantity_type)}`
+                      }
+                    </span>
+                  </div>
+                  <span className="text-gray-300 font-bold">→</span>
+                  <div>
+                    <span className="text-gray-400 block">New Stock</span>
+                    <span className={`font-bold text-sm ${previewQty < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                      {formatQuantity(previewQty, selectedProduct.unit, selectedProduct.quantity_type)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -414,37 +493,37 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
             <Button variant="outline" className="border-gray-300 text-gray-700" onClick={onClose}>Cancel</Button>
             <Button
               className="gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-              onClick={() => { if (validate()) setConfirmOpen(true); }}
+              onClick={handleSubmitClick}
               disabled={loading}
             >
               <CheckCircle2 className="h-4 w-4" /> Save Adjustment
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Stock Adjustment</AlertDialogTitle>
-            <AlertDialogDescription>
-              {adjType === "Correction"
-                ? `This will set "${selectedProduct?.product_name}" quantity to ${previewQty} ${selectedProduct?.unit}.`
-                : `This will deduct ${qtyNum} ${selectedProduct?.unit} from "${selectedProduct?.product_name}" (${currentQty} → ${previewQty}).`
-              } This action is logged and cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Go Back</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-amber-600 hover:bg-amber-700"
-              onClick={() => { setConfirmOpen(false); handleSave(); }}
-            >
-              {loading ? "Saving..." : "Confirm Adjustment"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Dual Authorization Modal: Remote Request to Admin vs In-Terminal Override */}
+      {authPayload && (
+        <ClerkAuthModal
+          open={authModalOpen}
+          onClose={() => {
+            setAuthModalOpen(false);
+          }}
+          requestType={authRequestType}
+          createPayload={authPayload}
+          title="Authorize Stock Adjustment"
+          summary={authSummary}
+          onRequestCreated={() => {
+            adjDraft.commitDraft();
+            onSaved();
+          }}
+          onApproved={(_adminName) => {
+            adjDraft.commitDraft();
+            onClose();
+            onSaved();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -458,6 +537,11 @@ export default function ClerkStockAdjustment() {
   const [logs, setLogs] = useState<any[]>([]);
 
   const handleSaved = () => { setModalOpen(false); setRefreshKey((k) => k + 1); };
+
+  // Real-time synchronization when requests are approved/rejected or inventory adjusted
+  useRealtimeSync(["inventory", "requests", "products", "dashboard"], () => {
+    setRefreshKey((k) => k + 1);
+  });
 
   // Load adjustment history
   useEffect(() => {
@@ -600,13 +684,22 @@ export default function ClerkStockAdjustment() {
                   </td>
                   <td className="py-3 px-4"><TypeBadge type={r.action} /></td>
                   <td className="py-3 px-4 text-center">
-                    <span className={`inline-flex items-center justify-center font-extrabold text-xs px-2.5 py-1 rounded-full tabular-nums shadow-sm ${
-                      r.action === 'Correction'
-                        ? 'text-blue-700 bg-blue-50 border border-blue-200'
-                        : 'text-rose-700 bg-rose-50 border border-rose-200'
-                    }`}>
-                      {r.action === 'Correction' ? `→ ${Math.abs(r.quantity_change)}` : `− ${Math.abs(r.quantity_change)}`}
-                    </span>
+                    {(() => {
+                      const change = Number(r.quantity_change ?? 0);
+                      const isPositive = change > 0;
+                      const isZero = change === 0;
+                      return (
+                        <span className={`inline-flex items-center justify-center font-extrabold text-xs px-2.5 py-1 rounded-full tabular-nums shadow-sm ${
+                          isPositive
+                            ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                            : isZero
+                            ? 'text-slate-700 bg-slate-50 border border-slate-200'
+                            : 'text-rose-700 bg-rose-50 border border-rose-200'
+                        }`}>
+                          {isPositive ? `+ ${change}` : isZero ? '0' : `− ${Math.abs(change)}`}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span className="text-xs font-semibold text-slate-500 tabular-nums">{r.quantity}</span>

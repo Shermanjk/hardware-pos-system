@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -399,11 +400,11 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
   };
 
   return (
-    <Dialog open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Set Reference Price</DialogTitle>
+    <Sheet open={!!product} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Set Reference Price</SheetTitle>
         {/* Amber header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-amber-400 rounded-t-lg">
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-400 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <TrendingUp className="h-5 w-5 text-white" />
           </div>
@@ -414,7 +415,7 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
         </div>
 
         {product && (
-          <div className="px-6 py-5 space-y-4">
+          <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
             {/* Current price card */}
             {product.current_price != null && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -468,26 +469,28 @@ function SetPriceModal({ product, onClose, onSaved }: SetPriceModalProps) {
           </div>
         )}
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white gap-2">
             {saving && <Spinner className="text-white" />}
             {saving ? "Saving…" : "Set Price"}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-// ─── Price History Panel ──────────────────────────────────────────────────────
+// ─── Price History Modal ──────────────────────────────────────────────────────
 
-function PriceHistoryPanel({ productId, productName, unitAbbr, onClose }: {
+interface PriceHistoryModalProps {
   productId: number;
   productName: string;
   unitAbbr: string;
   onClose: () => void;
-}) {
+}
+
+function PriceHistoryModal({ productId, productName, unitAbbr, onClose }: PriceHistoryModalProps) {
   const [history, setHistory] = useState<CommodityPriceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -500,9 +503,9 @@ function PriceHistoryPanel({ productId, productName, unitAbbr, onClose }: {
   }, [productId]);
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden max-h-[80vh]">
-        <DialogTitle className="sr-only">Price History</DialogTitle>
+    <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">Price History</SheetTitle>
         {/* Amber header */}
         <div className="flex items-center gap-3 px-6 py-4 bg-amber-600 rounded-t-lg shrink-0">
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
@@ -551,8 +554,8 @@ function PriceHistoryPanel({ productId, productName, unitAbbr, onClose }: {
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -841,10 +844,10 @@ function MarketBasedWithTabs({
         </>
       )}
 
-      {/* Transaction Detail Modal */}
-      <Dialog open={!!selectedPurchase} onOpenChange={(o) => { if (!o) setSelectedPurchase(null); }}>
-        <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
-          <DialogTitle className="sr-only">Transaction Details</DialogTitle>
+      {/* Transaction Detail Sheet */}
+      <Sheet open={!!selectedPurchase} onOpenChange={(o) => { if (!o) setSelectedPurchase(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-2xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Transaction Details</SheetTitle>
           {/* Slate header */}
           <div className="flex items-center gap-3 px-6 py-4 bg-slate-700 rounded-t-lg shrink-0">
             <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
@@ -914,7 +917,10 @@ function MarketBasedWithTabs({
                     <span className="text-gray-500 text-xs block mb-0.5">Seller Contact</span>
                     <span className="font-medium font-mono">{selectedPurchase.seller_contact || <span className="text-gray-400 font-normal">—</span>}</span>
                   </div>
-                  <div><span className="text-gray-500 text-xs block mb-0.5">Date</span><span className="font-medium">{fmtDateOnly(selectedPurchase.transaction_date)}</span></div>
+                  <div>
+                    <span className="text-gray-500 text-xs block mb-0.5">Date</span>
+                    <span className="font-medium">{fmtDateOnly(selectedPurchase.transaction_date)}</span>
+                  </div>
                   <div><span className="text-gray-500 text-xs block mb-0.5">Submitted By</span><span className="font-medium">{selectedPurchase.prepared_by_name || "—"}</span></div>
                   {selectedPurchase.approved_by_name && <div><span className="text-gray-500 text-xs block mb-0.5">Approved By</span><span className="font-medium">{selectedPurchase.approved_by_name}</span></div>}
                   {selectedPurchase.rejection_reason && (
@@ -934,8 +940,8 @@ function MarketBasedWithTabs({
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
             <Button variant="outline" onClick={() => setSelectedPurchase(null)}>Close</Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -982,7 +988,7 @@ export default function CommodityPrices() {
       />
 
       {historyFor && (
-        <PriceHistoryPanel
+        <PriceHistoryModal
           productId={historyFor.id}
           productName={historyFor.product_name}
           unitAbbr={historyFor.unit_abbreviation}

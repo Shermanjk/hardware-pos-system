@@ -1,11 +1,22 @@
-import { useState, useEffect, useCallback } from "react";
-import { Search, X, RefreshCw, AlertCircle, Package, Ban, RotateCcw, XCircle, CheckCircle2 } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Search, X, RefreshCw, AlertCircle, Package, Ban, RotateCcw, XCircle, CheckCircle2, Check, CheckCheck, ListChecks, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { getPendingRequests, getRequestHistory, approveRequest, approveReturnRequest, rejectRequest, type UnifiedRequest } from "@/shared/api/requestsApi";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  getPendingRequests,
+  getRequestHistory,
+  approveRequest,
+  approveReturnRequest,
+  rejectRequest,
+  getBatchRequestDetails,
+  decideStockCountBatch,
+  type UnifiedRequest,
+  type BatchDecisionPayload,
+} from "@/shared/api/requestsApi";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { toast } from "sonner";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
@@ -479,125 +490,474 @@ interface DetailDialogProps {
   onApprove: (type: string, id: number) => void;
   onApproveReturn: (id: number, payload: any) => void;
   onReject: (type: string, id: number) => void;
+  onBatchDecideSuccess?: () => void;
   actionLoading: boolean;
 }
 
-function DetailDialog({ req, onClose, onApprove, onApproveReturn, onReject, actionLoading }: DetailDialogProps) {
+function DetailDialog({
+  req,
+  onClose,
+  onApprove,
+  onApproveReturn,
+  onReject,
+  onBatchDecideSuccess,
+  actionLoading,
+}: DetailDialogProps) {
   if (!req) return null;
-  
+
   const isPending = req.status.toLowerCase() === "pending" || req.status === "PENDING_APPROVAL";
   const typeMap: Record<string, string> = {
-    "STOCK_COUNT_STANDARD": "stock-count-standard",
-    "STOCK_COUNT_MARKET": "stock-count-market",
-    "VOID": "void",
-    "RETURN": "return",
+    STOCK_COUNT_STANDARD: "stock-count-standard",
+    STOCK_COUNT_MARKET: "stock-count-market",
+    VOID: "void",
+    RETURN: "return",
   };
 
+  const isStockCount = req.type.startsWith("STOCK_COUNT");
+
+  // Batch items state for stock counts
+  const [batchItems, setBatchItems] = useState<UnifiedRequest[]>([]);
+  const [loadingBatch, setLoadingBatch] = useState(false);
+  const [itemDecisions, setItemDecisions] = useState<
+    Record<number, { action: "approve" | "reject"; rejection_reason: string }>
+  >({});
+  const [batchActionLoading, setBatchActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!req) {
+      setBatchItems([]);
+      setItemDecisions({});
+      return;
+    }
+
+    if (isStockCount && req.reference) {
+      setLoadingBatch(true);
+      getBatchRequestDetails(req.reference)
+        .then((res) => {
+          const items = res.items && res.items.length > 0 ? res.items : [req];
+          setBatchItems(items);
+          const initial: Record<number, { action: "approve" | "reject"; rejection_reason: string }> = {};
+          items.forEach((it) => {
+            initial[it.id] = {
+              action: it.status === "REJECTED" ? "reject" : "approve",
+              rejection_reason: it.rejection_reason || "",
+            };
+          });
+          setItemDecisions(initial);
+        })
+        .catch(() => {
+          setBatchItems([req]);
+          setItemDecisions({ [req.id]: { action: "approve", rejection_reason: "" } });
+        })
+        .finally(() => setLoadingBatch(false));
+    } else {
+      setBatchItems([req]);
+    }
+  }, [req, isStockCount]);
+
+  const handleApproveAll = () => {
+    const next: Record<number, { action: "approve" | "reject"; rejection_reason: string }> = {};
+    batchItems.forEach((it) => {
+      next[it.id] = { action: "approve", rejection_reason: "" };
+    });
+    setItemDecisions(next);
+  };
+
+  const handleRejectAll = () => {
+    const next: Record<number, { action: "approve" | "reject"; rejection_reason: string }> = {};
+    batchItems.forEach((it) => {
+      next[it.id] = {
+        action: "reject",
+        rejection_reason: itemDecisions[it.id]?.rejection_reason || "Rejected by Administrator",
+      };
+    });
+    setItemDecisions(next);
+  };
+
+  const handleSubmitBatchDecisions = async () => {
+    if (!req) return;
+    setBatchActionLoading(true);
+    try {
+      const payload: BatchDecisionPayload = {
+        reference: req.reference,
+        decisions: batchItems.map((it) => {
+          const d = itemDecisions[it.id] || { action: "approve", rejection_reason: "" };
+          const itemType: "STOCK_COUNT_STANDARD" | "STOCK_COUNT_MARKET" =
+            it.type === "STOCK_COUNT_MARKET" ? "STOCK_COUNT_MARKET" : "STOCK_COUNT_STANDARD";
+          return {
+            id: it.id,
+            type: itemType,
+            action: d.action,
+            rejection_reason: d.action === "reject" ? d.rejection_reason?.trim() || "Rejected by Administrator" : undefined,
+          };
+        }),
+      };
+
+      const res = await decideStockCountBatch(payload);
+      toast.success(res.message);
+      onClose();
+      onBatchDecideSuccess?.();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to process batch decisions.");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  const approveCount = Object.values(itemDecisions).filter((d) => d.action === "approve").length;
+  const rejectCount = Object.values(itemDecisions).filter((d) => d.action === "reject").length;
+
   // Dynamic header config per type
-  const headerConfig = req.type.startsWith("STOCK_COUNT")
-    ? { bg: "bg-slate-500", icon: <Package className="h-5 w-5 text-white" />, title: req.type === "STOCK_COUNT_MARKET" ? "Market-Based Stock Count" : "Stock Count Request" }
+  const headerConfig = isStockCount
+    ? {
+        bg: "bg-slate-800",
+        icon: <Package className="h-5 w-5 text-white" />,
+        title:
+          batchItems.length > 1
+            ? `Batch Stock Count (${batchItems.length} Products)`
+            : req.type === "STOCK_COUNT_MARKET"
+            ? "Market-Based Stock Count"
+            : "Stock Count Request",
+      }
     : req.type === "VOID"
-    ? { bg: "bg-slate-500", icon: <Ban className="h-5 w-5 text-white" />, title: "Void Request" }
-    : { bg: "bg-slate-500", icon: <RotateCcw className="h-5 w-5 text-white" />, title: "Return Request" };
+    ? { bg: "bg-slate-800", icon: <Ban className="h-5 w-5 text-white" />, title: "Void Request" }
+    : { bg: "bg-slate-800", icon: <RotateCcw className="h-5 w-5 text-white" />, title: "Return Request" };
 
   return (
-    <Dialog open={!!req} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 flex flex-col gap-0 overflow-hidden max-h-[90vh]">
-        <DialogTitle className="sr-only">{headerConfig.title}</DialogTitle>
+    <Sheet
+      open={!!req}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <SheetContent
+        side="right"
+        className="w-[95vw] sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white"
+      >
+        <SheetTitle className="sr-only">{headerConfig.title}</SheetTitle>
+
         {/* Slate header */}
-        <div className={`flex items-center gap-3 px-6 py-4 ${headerConfig.bg} rounded-t-lg shrink-0`}>
-          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-            {headerConfig.icon}
+        <div className={`flex items-center justify-between gap-3 px-6 py-4 ${headerConfig.bg} rounded-t-lg shrink-0`}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              {headerConfig.icon}
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">{headerConfig.title}</h2>
+              <p className="text-xs text-slate-300 mt-0.5 font-mono">{req.reference}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base font-bold text-white">{headerConfig.title}</h2>
-            <p className="text-xs text-slate-300 mt-0.5 font-mono">{req.reference}</p>
-          </div>
+          {isStockCount && batchItems.length > 1 && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/30 text-purple-200 border border-purple-400/40">
+              {batchItems.length} Products
+            </span>
+          )}
         </div>
 
-        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
-          {/* Request Info */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1 bg-slate-50/50">
+          {/* Request Info Box */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Request Info</p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center gap-1.5"><span className="text-gray-500">Type:</span> <TypeBadge type={req.type} /></div>
-              <div><span className="text-gray-500">Reference:</span> <span className="font-mono font-semibold text-gray-800 ml-1">{req.reference}</span></div>
-              <div><span className="text-gray-500">Requested By:</span> <span className="font-medium text-gray-800 ml-1">{req.requested_by_name}</span></div>
-              <div><span className="text-gray-500">Date:</span> <span className="text-gray-800 ml-1">{fmtDate(req.created_at || req.prepared_at)}</span></div>
-              <div className="flex items-center gap-1.5"><span className="text-gray-500">Status:</span> <span className="ml-1"><StatusBadge status={req.status} /></span></div>
-            </div>
-          </div>
-
-          {/* Reason */}
-          <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Reason</p>
-            <p className="text-gray-800">{req.reason}</p>
-          </div>
-
-          {/* Remarks */}
-          {req.remarks && (
-            <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Remarks</p>
-              <p className="text-gray-800">{req.remarks}</p>
-            </div>
-          )}
-
-          {/* Type-specific details */}
-          {req.type.startsWith("STOCK_COUNT") && (
-            <div className="p-4 bg-blue-50 rounded-lg text-sm border border-blue-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-3">Inventory Details</p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-gray-500">Product:</span> <span className="font-semibold text-gray-900 ml-1">{req.product_name}</span></div>
-                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono text-gray-700 ml-1">{req.barcode}</span></div>
-                <div><span className="text-gray-500">System Qty:</span> <span className="font-semibold text-gray-900 ml-1">{(() => {
-                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
-                  return allowDecimal ? req.system_quantity?.toFixed(3) : req.system_quantity;
-                })()}</span></div>
-                <div><span className="text-gray-500">Physical Qty:</span> <span className="font-semibold text-gray-900 ml-1">{(() => {
-                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
-                  return allowDecimal ? req.physical_quantity?.toFixed(3) : req.physical_quantity;
-                })()}</span></div>
-                <div><span className="text-gray-500">Difference:</span> <span className={`font-bold ml-1 ${req.difference && req.difference > 0 ? "text-blue-600" : "text-red-600"}`}>{(() => {
-                  const allowDecimal = req.unit_allow_decimal ?? req.quantity_type === "WEIGHTED";
-                  const displayDiff = allowDecimal ? req.difference?.toFixed(3) : Math.round(req.difference || 0);
-                  return `${Number(displayDiff) > 0 ? "+" : ""}${displayDiff}`;
-                })()}</span></div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Request Overview</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white rounded-xl p-4 border border-slate-200/90 shadow-xs">
+              <div>
+                <span className="text-gray-400 block font-medium">Type</span>
+                <div className="mt-1">
+                  <TypeBadge type={req.type} />
+                </div>
+              </div>
+              <div>
+                <span className="text-gray-400 block font-medium">Reference</span>
+                <span className="font-mono font-bold text-gray-800 mt-1 block">{req.reference}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 block font-medium">Requested By</span>
+                <span className="font-semibold text-gray-800 mt-1 block">{req.requested_by_name}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 block font-medium">Date & Time</span>
+                <span className="text-gray-700 mt-1 block">{fmtDate(req.created_at || req.prepared_at)}</span>
               </div>
             </div>
+          </div>
+
+          {/* STOCK COUNT: BATCH ITEMS REVIEW TABLE */}
+          {isStockCount && (
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Count Discrepancies ({batchItems.length} Item{batchItems.length !== 1 ? "s" : ""})
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Review each product variance. You may approve all, reject all, or make individual decisions.
+                  </p>
+                </div>
+
+                {isPending && batchItems.length > 1 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleApproveAll}
+                      className="h-8 text-xs font-bold text-emerald-700 border-emerald-300 hover:bg-emerald-50 gap-1"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" /> Approve All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRejectAll}
+                      className="h-8 text-xs font-bold text-rose-700 border-rose-300 hover:bg-rose-50 gap-1"
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject All
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {loadingBatch ? (
+                <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
+                  <LoadingSpinner size={20} className="mx-auto text-purple-600 mb-2" />
+                  <p className="text-xs font-medium text-slate-500">Loading batch details…</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="divide-y divide-slate-100">
+                    {batchItems.map((it, idx) => {
+                      const diff = Number(it.difference ?? (it.physical_quantity || 0) - (it.system_quantity || 0));
+                      const isPositive = diff > 0;
+                      const decision = itemDecisions[it.id]?.action || "approve";
+                      const rejectionReason = itemDecisions[it.id]?.rejection_reason || "";
+
+                      return (
+                        <div key={it.id || idx} className="p-4 transition-colors hover:bg-slate-50/70 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            {/* Product info */}
+                            <div className="flex-1 min-w-[200px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  #{idx + 1}
+                                </span>
+                                <h4 className="text-sm font-bold text-slate-900 leading-tight">{it.product_name}</h4>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                <span className="font-mono text-slate-400">{it.barcode}</span>
+                                {it.category_name && it.category_name !== "—" && (
+                                  <span>• {it.category_name}</span>
+                                )}
+                                <span>
+                                  • Reason: <strong className="text-slate-700">{it.reason}</strong>
+                                </span>
+                              </div>
+                              {it.remarks && (
+                                <p className="text-xs text-slate-500 italic mt-0.5 bg-slate-50 p-1.5 rounded border border-slate-100 inline-block">
+                                  Note: {it.remarks}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Quantities */}
+                            <div className="flex items-center gap-4 text-center shrink-0 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
+                              <div>
+                                <span className="text-[10px] uppercase font-semibold text-slate-400 block">System</span>
+                                <span className="text-xs font-semibold text-slate-700">
+                                  {it.system_quantity} {it.unit_abbreviation}
+                                </span>
+                              </div>
+                              <span className="text-slate-300 font-bold">→</span>
+                              <div>
+                                <span className="text-[10px] uppercase font-semibold text-slate-400 block">Counted</span>
+                                <span className="text-xs font-bold text-slate-900">
+                                  {it.physical_quantity} {it.unit_abbreviation}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] uppercase font-semibold text-slate-400 block">Diff</span>
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded font-extrabold text-xs ${
+                                    isPositive
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  }`}
+                                >
+                                  {isPositive ? `+${diff}` : String(diff)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Action selector (if pending) */}
+                            {isPending ? (
+                              <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setItemDecisions((prev) => ({
+                                      ...prev,
+                                      [it.id]: { action: "approve", rejection_reason: "" },
+                                    }))
+                                  }
+                                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                                    decision === "approve"
+                                      ? "bg-emerald-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <Check className="h-3 w-3" /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setItemDecisions((prev) => ({
+                                      ...prev,
+                                      [it.id]: {
+                                        action: "reject",
+                                        rejection_reason: prev[it.id]?.rejection_reason || "Rejected by Administrator",
+                                      },
+                                    }))
+                                  }
+                                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                                    decision === "reject"
+                                      ? "bg-rose-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <X className="h-3 w-3" /> Reject
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="shrink-0 text-right">
+                                <StatusBadge status={it.status} />
+                                {it.rejection_reason && (
+                                  <p className="text-[11px] text-rose-600 mt-1 italic">{it.rejection_reason}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Inline rejection reason if marked for reject */}
+                          {isPending && decision === "reject" && (
+                            <div className="pl-6 border-l-2 border-rose-300 pt-1">
+                              <label className="text-[11px] font-bold text-rose-800 mb-1 block">
+                                Rejection Note for {it.product_name}
+                              </label>
+                              <Input
+                                type="text"
+                                placeholder="State reason for rejecting this item…"
+                                value={rejectionReason}
+                                onChange={(e) =>
+                                  setItemDecisions((prev) => ({
+                                    ...prev,
+                                    [it.id]: { ...prev[it.id], rejection_reason: e.target.value },
+                                  }))
+                                }
+                                className="h-8 text-xs border-rose-200 focus:border-rose-400 bg-rose-50/40"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
+          {/* NON-STOCK-COUNT: VOID DETAILS */}
           {req.type === "VOID" && (
-            <div className="p-4 bg-red-50 rounded-lg text-sm border border-red-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-red-700 mb-3">Transaction Details</p>
+            <div className="p-4 bg-red-50 rounded-xl text-sm border border-red-200 shadow-xs">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-800 mb-3">Transaction Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}</span></div>
-                <div><span className="text-gray-500">Amount:</span> <span className="font-bold text-gray-900 ml-1">{fmtPeso(req.amount || 0)}</span></div>
-                <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span></div>
+                <div>
+                  <span className="text-gray-500">Invoice #:</span>
+                  <span className="font-mono font-semibold text-gray-900 ml-1">
+                    {req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Amount:</span>
+                  <span className="font-bold text-gray-900 ml-1">{fmtPeso(req.amount || 0)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Customer:</span>
+                  <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span>
+                </div>
               </div>
             </div>
           )}
 
+          {/* NON-STOCK-COUNT: RETURN DETAILS */}
           {req.type === "RETURN" && (
-            <div className="p-4 bg-green-50 rounded-lg text-sm border border-green-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-700 mb-3">Return Details</p>
+            <div className="p-4 bg-green-50 rounded-xl text-sm border border-green-200 shadow-xs">
+              <p className="text-xs font-bold uppercase tracking-wide text-green-800 mb-3">Return Details</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-gray-500">Return #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.return_number}</span></div>
-                <div><span className="text-gray-500">Invoice #:</span> <span className="font-mono font-semibold text-gray-900 ml-1">{req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}</span></div>
-                <div><span className="text-gray-500">Product:</span> <span className="font-medium text-gray-800 ml-1">{req.product_name}</span></div>
-                <div><span className="text-gray-500">Barcode:</span> <span className="font-mono text-gray-700 ml-1">{req.barcode}</span></div>
-                <div><span className="text-gray-500">Qty Returned:</span> <span className="font-semibold text-gray-900 ml-1">{req.physical_quantity}</span></div>
-                <div><span className="text-gray-500">Unit Price:</span> <span className="font-semibold text-gray-900 ml-1">{fmtPeso(req.unit_price || 0)}</span></div>
-                <div><span className="text-gray-500">Refund Amount:</span> <span className="font-bold text-emerald-700 ml-1">{fmtPeso(req.amount || 0)}</span></div>
-                <div><span className="text-gray-500">Customer:</span> <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span></div>
+                <div>
+                  <span className="text-gray-500">Return #:</span>
+                  <span className="font-mono font-semibold text-gray-900 ml-1">{req.return_number}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Invoice #:</span>
+                  <span className="font-mono font-semibold text-gray-900 ml-1">
+                    {req.invoice_number ? req.invoice_number.replace(/^INV-?/i, "") : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Product:</span>
+                  <span className="font-medium text-gray-800 ml-1">{req.product_name}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Barcode:</span>
+                  <span className="font-mono text-gray-700 ml-1">{req.barcode}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Qty Returned:</span>
+                  <span className="font-semibold text-gray-900 ml-1">{req.physical_quantity}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Unit Price:</span>
+                  <span className="font-semibold text-gray-900 ml-1">{fmtPeso(req.unit_price || 0)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Refund Amount:</span>
+                  <span className="font-bold text-emerald-700 ml-1">{fmtPeso(req.amount || 0)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Customer:</span>
+                  <span className="font-medium text-gray-800 ml-1">{req.customer_name || "N/A"}</span>
+                </div>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2 shrink-0">
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          {isPending && (
+        <div className="px-6 py-4 bg-white border-t border-gray-200 flex items-center justify-between gap-3 shrink-0">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+
+          {isPending && isStockCount && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
+                {approveCount} to Approve, {rejectCount} to Reject
+              </span>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+                onClick={handleSubmitBatchDecisions}
+                disabled={batchActionLoading || loadingBatch}
+              >
+                {batchActionLoading && (
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />
+                )}
+                <CheckCircle2 className="h-4 w-4" />
+                {batchActionLoading ? "Processing…" : `Confirm Decisions (${batchItems.length} Items)`}
+              </Button>
+            </div>
+          )}
+
+          {isPending && !isStockCount && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -618,15 +978,17 @@ function DetailDialog({ req, onClose, onApprove, onApproveReturn, onReject, acti
                 }}
                 disabled={actionLoading}
               >
-                {actionLoading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />}
+                {actionLoading && (
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />
+                )}
                 <CheckCircle2 className="h-4 w-4" />
                 {actionLoading ? "Processing…" : "Approve"}
               </Button>
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -748,6 +1110,16 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
     return matchSearch;
   });
 
+  const batchCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    rows.forEach((r) => {
+      if (r.reference && r.type.startsWith("STOCK_COUNT")) {
+        counts[r.reference] = (counts[r.reference] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [rows]);
+
   const hasFilters = search || filterStatus !== "all";
 
   return (
@@ -849,7 +1221,14 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
                     <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-md">{r.reference}</span>
                   </td>
                   <td className="py-3.5 px-5 font-bold text-slate-900">
-                    {r.product_name || r.invoice_number || r.return_number || "—"}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{r.product_name || r.invoice_number || r.return_number || "—"}</span>
+                      {batchCounts[r.reference] > 1 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                          {batchCounts[r.reference]} items
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3.5 px-5 text-sm text-slate-600 font-medium">{r.requested_by_name}</td>
                   <td className="py-3.5 px-5 text-sm text-slate-500">{fmtDate(r.created_at || r.prepared_at)}</td>
@@ -893,6 +1272,10 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
         onApprove={(type, id) => handleApprove(type, id)}
         onApproveReturn={(id, payload) => { setDetailReq(null); setReturnApprovalTarget(detailReq); }}
         onReject={(type, id) => { setDetailReq(null); setRejectTarget({ type, id }); }}
+        onBatchDecideSuccess={() => {
+          load();
+          window.dispatchEvent(new CustomEvent('refresh-pending-counts'));
+        }}
         actionLoading={actionLoading}
       />
       <RejectDialog

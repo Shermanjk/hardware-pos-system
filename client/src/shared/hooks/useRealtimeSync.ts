@@ -231,6 +231,22 @@ class RealtimeSyncHub {
           const data = JSON.parse(event.data);
           if (data && data.type === "entity_updated") {
             this.notifyListeners(data as EntityUpdateEvent);
+            window.dispatchEvent(new CustomEvent("entity_updated", { detail: data }));
+          } else if (data && data.type === "request_decision") {
+            window.dispatchEvent(new CustomEvent("request_decision", { detail: data }));
+            this.notifyListeners({
+              type: "entity_updated",
+              entity: "requests",
+              action: data.decision,
+              id: data.id,
+              timestamp: new Date().toISOString(),
+            });
+            this.notifyListeners({
+              type: "entity_updated",
+              entity: "inventory",
+              action: "adjusted",
+              timestamp: new Date().toISOString(),
+            });
           } else if (data && data.type === "force_logout") {
             const message = data.message || "Your session has been ended by an administrator.";
             clearToken();

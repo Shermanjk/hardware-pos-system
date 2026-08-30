@@ -21,6 +21,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getInventoryLogs, type InventoryLog } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
 import { getStoreSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import {
     BARCODE_PRINTER_CONFIG,
     createDynamicBarcodeConfig,
@@ -698,6 +699,11 @@ export default function ClerkInventory() {
   const [logOpen, setLogOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
+
+  // Real-time synchronization
+  useRealtimeSync(["inventory", "products", "requests", "dashboard"], () => {
+    setRefreshKey((k) => k + 1);
+  });
 
   // Load real data
   useEffect(() => {

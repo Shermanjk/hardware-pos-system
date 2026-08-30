@@ -71,6 +71,7 @@ export type AuditAction =
   | "MARKET_BASED_ADJUSTMENT_REQUEST_REJECTED"
   // ── Standard Stock Count Adjustment Requests ───────────────────────────────
   | "STOCK_COUNT_ADJUSTMENT_REQUEST_CREATED"
+  | "STOCK_COUNT_BATCH_REQUEST_CREATED"
   | "STOCK_COUNT_ADJUSTMENT_REQUEST_APPROVED"
   | "STOCK_COUNT_ADJUSTMENT_REQUEST_REJECTED"
   // ── System / settings ───────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -567,141 +568,173 @@ export default function DiscountManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Create New Discount</DialogTitle>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Discount Name</Label>
-              <Input
-                value={formData.discount_name}
-                onChange={(e) => setFormData({ ...formData, discount_name: e.target.value })}
-                placeholder="e.g., Contractor 10%, VIP 15%"
-                className="mt-1.5"
-              />
+      {/* Create Sheet */}
+      <Sheet open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Create New Discount</SheetTitle>
+          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-blue-400" />
+              <h3 className="font-bold text-base">Create New Discount</h3>
             </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Discount Type</Label>
-              <div className="mt-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
-                Percentage
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Value (%)</Label>
-              <Input
-                type="number"
-                value={formData.value}
-                onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) })}
-                placeholder={formData.discount_type === "Percentage" ? "10" : "100"}
-                className="mt-1.5"
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <Label className="text-sm font-semibold text-gray-700">Requires Admin Approval</Label>
-              <Switch
-                checked={formData.requires_admin_approval}
-                onCheckedChange={(checked) => setFormData({ ...formData, requires_admin_approval: checked })}
-                className="data-[state=checked]:bg-blue-600"
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <div>
-                <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
-                <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
-              </div>
-              <Switch
-                checked={formData.is_sc_pwd}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
-                className="data-[state=checked]:bg-purple-600"
-              />
-            </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Status</Label>
-              <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="flex-1">Cancel</Button>
-              <Button onClick={handleCreate} className="flex-1">Create</Button>
-            </div>
+            <button
+              onClick={() => setIsCreateDialogOpen(false)}
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogTitle>Edit Discount</DialogTitle>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Discount Name</Label>
-              <Input
-                value={formData.discount_name}
-                onChange={(e) => setFormData({ ...formData, discount_name: e.target.value })}
-                className="mt-1.5"
-              />
-            </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Discount Type</Label>
-              <div className="mt-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
-                Percentage
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Value (%)</Label>
-              <Input
-                type="number"
-                value={formData.value}
-                onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) })}
-                className="mt-1.5"
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <Label className="text-sm font-semibold text-gray-700">Requires Admin Approval</Label>
-              <Switch
-                checked={formData.requires_admin_approval}
-                onCheckedChange={(checked) => setFormData({ ...formData, requires_admin_approval: checked })}
-                className="data-[state=checked]:bg-blue-600"
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+            <div className="space-y-4">
               <div>
-                <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
-                <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
+                <Label className="text-sm font-semibold text-gray-700">Discount Name</Label>
+                <Input
+                  value={formData.discount_name}
+                  onChange={(e) => setFormData({ ...formData, discount_name: e.target.value })}
+                  placeholder="e.g., Contractor 10%, VIP 15%"
+                  className="mt-1.5"
+                />
               </div>
-              <Switch
-                checked={formData.is_sc_pwd}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
-                className="data-[state=checked]:bg-purple-600"
-              />
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Discount Type</Label>
+                <div className="mt-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                  Percentage
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Value (%)</Label>
+                <Input
+                  type="number"
+                  value={formData.value}
+                  onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) })}
+                  placeholder={formData.discount_type === "Percentage" ? "10" : "100"}
+                  className="mt-1.5"
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <Label className="text-sm font-semibold text-gray-700">Requires Admin Approval</Label>
+                <Switch
+                  checked={formData.requires_admin_approval}
+                  onCheckedChange={(checked) => setFormData({ ...formData, requires_admin_approval: checked })}
+                  className="data-[state=checked]:bg-blue-600"
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div>
+                  <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
+                  <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
+                </div>
+                <Switch
+                  checked={formData.is_sc_pwd}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
+                  className="data-[state=checked]:bg-purple-600"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Status</Label>
+                <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Status</Label>
-              <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
-                <SelectTrigger className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="flex-1">Cancel</Button>
-              <Button onClick={handleUpdate} className="flex-1">Update</Button>
+
+            <div className="flex gap-2 pt-4 border-t border-gray-100 shrink-0">
+              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="flex-1">Cancel</Button>
+              <Button onClick={handleCreate} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Create</Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Sheet */}
+      <Sheet open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Edit Discount</SheetTitle>
+          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-400" />
+              <h3 className="font-bold text-base">Edit Discount</h3>
+            </div>
+            <button
+              onClick={() => setIsEditDialogOpen(false)}
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Discount Name</Label>
+                <Input
+                  value={formData.discount_name}
+                  onChange={(e) => setFormData({ ...formData, discount_name: e.target.value })}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Discount Type</Label>
+                <div className="mt-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                  Percentage
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Value (%)</Label>
+                <Input
+                  type="number"
+                  value={formData.value}
+                  onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) })}
+                  className="mt-1.5"
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <Label className="text-sm font-semibold text-gray-700">Requires Admin Approval</Label>
+                <Switch
+                  checked={formData.requires_admin_approval}
+                  onCheckedChange={(checked) => setFormData({ ...formData, requires_admin_approval: checked })}
+                  className="data-[state=checked]:bg-blue-600"
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div>
+                  <Label className="text-sm font-semibold text-gray-700">SC/PWD Discount</Label>
+                  <p className="text-xs text-gray-500 mt-0.5">Applies on VAT-exclusive base (RA 9994/9442)</p>
+                </div>
+                <Switch
+                  checked={formData.is_sc_pwd}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_sc_pwd: checked })}
+                  className="data-[state=checked]:bg-purple-600"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Status</Label>
+                <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t border-gray-100 shrink-0">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="flex-1">Cancel</Button>
+              <Button onClick={handleUpdate} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Update</Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

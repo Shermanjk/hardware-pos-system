@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { submitCommodityPurchase, authorizeCommodityPurchase, type RecordPurchasePayload } from "@/shared/api/commodityApi";
 import { createAdjustmentRequest, authorizeAdjustmentRequest, type CreateAdjustmentRequestPayload } from "@/shared/api/inventoryApi";
+import { createStockCountRequest, authorizeStockCountRequest, getRequestHistory, type CreateStockCountPayload } from "@/shared/api/requestsApi";
 import {
     AlertTriangle,
     CheckCircle,
@@ -19,14 +20,15 @@ import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type RequestType = "commodity_purchase" | "market_adjustment";
+type RequestType = "commodity_purchase" | "market_adjustment" | "stock_count_standard";
 type ApprovalMethod = "remote" | "local";
 type ModalStatus = "idle" | "pending" | "approved";
 
 // The payload needed to create the request — only sent when a method is chosen
 type RequestPayload =
   | { type: "commodity_purchase"; payload: RecordPurchasePayload }
-  | { type: "market_adjustment"; payload: CreateAdjustmentRequestPayload };
+  | { type: "market_adjustment"; payload: CreateAdjustmentRequestPayload }
+  | { type: "stock_count_standard"; payload: CreateStockCountPayload };
 
 interface ClerkAuthModalProps {
   open: boolean;
@@ -99,6 +101,78 @@ export default function ClerkAuthModal({
     }
   }, [open, existingRequestId]);
 
+  // ── Realtime listener & polling fallback for remote admin approval ──────────
+  useEffect(() => {
+    if (!open || status !== "pending" || !requestId) return;
+
+    let isResolved = false;
+
+    const handleSuccess = (approver: string) => {
+      if (isResolved || !mountedRef.current) return;
+      isResolved = true;
+      setAdminName(approver);
+      setStatus("approved");
+      toast.success(`Request approved by ${approver}!`, { duration: 4000 });
+
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        onApproved(approver);
+        onClose();
+      }, 1200);
+    };
+
+    const handleRejection = (reason?: string | null) => {
+      if (isResolved || !mountedRef.current) return;
+      isResolved = true;
+      const msg = reason ? `Request rejected: ${reason}` : "Request was rejected by Administrator.";
+      toast.error(msg, { duration: 5000 });
+      setStatus("idle");
+      setMethod(null);
+      onClose();
+    };
+
+    // 1. WebSocket Event Listener (Instant sub-100ms update)
+    const handleWsDecision = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      const data = customEvent.detail;
+      if (!data) return;
+
+      if (Number(data.id) === Number(requestId)) {
+        if (data.decision === "approved") {
+          handleSuccess(data.admin_name || "Admin");
+        } else if (data.decision === "rejected") {
+          handleRejection(data.rejection_reason);
+        }
+      }
+    };
+
+    window.addEventListener("request_decision", handleWsDecision);
+
+    // 2. Fast Polling Fallback (every 2.5 seconds)
+    const pollTimer = setInterval(async () => {
+      if (isResolved || !mountedRef.current) return;
+      try {
+        const history = await getRequestHistory({ limit: 20 });
+        const match = history.find((h) => Number(h.id) === Number(requestId));
+        if (match) {
+          const st = (match.status || "").toUpperCase();
+          if (st === "APPROVED" || st === "COMPLETED") {
+            handleSuccess(match.approved_by_name || "Admin");
+          } else if (st === "REJECTED") {
+            handleRejection(match.rejection_reason);
+          }
+        }
+      } catch {
+        // Silent fallback
+      }
+    }, 2500);
+
+    return () => {
+      window.removeEventListener("request_decision", handleWsDecision);
+      clearInterval(pollTimer);
+    };
+  }, [open, status, requestId, onApproved, onClose]);
+
   // ── Create request helper ─────────────────────────────────────────────────
   async function ensureRequestCreated(): Promise<number | null> {
     if (requestId) return requestId;
@@ -106,6 +180,14 @@ export default function ClerkAuthModal({
 
     if (createPayload.type === "commodity_purchase") {
       const result = await submitCommodityPurchase(createPayload.payload);
+      const id = result.id;
+      if (mountedRef.current) {
+        setRequestId(id);
+        onRequestCreated?.(id);
+      }
+      return id;
+    } else if (createPayload.type === "stock_count_standard") {
+      const result = await createStockCountRequest(createPayload.payload);
       const id = result.id;
       if (mountedRef.current) {
         setRequestId(id);
@@ -168,6 +250,13 @@ export default function ClerkAuthModal({
             setRequestId(result.id);
             onRequestCreated?.(result.id);
           }
+        } else if (createPayload.type === "stock_count_standard") {
+          const result = await authorizeStockCountRequest(createPayload.payload, credentials);
+          approvedBy = result.admin_name;
+          if (mountedRef.current) {
+            setRequestId(result.id);
+            onRequestCreated?.(result.id);
+          }
         } else {
           const result = await authorizeAdjustmentRequest(createPayload.payload, credentials);
           approvedBy = result.admin_name;
@@ -182,6 +271,10 @@ export default function ClerkAuthModal({
         if (requestType === "commodity_purchase") {
           const { localOverrideCommodityPurchase } = await import("@/shared/api/commodityApi");
           const result = await localOverrideCommodityPurchase(existingRequestId, credentials);
+          approvedBy = result.admin_name;
+        } else if (requestType === "stock_count_standard") {
+          const { localOverrideStockCountRequest } = await import("@/shared/api/requestsApi");
+          const result = await localOverrideStockCountRequest(existingRequestId, credentials);
           approvedBy = result.admin_name;
         } else {
           const { localOverrideAdjustmentRequest } = await import("@/shared/api/inventoryApi");

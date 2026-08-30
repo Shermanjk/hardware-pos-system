@@ -278,9 +278,9 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
           }}
         />
       )}
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">{mode === "add" ? "Add New Product" : "Edit Product"}</DialogTitle>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">{mode === "add" ? "Add New Product" : "Edit Product"}</SheetTitle>
 
         {/* Colored header */}
         <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${mode === "add" ? "bg-blue-400" : "bg-gray-500"}`}>
@@ -464,16 +464,6 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                   {isStore ? "A unique store barcode will be auto-generated." : "Scan with a USB barcode scanner or type manually."}
                 </p>
               </div>
-
-              {/* Row 3 — Supplier Barcode (half width) */}
-              {form.pricing_type !== "MARKET_BASED" && (
-                <div className="max-w-sm">
-                  <Label className="mb-1.5 block text-xs font-semibold text-gray-600 uppercase tracking-wide">Supplier Barcode <span className="text-gray-400 font-normal">(optional)</span></Label>
-                  <Input value={form.supplier_barcode} onChange={(e) => set("supplier_barcode", e.target.value)}
-                    placeholder="Supplier's own barcode, if different" disabled={isLoading}
-                    className="border-gray-300" />
-                </div>
-              )}
             </div>
           </div>
 
@@ -646,8 +636,8 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
           </Button>
         </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
     </>
   );
 }
@@ -763,12 +753,6 @@ function ViewProductModal({ product, onClose, onEdit }: ViewProductModalProps) {
             </span>
           </div>
 
-          {product.supplier_barcode && (
-            <div className="text-sm">
-              <span className="text-xs text-gray-500">Supplier Barcode:</span>{" "}
-              <span className="font-mono font-medium text-gray-800">{product.supplier_barcode}</span>
-            </div>
-          )}
           {product.description && (
             <div className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-sm">
               <p className="text-xs text-gray-500 font-medium mb-1">Description</p>

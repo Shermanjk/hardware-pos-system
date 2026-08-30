@@ -4,6 +4,7 @@ import { z } from "zod";
 import { pool } from "../db.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { broadcastEntityUpdate, broadcastRequestDecision } from "../ws.js";
 
 const router = Router();
 router.use(authenticate);
@@ -401,6 +402,20 @@ router.post("/requests/:id/approve", async (req: Request, res: Response) => {
       },
     });
 
+    broadcastRequestDecision({
+      type: "request_decision",
+      request_type: "market_adjustment",
+      id,
+      reference: request.reference,
+      decision: "approved",
+      admin_name: req.user?.full_name || req.user?.username || "Admin",
+    });
+
+    broadcastEntityUpdate({ entity: "requests", action: "approved", id });
+    broadcastEntityUpdate({ entity: "inventory", action: "adjusted" });
+    broadcastEntityUpdate({ entity: "products", id: request.product_id });
+    broadcastEntityUpdate({ entity: "dashboard" });
+
     res.status(200).json({
       message: "Adjustment approved and inventory updated",
       new_quantity: newQuantity,
@@ -476,6 +491,20 @@ router.post("/requests/:id/reject", async (req: Request, res: Response) => {
       },
     });
 
+    broadcastRequestDecision({
+      type: "request_decision",
+      request_type: "market_adjustment",
+      id,
+      reference: request.reference,
+      decision: "rejected",
+      admin_name: req.user?.full_name || req.user?.username || "Admin",
+      rejection_reason,
+    });
+
+    broadcastEntityUpdate({ entity: "requests", action: "rejected", id });
+    broadcastEntityUpdate({ entity: "inventory" });
+    broadcastEntityUpdate({ entity: "dashboard" });
+
     res.status(200).json({
       message: "Adjustment request rejected",
       reference: request.reference
@@ -491,7 +520,7 @@ router.post("/requests/:id/reject", async (req: Request, res: Response) => {
 
 // ─── GET /api/market-based-adjustments/history ───────────────────────────────
 router.get("/history", async (req: Request, res: Response) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireAdminOrClerk(req, res)) return;
 
   const { product_id, prepared_by, status, reason, date_from, date_to, limit, offset } = req.query;
 

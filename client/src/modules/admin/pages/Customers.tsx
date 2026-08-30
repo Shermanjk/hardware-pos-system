@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   createCustomer,
   getCustomers,
@@ -308,20 +308,20 @@ export default function CustomersPage() {
       toast.success(`Payment of ${fmt(payAmount)} recorded.`);
 
       if (paymentForm.autoPrintReceipt && storeSettings) {
-        printCreditPaymentReceipt(
-          {
-            reference: res.reference,
-            created_at: new Date().toISOString(),
-            customer_name: res.customer_name,
-            customer_code: paymentCustomer.customer_code,
-            amount_paid: payAmount,
-            previous_balance: paymentCustomer.current_balance,
-            new_balance: res.new_balance,
+        try {
+          printCreditPaymentReceipt({
+            receiptNumber: res.reference,
+            customerName: res.customer_name || paymentCustomer.full_name,
+            customerCode: paymentCustomer.customer_code,
+            amountPaidCents: Math.round(payAmount * 100),
+            newBalanceCents: Math.round(res.new_balance * 100),
+            cashierName: user?.full_name || user?.username || "Admin",
             notes: paymentForm.notes.trim() || undefined,
-            cashier_name: user?.full_name || "Admin",
-          },
-          storeSettings
-        );
+            settings: storeSettings,
+          });
+        } catch (printErr) {
+          console.error("Print receipt error:", printErr);
+        }
       }
 
       setPaymentCustomer(null);
@@ -692,11 +692,11 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* ── Modal: Add Customer ───────────────────────────────────────────────── */}
-      <Dialog open={showAddModal} onOpenChange={(o) => { if (!o && !isSubmitting) setShowAddModal(false); }}>
-        <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl" showCloseButton={false}>
-          <DialogTitle className="sr-only">Register New Customer</DialogTitle>
-          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+      {/* ── Sheet: Add Customer ───────────────────────────────────────────────── */}
+      <Sheet open={showAddModal} onOpenChange={(o) => { if (!o && !isSubmitting) setShowAddModal(false); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Register New Customer</SheetTitle>
+          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-blue-400" />
               <h3 className="font-bold text-base">Register New Customer</h3>
@@ -710,97 +710,99 @@ export default function CustomersPage() {
             </button>
           </div>
 
-          <form onSubmit={handleCreateCustomer} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Full Name / Company Name <span className="text-rose-500">*</span>
-              </label>
-              <Input
-                required
-                placeholder="e.g. Juan dela Cruz / ABC Construction"
-                value={addForm.full_name}
-                onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <form onSubmit={handleCreateCustomer} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+            <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Number</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name / Company Name <span className="text-rose-500">*</span>
+                </label>
                 <Input
-                  placeholder="0917-XXX-XXXX"
-                  value={addForm.contact_number}
-                  onChange={(e) => setAddForm({ ...addForm, contact_number: e.target.value })}
+                  required
+                  placeholder="e.g. Juan dela Cruz / ABC Construction"
+                  value={addForm.full_name}
+                  onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
                   className="h-10 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">TIN (Optional)</label>
-                <Input
-                  placeholder="000-000-000-000"
-                  value={addForm.tin}
-                  onChange={(e) => setAddForm({ ...addForm, tin: e.target.value })}
-                  className="h-10 text-sm"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
-              <Input
-                placeholder="Barangay, City, Province"
-                value={addForm.address}
-                onChange={(e) => setAddForm({ ...addForm, address: e.target.value })}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Business Style (Optional)</label>
-              <Input
-                placeholder="e.g. Retailer / Contractor"
-                value={addForm.business_style}
-                onChange={(e) => setAddForm({ ...addForm, business_style: e.target.value })}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            {/* Credit Settings */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <div className="font-semibold text-xs text-slate-900">Enable Credit Privileges</div>
-                  <div className="text-[11px] text-slate-500">Allow this customer to purchase materials on utang</div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Number</label>
+                  <Input
+                    placeholder="0917-XXX-XXXX"
+                    value={addForm.contact_number}
+                    onChange={(e) => setAddForm({ ...addForm, contact_number: e.target.value })}
+                    className="h-10 text-sm"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={addForm.is_credit_enabled}
-                  onChange={(e) => setAddForm({ ...addForm, is_credit_enabled: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">TIN (Optional)</label>
+                  <Input
+                    placeholder="000-000-000-000"
+                    value={addForm.tin}
+                    onChange={(e) => setAddForm({ ...addForm, tin: e.target.value })}
+                    className="h-10 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
+                <Input
+                  placeholder="Barangay, City, Province"
+                  value={addForm.address}
+                  onChange={(e) => setAddForm({ ...addForm, address: e.target.value })}
+                  className="h-10 text-sm"
                 />
               </div>
 
-              {addForm.is_credit_enabled && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Credit Limit (₱)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₱</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="100"
-                      placeholder="0.00 (0 for unlimited)"
-                      value={addForm.credit_limit}
-                      onChange={(e) => setAddForm({ ...addForm, credit_limit: e.target.value })}
-                      className="pl-8 h-10 text-sm"
-                    />
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Business Style (Optional)</label>
+                <Input
+                  placeholder="e.g. Retailer / Contractor"
+                  value={addForm.business_style}
+                  onChange={(e) => setAddForm({ ...addForm, business_style: e.target.value })}
+                  className="h-10 text-sm"
+                />
+              </div>
+
+              {/* Credit Settings */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-xs text-slate-900">Enable Credit Privileges</div>
+                    <div className="text-[11px] text-slate-500">Allow this customer to purchase materials on utang</div>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">Set maximum allowed outstanding balance before manager override</p>
+                  <input
+                    type="checkbox"
+                    checked={addForm.is_credit_enabled}
+                    onChange={(e) => setAddForm({ ...addForm, is_credit_enabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
                 </div>
-              )}
+
+                {addForm.is_credit_enabled && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Credit Limit (₱)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₱</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="100"
+                        placeholder="0.00 (0 for unlimited)"
+                        value={addForm.credit_limit}
+                        onChange={(e) => setAddForm({ ...addForm, credit_limit: e.target.value })}
+                        className="pl-8 h-10 text-sm"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">Set maximum allowed outstanding balance before manager override</p>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 shrink-0">
               <Button type="button" variant="outline" onClick={() => setShowAddModal(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
@@ -810,14 +812,14 @@ export default function CustomersPage() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── Modal: Edit Customer ──────────────────────────────────────────────── */}
-      <Dialog open={!!editCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setEditCustomer(null); }}>
-        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl" showCloseButton={false}>
-          <DialogTitle className="sr-only">Edit Customer Information</DialogTitle>
-          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+      {/* ── Sheet: Edit Customer ──────────────────────────────────────────────── */}
+      <Sheet open={!!editCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setEditCustomer(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Edit Customer Information</SheetTitle>
+          <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2">
               <Edit2 className="h-5 w-5 text-blue-400" />
               <h3 className="font-bold text-base">Edit Customer Profile</h3>
@@ -831,70 +833,72 @@ export default function CustomersPage() {
             </button>
           </div>
 
-          <form onSubmit={handleUpdateCustomer} className="p-6 space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Full Name <span className="text-rose-500">*</span>
-              </label>
-              <Input
-                required
-                value={editForm.full_name}
-                onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleUpdateCustomer} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+            <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Number</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
                 <Input
-                  value={editForm.contact_number}
-                  onChange={(e) => setEditForm({ ...editForm, contact_number: e.target.value })}
+                  required
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                   className="h-10 text-sm"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Number</label>
+                  <Input
+                    value={editForm.contact_number}
+                    onChange={(e) => setEditForm({ ...editForm, contact_number: e.target.value })}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">TIN</label>
+                  <Input
+                    value={editForm.tin}
+                    onChange={(e) => setEditForm({ ...editForm, tin: e.target.value })}
+                    className="h-10 text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">TIN</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
                 <Input
-                  value={editForm.tin}
-                  onChange={(e) => setEditForm({ ...editForm, tin: e.target.value })}
+                  value={editForm.address}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                   className="h-10 text-sm"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
-              <Input
-                value={editForm.address}
-                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Business Style</label>
-                <Input
-                  value={editForm.business_style}
-                  onChange={(e) => setEditForm({ ...editForm, business_style: e.target.value })}
-                  className="h-10 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Account Status</label>
-                <select
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as "Active" | "Inactive" })}
-                  className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Business Style</label>
+                  <Input
+                    value={editForm.business_style}
+                    onChange={(e) => setEditForm({ ...editForm, business_style: e.target.value })}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Account Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as "Active" | "Inactive" })}
+                    className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 shrink-0">
               <Button type="button" variant="outline" onClick={() => setEditCustomer(null)} disabled={isSubmitting}>
                 Cancel
               </Button>
@@ -904,16 +908,16 @@ export default function CustomersPage() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── Modal: Credit Settings ────────────────────────────────────────────── */}
-      <Dialog open={!!creditSettingsCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setCreditSettingsCustomer(null); }}>
-        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl" showCloseButton={false}>
-          <DialogTitle className="sr-only">Configure Credit Settings</DialogTitle>
+      {/* ── Sheet: Credit Settings ────────────────────────────────────────────── */}
+      <Sheet open={!!creditSettingsCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setCreditSettingsCustomer(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Configure Credit Settings</SheetTitle>
           {creditSettingsCustomer && (
             <>
-              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                   <Sliders className="h-5 w-5 text-blue-400" />
                   <h3 className="font-bold text-base">Credit Permissions</h3>
@@ -927,47 +931,49 @@ export default function CustomersPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveCreditSettings} className="p-6 space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-                  <div className="font-bold text-slate-900">{creditSettingsCustomer.full_name}</div>
-                  <div className="text-slate-500">Customer Code: {creditSettingsCustomer.customer_code}</div>
-                  <div className="text-slate-500">Current Balance: <strong className="text-rose-600">{fmt(creditSettingsCustomer.current_balance)}</strong></div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white">
-                  <div>
-                    <div className="font-semibold text-xs text-slate-900">Enable Credit (Utang)</div>
-                    <div className="text-[11px] text-slate-500">Allow this customer to purchase on credit</div>
+              <form onSubmit={handleSaveCreditSettings} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+                    <div className="font-bold text-slate-900">{creditSettingsCustomer.full_name}</div>
+                    <div className="text-slate-500">Customer Code: {creditSettingsCustomer.customer_code}</div>
+                    <div className="text-slate-500">Current Balance: <strong className="text-rose-600">{fmt(creditSettingsCustomer.current_balance)}</strong></div>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={creditForm.is_credit_enabled}
-                    onChange={(e) => setCreditForm({ ...creditForm, is_credit_enabled: e.target.checked })}
-                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Credit Limit (₱)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₱</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="100"
-                      placeholder="0.00 (0 for no limit)"
-                      value={creditForm.credit_limit}
-                      onChange={(e) => setCreditForm({ ...creditForm, credit_limit: e.target.value })}
-                      disabled={!creditForm.is_credit_enabled}
-                      className="pl-8 h-10 text-sm"
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white">
+                    <div>
+                      <div className="font-semibold text-xs text-slate-900">Enable Credit (Utang)</div>
+                      <div className="text-[11px] text-slate-500">Allow this customer to purchase on credit</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={creditForm.is_credit_enabled}
+                      onChange={(e) => setCreditForm({ ...creditForm, is_credit_enabled: e.target.checked })}
+                      className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    If customer's balance reaches this limit, cashier will require real-time admin override.
-                  </p>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Credit Limit (₱)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₱</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="100"
+                        placeholder="0.00 (0 for no limit)"
+                        value={creditForm.credit_limit}
+                        onChange={(e) => setCreditForm({ ...creditForm, credit_limit: e.target.value })}
+                        disabled={!creditForm.is_credit_enabled}
+                        className="pl-8 h-10 text-sm"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      If customer's balance reaches this limit, cashier will require real-time admin override.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 shrink-0">
                   <Button type="button" variant="outline" onClick={() => setCreditSettingsCustomer(null)} disabled={isSubmitting}>
                     Cancel
                   </Button>
@@ -983,16 +989,16 @@ export default function CustomersPage() {
               </form>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── Modal: Receive Payment ────────────────────────────────────────────── */}
-      <Dialog open={!!paymentCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setPaymentCustomer(null); }}>
-        <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl" showCloseButton={false}>
-          <DialogTitle className="sr-only">Receive Credit Payment</DialogTitle>
+      {/* ── Sheet: Receive Payment ────────────────────────────────────────────── */}
+      <Sheet open={!!paymentCustomer} onOpenChange={(o) => { if (!o && !isSubmitting) setPaymentCustomer(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Receive Credit Payment</SheetTitle>
           {paymentCustomer && (
             <>
-              <div className="px-6 py-4 bg-emerald-600 text-white flex justify-between items-center">
+              <div className="px-6 py-4 bg-emerald-600 text-white flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                   <PesoSign className="text-xl" />
                   <h3 className="font-bold text-base">Receive Credit Payment</h3>
@@ -1006,81 +1012,83 @@ export default function CustomersPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleRecordPayment} className="p-6 space-y-4">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs space-y-1.5">
-                  <div className="font-bold text-sm text-slate-900">{paymentCustomer.full_name}</div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Customer Code</span>
-                    <span className="font-mono font-medium">{paymentCustomer.customer_code}</span>
+              <form onSubmit={handleRecordPayment} className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs space-y-1.5">
+                    <div className="font-bold text-sm text-slate-900">{paymentCustomer.full_name}</div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Customer Code</span>
+                      <span className="font-mono font-medium">{paymentCustomer.customer_code}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-sm text-emerald-950 pt-1 border-t border-emerald-200">
+                      <span>Total Outstanding Balance</span>
+                      <span className="text-rose-700">{fmt(paymentCustomer.current_balance)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between font-bold text-sm text-emerald-950 pt-1 border-t border-emerald-200">
-                    <span>Total Outstanding Balance</span>
-                    <span className="text-rose-700">{fmt(paymentCustomer.current_balance)}</span>
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs font-semibold text-slate-700">Amount to Pay (₱)</label>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentForm({ ...paymentForm, amount: String(paymentCustomer.current_balance) })}
-                      className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800"
-                    >
-                      Pay Full Balance
-                    </button>
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-semibold text-slate-700">Amount to Pay (₱)</label>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentForm({ ...paymentForm, amount: String(paymentCustomer.current_balance) })}
+                        className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800"
+                      >
+                        Pay Full Balance
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-500">₱</span>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        max={paymentCustomer.current_balance}
+                        step="0.01"
+                        required
+                        placeholder="0.00"
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                        className="pl-8 h-12 text-lg font-bold text-slate-900"
+                        autoFocus
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-500">₱</span>
+
+                  {Number(paymentForm.amount) > 0 && (
+                    <div className="text-xs flex justify-between px-1 text-slate-600">
+                      <span>Remaining Balance After Payment:</span>
+                      <span className="font-bold text-slate-900">
+                        {fmt(Math.max(0, paymentCustomer.current_balance - Number(paymentForm.amount)))}
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Notes / Check No. / Ref (optional)</label>
                     <Input
-                      type="number"
-                      min="0.01"
-                      max={paymentCustomer.current_balance}
-                      step="0.01"
-                      required
-                      placeholder="0.00"
-                      value={paymentForm.amount}
-                      onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                      className="pl-8 h-12 text-lg font-bold text-slate-900"
-                      autoFocus
+                      placeholder="e.g. Check #12345 / Cash payment"
+                      value={paymentForm.notes}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                      className="h-10 text-sm"
                     />
                   </div>
-                </div>
 
-                {Number(paymentForm.amount) > 0 && (
-                  <div className="text-xs flex justify-between px-1 text-slate-600">
-                    <span>Remaining Balance After Payment:</span>
-                    <span className="font-bold text-slate-900">
-                      {fmt(Math.max(0, paymentCustomer.current_balance - Number(paymentForm.amount)))}
-                    </span>
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="print-receipt-chk"
+                      checked={paymentForm.autoPrintReceipt}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, autoPrintReceipt: e.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <label htmlFor="print-receipt-chk" className="text-xs text-slate-700 font-medium flex items-center gap-1 cursor-pointer">
+                      <Printer className="h-3.5 w-3.5 text-slate-500" />
+                      Print Collection Receipt upon confirmation
+                    </label>
                   </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notes / Check No. / Ref (optional)</label>
-                  <Input
-                    placeholder="e.g. Check #12345 / Cash payment"
-                    value={paymentForm.notes}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                    className="h-10 text-sm"
-                  />
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="print-receipt-chk"
-                    checked={paymentForm.autoPrintReceipt}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, autoPrintReceipt: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <label htmlFor="print-receipt-chk" className="text-xs text-slate-700 font-medium flex items-center gap-1 cursor-pointer">
-                    <Printer className="h-3.5 w-3.5 text-slate-500" />
-                    Print Collection Receipt upon confirmation
-                  </label>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 shrink-0">
                   <Button type="button" variant="outline" onClick={() => setPaymentCustomer(null)} disabled={isSubmitting}>
                     Cancel
                   </Button>
@@ -1096,16 +1104,16 @@ export default function CustomersPage() {
               </form>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* ── Modal: View Customer Store Credits ────────────────────────────────── */}
-      <Dialog open={!!storeCreditCustomer} onOpenChange={(o) => { if (!o) setStoreCreditCustomer(null); }}>
-        <DialogContent className="max-w-lg p-0 flex flex-col gap-0 overflow-hidden border-0 shadow-2xl rounded-2xl" showCloseButton={false}>
-          <DialogTitle className="sr-only">Customer Store Credit Details</DialogTitle>
+      {/* ── Sheet: View Customer Store Credits ────────────────────────────────── */}
+      <Sheet open={!!storeCreditCustomer} onOpenChange={(o) => { if (!o) setStoreCreditCustomer(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+          <SheetTitle className="sr-only">Customer Store Credit Details</SheetTitle>
           {storeCreditCustomer && (
             <>
-              <div className="px-6 py-4 bg-emerald-700 text-white flex justify-between items-center">
+              <div className="px-6 py-4 bg-emerald-700 text-white flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                   <Wallet className="h-5 w-5 text-emerald-200" />
                   <div>
@@ -1121,54 +1129,55 @@ export default function CustomersPage() {
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-emerald-900 uppercase">Available Store Credit</span>
-                    <p className="text-2xl font-bold text-emerald-700 mt-0.5">{fmt(storeCreditCustomer.store_credit_balance ?? 0)}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[11px] text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full font-semibold">
-                      {storeCreditRecords.filter(r => r.status === "active").length} Active Voucher(s)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Store Credit Ledger / History</h4>
-
-                  {loadingStoreCredits ? (
-                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-500">
-                      <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-                      <p className="text-xs">Loading store credit records…</p>
+              <div className="p-6 space-y-4 overflow-y-auto flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-emerald-900 uppercase">Available Store Credit</span>
+                      <p className="text-2xl font-bold text-emerald-700 mt-0.5">{fmt(storeCreditCustomer.store_credit_balance ?? 0)}</p>
                     </div>
-                  ) : storeCreditRecords.length === 0 ? (
-                    <div className="py-8 text-center bg-slate-50 rounded-xl border border-slate-200">
-                      <RotateCcw className="h-8 w-8 text-slate-300 mx-auto mb-1.5" />
-                      <p className="text-xs font-bold text-slate-700">No store credits on record</p>
-                      <p className="text-[11px] text-slate-400">Store credits are issued when a customer returns an item and chooses Store Credit resolution.</p>
+                    <div className="text-right">
+                      <span className="text-[11px] text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full font-semibold">
+                        {storeCreditRecords.filter(r => r.status === "active").length} Active Voucher(s)
+                      </span>
                     </div>
-                  ) : (
-                    <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
-                      {storeCreditRecords.map((r) => (
-                        <div key={r.id} className="p-3.5 bg-white hover:bg-slate-50 flex items-center justify-between text-xs">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-slate-900">{r.return_number || `Credit #${r.id}`}</span>
-                              {r.invoice_number && (
-                                <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                  Inv: {r.invoice_number}
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Store Credit Ledger / History</h4>
+
+                    {loadingStoreCredits ? (
+                      <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-500">
+                        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+                        <p className="text-xs">Loading store credit records…</p>
+                      </div>
+                    ) : storeCreditRecords.length === 0 ? (
+                      <div className="py-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+                        <RotateCcw className="h-8 w-8 text-slate-300 mx-auto mb-1.5" />
+                        <p className="text-xs font-bold text-slate-700">No store credits on record</p>
+                        <p className="text-[11px] text-slate-400">Store credits are issued when a customer returns an item and chooses Store Credit resolution.</p>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                        {storeCreditRecords.map((r) => (
+                          <div key={r.id} className="p-3.5 bg-white hover:bg-slate-50 flex items-center justify-between text-xs">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900">{r.return_number || `Credit #${r.id}`}</span>
+                                {r.invoice_number && (
+                                  <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    Inv: {r.invoice_number}
+                                  </span>
+                                )}
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  r.status === "active"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : r.status === "fully_used"
+                                    ? "bg-slate-100 text-slate-600"
+                                    : "bg-rose-100 text-rose-800"
+                                }`}>
+                                  {r.status.toUpperCase()}
                                 </span>
-                              )}
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                r.status === "active"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : r.status === "fully_used"
-                                  ? "bg-slate-100 text-slate-600"
-                                  : "bg-rose-100 text-rose-800"
-                              }`}>
-                                {r.status.toUpperCase()}
-                              </span>
                             </div>
                             <div className="flex items-center gap-2 text-slate-400 text-[11px]">
                               <Clock className="h-3 w-3" />
@@ -1196,17 +1205,18 @@ export default function CustomersPage() {
                     When a cashier creates a new sale and selects this customer, the cashier can apply this available store credit to pay for the purchase.
                   </span>
                 </div>
-
-                <div className="flex justify-end pt-1">
-                  <Button variant="outline" onClick={() => setStoreCreditCustomer(null)}>
-                    Close
-                  </Button>
-                </div>
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+
+              <div className="flex justify-end pt-4 border-t border-gray-100 shrink-0">
+                <Button variant="outline" onClick={() => setStoreCreditCustomer(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
     </div>
   );
 }

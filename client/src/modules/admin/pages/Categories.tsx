@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -75,11 +76,11 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
   const isAdd = mode === "add";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">{isAdd ? "Add New Category" : "Edit Category"}</DialogTitle>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">{isAdd ? "Add New Category" : "Edit Category"}</SheetTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <FolderOpen className="h-5 w-5 text-white" />
           </div>
@@ -91,8 +92,8 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
             {error && (
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -126,7 +127,7 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
             </div>
           </div>
 
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
@@ -134,8 +135,8 @@ function CategoryFormModal({ mode, open, initial, onClose, onSaved }: CategoryFo
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -202,11 +203,11 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
   const isAdd = mode === "add";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0 flex flex-col gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">{isAdd ? "Add New Unit" : "Edit Unit"}</DialogTitle>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-[90vw] sm:max-w-xl p-0 flex flex-col gap-0 overflow-hidden border-l border-gray-200 [&>button]:text-white">
+        <SheetTitle className="sr-only">{isAdd ? "Add New Unit" : "Edit Unit"}</SheetTitle>
         {/* Colored header */}
-        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
+        <div className={`flex items-center gap-3 px-6 py-4 rounded-t-lg shrink-0 ${isAdd ? "bg-blue-400" : "bg-gray-500"}`}>
           <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
             <Ruler className="h-5 w-5 text-white" />
           </div>
@@ -218,8 +219,8 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
             {error && (
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -344,7 +345,7 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
             </div>
           </div>
 
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 shrink-0">
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading && <LoadingSpinner size={16} className="mr-2 text-white" />}
@@ -352,8 +353,8 @@ function UnitFormModal({ mode, open, initial, onClose, onSaved }: UnitFormModalP
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
