@@ -553,12 +553,24 @@ router.get(
       const openedAt = new Date(session.opened_at);
       const closedAt = session.closed_at ? new Date(session.closed_at) : new Date();
 
-      // Query sales for this session
+      // Query all issued invoices in this session for sequence continuity
+      const [allShiftInvoicesRows] = await pool.execute<any[]>(
+        `SELECT
+           MIN(invoice_number) AS beg_invoice_no,
+           MAX(invoice_number) AS end_invoice_no
+         FROM sales
+         WHERE cashier_id = ?
+           AND created_at >= ?
+           AND created_at <= ?
+           AND payment_status = 'completed'`,
+        [session.cashier_id, openedAt, closedAt]
+      );
+      const allShiftInvoices = allShiftInvoicesRows[0];
+
+      // Query completed, non-voided sales for this session
       const [salesRows] = await pool.execute<any[]>(
         `SELECT
            COUNT(*) AS transaction_count,
-           MIN(invoice_number) AS beg_invoice_no,
-           MAX(invoice_number) AS end_invoice_no,
            COALESCE(SUM(subtotal + COALESCE(vat_amount, 0) + COALESCE(discount, 0)), 0) AS shift_gross,
            COALESCE(SUM(vat_amount), 0) AS total_vat,
            COALESCE(SUM(discount), 0) AS total_discounts,
@@ -616,8 +628,8 @@ router.get(
           opened_at: session.opened_at,
           closed_at: session.closed_at || null,
           session_status: session.session_status,
-          beg_invoice_no: salesSummary.beg_invoice_no || null,
-          end_invoice_no: salesSummary.end_invoice_no || null,
+          beg_invoice_no: allShiftInvoices.beg_invoice_no || null,
+          end_invoice_no: allShiftInvoices.end_invoice_no || null,
           transaction_count: Number(salesSummary.transaction_count),
           shift_gross: round2(Number(salesSummary.shift_gross)),
           shift_discounts: round2(Number(salesSummary.total_discounts)),
