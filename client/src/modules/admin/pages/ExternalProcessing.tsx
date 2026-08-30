@@ -671,7 +671,7 @@ export default function ExternalProcessing() {
           <DeliveryForm onSaved={() => { setRefreshKey((k) => k + 1); setActiveTab("history"); }} companiesRefreshKey={refreshKey} />
         )}
         {activeTab === "history" && (
-          <DeliveryHistory refreshKey={refreshKey} />
+          <DeliveryHistoryTab refreshKey={refreshKey} />
         )}
       </div>
 
