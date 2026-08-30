@@ -4,6 +4,8 @@ title Isra POS System
 :: 1. Silently start Print Agent if installed locally (0 windows opened)
 if exist "%~dp0print-agent\Start_Print_Agent.vbs" (
     wscript.exe "%~dp0print-agent\Start_Print_Agent.vbs"
+) else if exist "%~dp0..\print-agent\Start_Print_Agent.vbs" (
+    wscript.exe "%~dp0..\print-agent\Start_Print_Agent.vbs"
 ) else if exist "C:\IsraPOS-PrintAgent\Start_Print_Agent.vbs" (
     wscript.exe "C:\IsraPOS-PrintAgent\Start_Print_Agent.vbs"
 )

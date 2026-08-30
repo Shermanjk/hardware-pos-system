@@ -19,7 +19,7 @@ This print agent enables **100% Zero-Flash, Zero-Preview, Instant (<5ms) Thermal
 2. **Double-click `Install_Startup.bat` once**:
    - This registers `IsraPrintAgent.exe` in Windows Startup.
    - The agent starts running silently in the background immediately.
-3. Open your POS Kiosk as usual using `Launch_POS_Kiosk.bat`.
+3. Open your POS Kiosk as usual using `kiosk\Launch_POS_Kiosk.bat`.
 
 ---
 

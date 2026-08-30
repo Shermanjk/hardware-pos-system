@@ -77,7 +77,7 @@ router.get("/", async (req: Request, res: Response) => {
       branch_code:               row.branch_code ?? "",
       ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
       ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
-      accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
+      accreditation_no:          row.accreditation_no ?? "",
       accreditation_date_issued: row.accreditation_date_issued ? String(row.accreditation_date_issued).slice(0, 10) : null,
       vat_rate:                  Number(row.vat_rate ?? 0),
       vat_enabled:               Boolean(row.vat_enabled),
@@ -111,29 +111,22 @@ router.put("/", async (req: Request, res: Response) => {
 
   try {
     // ─── Operational Guardrail (Active Shift Lock) ───────────────────────────
-    // Before saving changes to statutory tax or machine settings, check for open cash sessions
-    const statutoryFields = [
+    // Before saving changes to core statutory tax calculation fields, check for open cash sessions
+    const statutoryTaxFields = [
       "vat_enabled",
       "vat_registered",
       "vat_rate",
       "tin",
-      "branch_code",
-      "pos_min",
-      "pos_serial",
-      "ptu_or_accn_no",
-      "ptu_date_issued",
-      "accreditation_no",
-      "accreditation_date_issued",
     ];
-    const isModifyingStatutory = statutoryFields.some((field) => (data as any)[field] !== undefined);
+    const isModifyingStatutoryTax = statutoryTaxFields.some((field) => (data as any)[field] !== undefined);
 
-    if (isModifyingStatutory) {
+    if (isModifyingStatutoryTax) {
       const [openSessions] = await pool.execute<any[]>(
         "SELECT id FROM cash_sessions WHERE session_status = 'open' LIMIT 1"
       );
       if (openSessions && openSessions.length > 0) {
         res.status(400).json({
-          message: "Cannot change statutory tax or machine settings while a shift is open. Please close all shifts and perform a Z-Reading first.",
+          message: "Cannot change statutory tax calculation settings while a shift is open. Please close all shifts and perform a Z-Reading first.",
         });
         return;
       }
@@ -224,7 +217,7 @@ router.put("/", async (req: Request, res: Response) => {
       branch_code:               row.branch_code ?? "",
       ptu_or_accn_no:            row.ptu_or_accn_no ?? null,
       ptu_date_issued:           row.ptu_date_issued ? String(row.ptu_date_issued).slice(0, 10) : null,
-      accreditation_no:          row.accreditation_no ?? "000-000000000-000000",
+      accreditation_no:          row.accreditation_no ?? "",
       accreditation_date_issued: row.accreditation_date_issued ? String(row.accreditation_date_issued).slice(0, 10) : null,
       vat_rate:                  Number(row.vat_rate ?? 0),
       vat_enabled:               Boolean(row.vat_enabled),

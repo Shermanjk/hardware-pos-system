@@ -198,7 +198,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         pos_serial:                initial.pos_serial                ?? "",
         ptu_or_accn_no:            initial.ptu_or_accn_no            ?? "",
         ptu_date_issued:           initial.ptu_date_issued           ?? "",
-        accreditation_no:          initial.accreditation_no          ?? "000-000000000-000000",
+        accreditation_no:          initial.accreditation_no          ?? "",
         accreditation_date_issued: initial.accreditation_date_issued ?? "",
       });
       setVatEnabled(initial.vat_enabled ?? false);

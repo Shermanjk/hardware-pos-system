@@ -180,7 +180,7 @@ export function formatStoreTIN(settings: StoreSettings): string {
     ? `${rawTin.slice(0, 3)}-${rawTin.slice(3, 6)}-${rawTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  if (rawBranch) {
+  if (rawBranch && rawBranch.trim() !== "") {
     const branchCode = rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0");
     return `${tinFormatted}-${branchCode}`;
   }
@@ -197,7 +197,6 @@ export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string
   const min = settings.pos_min || "N/A";
   const serial = settings.pos_serial || "N/A";
   const ptu = settings.ptu_or_accn_no || "";
-  const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
 
   lines.push(doubleDivider());
   lines.push(centerLine(storeName));
@@ -229,17 +228,15 @@ export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string
 // ─── 1. Format Sales Invoice ───────────────────────────────────────────────────
 
 export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
-  const { settings, customer, items, discount, vatBreakdown, payment, isTestMode } = params;
+  const { settings, customer, items, discount, vatBreakdown, payment } = params;
   const lines: string[] = [];
 
   const dateObj = new Date(params.dateTime);
   const dateStr = dateObj.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
   const timeStr = dateObj.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  // Header with PTU / ACCN and split TIN-branch
   lines.push(...buildStoreHeaderLines(settings, settings.document_type || "SALES INVOICE"));
 
-  // Invoice & Customer Metadata
   lines.push(padLine("SI No:", cleanInvoiceNumber(params.invoiceNumber)));
   lines.push(padLine("Date & Time:", `${dateStr} ${timeStr}`));
   lines.push(padLine("Cashier:", params.cashierName.toUpperCase()));
@@ -318,7 +315,7 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   if (vatBreakdown.nonVatSales && Number(vatBreakdown.nonVatSales) > 0) {
     lines.push(padLine("Non-VAT Sales:", `${fmtPeso(vatBreakdown.nonVatSales)}`));
   }
-  lines.push(divider());
+  lines.push(doubleDivider());
 
   // Signature line for SC/PWD or Credit sales
   if ((customer.scPwdType && customer.scPwdType !== "NONE") || payment.method === "CREDIT") {
@@ -330,11 +327,14 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   }
 
   // Accreditation Footer & Disclaimer
-  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
   lines.push(centerLine("POS Software: ISRA POS System v1.0"));
-  lines.push(centerLine(`Accreditation No: ${accNo}`));
-  if (settings.accreditation_date_issued) {
-    lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+  if (hasAccreditation) {
+    lines.push(centerLine(`Accreditation No: ${accNo}`));
+    if (settings.accreditation_date_issued) {
+      lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+    }
   }
   lines.push(doubleDivider());
   lines.push(centerLine("THIS SERVES AS AN OFFICIAL SALES INVOICE"));
@@ -488,11 +488,14 @@ export function formatZReadingText(params: ZReadingParams): string {
   lines.push(padLine("NEW GRAND TOTAL:", `${fmtPeso(params.newGrandTotal)}`));
   lines.push(doubleDivider());
 
-  const accNo = settings.accreditation_no || "000-000000000-000000";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
   lines.push(centerLine("POS Software: ISRA POS System v1.0"));
-  lines.push(centerLine(`Accreditation No: ${accNo}`));
-  if (settings.accreditation_date_issued) {
-    lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+  if (hasAccreditation) {
+    lines.push(centerLine(`Accreditation No: ${accNo}`));
+    if (settings.accreditation_date_issued) {
+      lines.push(centerLine(`Date Issued: ${settings.accreditation_date_issued}`));
+    }
   }
   return lines.join("\n");
 }
@@ -531,7 +534,7 @@ export async function printThermalMonospace(text: string): Promise<void> {
       width: 76mm;
       max-width: 76mm;
       margin: 0 auto;
-      padding: 0 1mm;
+      padding: 0 1mm 15mm 1mm;
       box-sizing: border-box;
       background: #fff;
     }
@@ -549,14 +552,14 @@ export async function printThermalMonospace(text: string): Promise<void> {
     }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm 15mm 1mm; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
     <pre>${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
-    <div style="height: 3mm;"></div>
+    <div style="height: 15mm; line-height: 15mm;">&nbsp;</div>
   </div>
 </body>
 </html>`;

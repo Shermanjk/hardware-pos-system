@@ -150,7 +150,7 @@ namespace IsraPOS.PrintAgent
     public class PrinterMarginsConfig
     {
         public float topMarginMm = 2.0f;
-        public float bottomMarginMm = 2.0f;
+        public float bottomMarginMm = 15.0f;
         public float leftMarginMm = 1.0f;
         public float contentWidthMm = 71.6f;
 

@@ -80,13 +80,32 @@ Windows only limits characters during the initial wizard creation. The Shortcut 
 
 ---
 
-## Step 3: Autostart POS on Windows Startup (Optional)
+## Step 3: Autostart POS on Windows Startup
 
-To make the POS system open automatically whenever the cashier PC turns on:
+To make the POS Kiosk open automatically whenever the cashier PC boots / turns on:
 
+### Option A: 1-Click Setup (Recommended)
+1. Open the **`kiosk`** folder.
+2. Double-click **`enable-kiosk-autostart.bat`**.
+3. It will automatically link the silent background launcher (`Launch_POS_Kiosk_Silent.vbs`) to the Windows Startup folder.
+4. Done! The kiosk will launch automatically on boot without any black terminal window flashing.
+*(To disable later, simply run `disable-kiosk-autostart.bat` inside the `kiosk` folder)*
+
+---
+
+### Option B: Manual Setup via Windows Startup Folder
 1. Press **Windows Key + R** to open the Run dialog.
 2. Type `shell:startup` and press **Enter**.
-3. Copy your **`POS Cashier Kiosk`** shortcut into the Startup folder that opens.
+3. Copy **`kiosk\Launch_POS_Kiosk.bat`** (or create a shortcut to it) into the Startup folder that opens.
+
+---
+
+### Option C: Windows Auto-Login (Skip Windows Login Screen on Boot)
+To allow Windows to boot straight into the POS without waiting for someone to type a password:
+1. Press **Windows Key + R**, type **`netplwiz`** and press **Enter**.
+2. Uncheck **"Users must enter a user name and password to use this computer"**.
+3. Select your cashier / user account, click **Apply**, enter the password once to confirm, and click **OK**.
+4. The PC will now restart directly into the Kiosk on every boot.
 
 ---
 

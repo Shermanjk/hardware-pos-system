@@ -105,11 +105,12 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
+  const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
-  const accNo = settings.accreditation_no || "000-000000000-000000";
-  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
+  const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
   const documentType = settings.document_type || "SALES INVOICE";
   const currSym = "";
   const posMin = settings.pos_min || "";
@@ -243,7 +244,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
       width: 76mm;
       max-width: 76mm;
       margin: 0 auto;
-      padding: 0 1mm;
+      padding: 0 1mm 15mm 1mm;
       box-sizing: border-box;
       background: #fff;
     }
@@ -317,7 +318,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm 15mm 1mm; }
     }
   </style>
 </head>
@@ -393,7 +394,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div class="section">CASHIER: ${(cashierName || "—").toUpperCase()}</div>
     <div class="divider"></div>
     <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
-    <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
+    ${hasAccreditation ? `<div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>` : ''}
     <div class="divider"></div>
     <div class="center">Thank you for your business.</div>
     <div class="center">We sincerely appreciate your trust</div>
@@ -401,6 +402,7 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
     <div style="margin-top: 3px;"></div>
     <div class="center" style="font-size: 11px;">THIS SERVES AS AN OFFICIAL SALES INVOICE</div>
     ${settings.receipt_footer ? `<div class="center" style="font-size: 11px; margin-top: 2px;">${settings.receipt_footer}</div>` : ''}
+    <div style="height: 15mm; line-height: 15mm;">&nbsp;</div>
   </div>
 </body>
 </html>`;
@@ -434,7 +436,7 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
+  const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
@@ -572,10 +574,13 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push("----------------------------------------");
   lines.push(`CASHIER: ${(cashierName || "—").toUpperCase()}`);
   lines.push("----------------------------------------");
-  const accNo = settings.accreditation_no || "000-000000000-000000";
-  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
+  const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
   lines.push("       POS Software: ISRA POS System v1.0");
-  lines.push(`     Accreditation No: ${accNo}${accDate}`);
+  if (hasAccreditation) {
+    lines.push(`     Accreditation No: ${accNo}${accDate}`);
+  }
   lines.push("----------------------------------------");
   lines.push("       Thank you for your business.");
   lines.push("   We sincerely appreciate your trust");
@@ -583,6 +588,7 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push("----------------------------------------");
   lines.push("    THIS SERVES AS AN OFFICIAL SALES INVOICE");
   if (settings.receipt_footer) lines.push(`    ${settings.receipt_footer}`);
+  lines.push("\n\n\n\n\n");
 
   return lines.join("\n");
 }
@@ -629,6 +635,7 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   lines.push("       Thank you for your payment!");
   lines.push("   We sincerely appreciate your trust");
   lines.push("  and look forward to serving you again!");
+  lines.push("\n\n\n\n\n");
 
   return lines.join("\n");
 }
@@ -651,11 +658,12 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
+  const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
-  const accNo = settings.accreditation_no || "000-000000000-000000";
-  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
+  const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
   const posMin = settings.pos_min || "";
   const posSerial = settings.pos_serial || "";
 
@@ -703,7 +711,7 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
       width: 76mm;
       max-width: 76mm;
       margin: 0 auto;
-      padding: 0 1mm;
+      padding: 0 1mm 15mm 1mm;
       box-sizing: border-box;
       background: #fff;
     }
@@ -718,7 +726,7 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     .divider { border-top: 1.5px dashed #000; margin: 9px 0 10px 0; }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm 15mm 1mm; }
     }
   </style>
 </head>
@@ -750,11 +758,12 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
     <div class="section">CASHIER: ${(cashierName || "").toUpperCase()}</div>
     <div class="divider"></div>
     <div class="center" style="font-size: 11px;">POS Software: ISRA POS System v1.0</div>
-    <div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>
+    ${hasAccreditation ? `<div class="center" style="font-size: 11px;">Accreditation No: ${accNo}${accDate}</div>` : ''}
     <div class="divider"></div>
     <div class="center">Thank you for your payment!</div>
     <div class="center">We sincerely appreciate your trust</div>
     <div class="center">and look forward to serving you again!</div>
+    <div style="height: 15mm; line-height: 15mm;">&nbsp;</div>
   </div>
 </body>
 </html>`;

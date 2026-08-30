@@ -23,7 +23,7 @@ This guide details how to set up a dedicated **Cashier PC** with **100% Silent B
 You only need to transfer **two items** from this project to the Cashier PC:
 
 1. **`print-agent` folder** ➔ Copy to `C:\IsraPOS-PrintAgent` (or `Documents\print-agent`).
-2. **`Launch_POS_Kiosk.bat`** ➔ Copy to the Cashier's **Desktop** (you can rename it to `Isra POS`).
+2. **`kiosk` folder** ➔ Copy to the Cashier PC (or copy `kiosk\Launch_POS_Kiosk.bat` to Desktop).
 
 > [!NOTE]
 > The Cashier PC does **NOT** need Node.js, Git, pnpm, MySQL, or the source code repository.
@@ -50,8 +50,8 @@ You only need to transfer **two items** from this project to the Cashier PC:
 
 ---
 
-### Step 3: Configure the Desktop POS Launcher
-1. On the Cashier PC's Desktop, right-click **`Launch_POS_Kiosk.bat`** and choose **Edit** (with Notepad).
+### Step 3: Configure the POS Launcher
+1. In the `kiosk` folder (or on Desktop), right-click **`Launch_POS_Kiosk.bat`** and choose **Edit** (with Notepad).
 2. Change the server URL to your Main Server's local IP address (e.g., `192.168.1.100`):
 
 ```bat
@@ -61,6 +61,8 @@ title Isra POS Kiosk
 :: 1. Silently ensure Print Agent is running (0 windows opened)
 if exist "%~dp0print-agent\Start_Print_Agent.vbs" (
     wscript.exe "%~dp0print-agent\Start_Print_Agent.vbs"
+) else if exist "%~dp0..\print-agent\Start_Print_Agent.vbs" (
+    wscript.exe "%~dp0..\print-agent\Start_Print_Agent.vbs"
 ) else if exist "C:\IsraPOS-PrintAgent\Start_Print_Agent.vbs" (
     wscript.exe "C:\IsraPOS-PrintAgent\Start_Print_Agent.vbs"
 )
@@ -82,12 +84,19 @@ exit
 
 ---
 
+### Step 4: Optional - Auto-Launch POS on PC Boot
+To make the Kiosk start automatically when the cashier PC turns on:
+1. Open the `kiosk` folder and double-click **`enable-kiosk-autostart.bat`**.
+2. The POS Kiosk will now launch automatically on startup with zero popup windows.
+*(To disable autostart later, double-click `disable-kiosk-autostart.bat` in the `kiosk` folder)*
+
+---
+
 ## 🖥️ The Daily Cashier Experience
 
 | Event | Behavior |
 | :--- | :--- |
-| **PC Powers On in the morning** | Print Agent starts silently in the background (**No CMD window**). |
-| **Cashier double-clicks "Isra POS"** | Chrome opens directly into fullscreen Kiosk mode. |
+| **PC Powers On in the morning** | Print Agent starts silently & POS Kiosk opens automatically in fullscreen. |
 | **Cashier completes a checkout** | Thermal receipt prints instantly (<5ms) with zero popups or preview screens. |
 | **End of Day / PC Shutdown** | Cashier closes Chrome or shuts down Windows. Everything cleans up automatically. |
 

@@ -77,6 +77,7 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push("   We sincerely appreciate your trust");
   lines.push("  and look forward to serving you again!");
   lines.push("       SALES RETURN RECEIPT");
+  lines.push("\n\n\n\n\n");
 
   return lines.join("\n");
 }
@@ -94,7 +95,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : (settings.tin || "000-000-000");
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  const storeTIN = rawBranch ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
+  const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const currSym                = "";
@@ -179,7 +180,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
       width: 76mm;
       max-width: 76mm;
       margin: 0 auto;
-      padding: 0 1mm;
+      padding: 0 1mm 15mm 1mm;
       box-sizing: border-box;
       background: #fff;
     }
@@ -251,7 +252,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
-      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm; }
+      .receipt { width: 76mm; max-width: 76mm; margin: 0 auto; padding: 0 1mm 15mm 1mm; }
     }
   </style>
 </head>
@@ -308,6 +309,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="center">and look forward to serving you again!</div>
     <div style="margin-top: 3px;"></div>
     <div class="center" style="font-size: 11px;">This is your SALES RETURN RECEIPT.</div>
+    <div style="height: 15mm; line-height: 15mm;">&nbsp;</div>
   </div>
 </body>
 </html>`;

@@ -129,9 +129,9 @@ export class EscPosBuilder {
     return this;
   }
 
-  /** Auto-cut paper (Feed 1 line then partial or full cut) */
+  /** Auto-cut paper (Feed 5 lines then partial or full cut for cutter clearance) */
   cut(partial = true): this {
-    this.feed(1);
+    this.feed(5);
     // GS V B 0 (Feed and Cut)
     this.buffer.push(GS, 0x56, partial ? 0x42 : 0x41, 0x00);
     return this;
@@ -172,7 +172,7 @@ function formatTIN(settings: StoreSettings): string {
       ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
       : settings.tin || "000-000-000";
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
-  if (rawBranch) {
+  if (rawBranch && rawBranch.trim() !== "") {
     const branchCode = rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0");
     return `${tinFormatted}-${branchCode}`;
   }
@@ -364,10 +364,13 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.divider();
   b.row("CASHIER:", (cashierName || "—").toUpperCase());
   b.divider();
-  const accNo = settings.accreditation_no || "000-000000000-000000";
-  const accDate = settings.accreditation_date_issued ? ` Date: ${settings.accreditation_date_issued}` : "";
+  const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
+  const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
+  const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
   b.center("POS Software: ISRA POS System v1.0");
-  b.center(`Accreditation No: ${accNo}${accDate}`);
+  if (hasAccreditation) {
+    b.center(`Accreditation No: ${accNo}${accDate}`);
+  }
   b.divider();
 
   b.align("center").bold(true).textLine("THIS SERVES AS AN OFFICIAL SALES INVOICE").bold(false);
