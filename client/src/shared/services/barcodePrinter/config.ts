@@ -78,15 +78,15 @@ export function createDynamicBarcodeConfig(
   const is25mm = isMedium && heightMm <= 26;
 
   const defaultBarcodeHeightMm = isSmall
-    ? 7.5
+    ? 8.2
     : is25mm
-    ? 9.5
+    ? 11.2
     : isMedium
-    ? 11.5
-    : Math.max(14, Math.round((heightMm - marginTopMm - marginBottomMm) * 0.44 * 10) / 10);
+    ? 14.5
+    : Math.max(18, Math.round((heightMm - marginTopMm - marginBottomMm) * 0.44 * 10) / 10);
 
   const barcodeHeightMm = overrides?.barcodeHeightMm ?? defaultBarcodeHeightMm;
-  const fontSizePt = overrides?.fontSizePt ?? (isSmall ? 5.4 : isMedium ? 7.2 : 8.5);
+  const fontSizePt = overrides?.fontSizePt ?? (isSmall ? 6.0 : isMedium ? 8.0 : 9.0);
 
   return {
     printerName:      overrides?.printerName      ?? "",

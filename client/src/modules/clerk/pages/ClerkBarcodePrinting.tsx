@@ -97,26 +97,31 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
     barcodeFontSize  = 8.0;
     productFontSize  = isVeryLong ? 6.5 : isLong ? 7.2 : 8.0;
     productLineClamp = isVeryLong ? 3 : 2;
-    barcodeHeightMm  = isVeryLong ? 6.5 : isLong ? 7.0 : 7.5;
+    barcodeHeightMm  = isVeryLong ? 7.2 : isLong ? 7.6 : 8.2;
     letterSpacingPx  = "0.4px";
   } else if (isMedium) {
     const is25mm     = config.labelHeightMm <= 26;
-    storeFontSize    = is25mm ? 9.5 : 11.0;
-    barcodeFontSize  = is25mm ? 9.0 : 10.5;
-    productFontSize  = isVeryLong ? 8.0 : isLong ? 9.0 : isMid ? 9.8 : 10.5;
-    productLineClamp = isVeryLong ? 4 : 3;
-    barcodeHeightMm  = is25mm
-      ? (isVeryLong ? 8.0 : isLong ? 8.8 : 9.5)
-      : (isVeryLong ? 9.5 : isLong ? 10.5 : 11.5);
-    letterSpacingPx  = "0.8px";
+    if (is25mm) {
+      storeFontSize    = 9.5;
+      barcodeFontSize  = 9.0;
+      productFontSize  = isVeryLong ? 7.8 : isLong ? 8.5 : 9.5;
+      productLineClamp = isVeryLong ? 3 : 2;
+      barcodeHeightMm  = isVeryLong ? 9.5 : isLong ? 10.2 : 11.2;
+      letterSpacingPx  = "0.6px";
+    } else {
+      storeFontSize    = 11.0;
+      barcodeFontSize  = 10.5;
+      productFontSize  = isVeryLong ? 8.5 : isLong ? 9.5 : isMid ? 10.2 : 11.0;
+      productLineClamp = isVeryLong ? 3 : 2;
+      barcodeHeightMm  = isVeryLong ? 12.8 : isLong ? 13.6 : 14.5;
+      letterSpacingPx  = "0.8px";
+    }
   } else {
     storeFontSize    = config.labelHeightMm >= 45 ? 14.0 : 12.5;
     barcodeFontSize  = config.labelHeightMm >= 45 ? 13.0 : 11.5;
     productFontSize  = isVeryLong ? 10.0 : isLong ? 11.5 : 13.0;
-    productLineClamp = 4;
-    barcodeHeightMm  = isVeryLong
-      ? Math.max(12, Math.round((config.labelHeightMm - config.marginTopMm - config.marginBottomMm) * 0.38 * 10) / 10)
-      : Math.max(14, Math.round((config.labelHeightMm - config.marginTopMm - config.marginBottomMm) * 0.44 * 10) / 10);
+    productLineClamp = 3;
+    barcodeHeightMm  = config.labelHeightMm >= 45 ? 22.0 : 19.0;
     letterSpacingPx  = "1.2px";
   }
 
@@ -193,8 +198,8 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 // ─── Label size presets ───────────────────────────────────────────────────────
 
 const SIZE_PRESETS = [
-  { id: "30x20",  label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
   { id: "50x30",  label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
+  { id: "30x20",  label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
   { id: "38x25",  label: "38 × 25 mm",                     w: 38, h: 25 },
   { id: "60x40",  label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
   { id: "100x50", label: "100 × 50 mm (Large)",            w: 100, h: 50 },
@@ -202,11 +207,11 @@ const SIZE_PRESETS = [
 ] as const;
 
 function normalizePresetKey(key: string | null | undefined): string {
-  if (!key) return "30x20";
+  if (!key) return "50x30";
   const cleaned = key.replace(/[\s\u00d7]/g, "x").toLowerCase();
   if (SIZE_PRESETS.some((p) => p.id === cleaned)) return cleaned;
   if (cleaned === "custom") return "custom";
-  return "30x20";
+  return "50x30";
 }
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────

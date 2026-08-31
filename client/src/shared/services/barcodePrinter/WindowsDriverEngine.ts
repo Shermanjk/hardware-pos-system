@@ -134,41 +134,62 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const isLong     = nameLen > 50;
     const isMid      = nameLen > 30;
 
+    let storeHeightMm: number;
     let storeNameFontPt: number;
+    let productHeightMm: number;
     let productNameFontPt: number;
-    let barcodeFontPt: number;
-    let barcodeHeightMm: number;
     let productLineClamp: number;
+    let barcodeHeightMm: number;
+    let textHeightMm: number;
+    let barcodeFontPt: number;
     let letterSpacingPx: string;
 
     if (isSmall) {
-      // 30 × 20 mm (and similar compact labels)
-      storeNameFontPt   = 5.5;
-      barcodeFontPt     = 5.4;
-      barcodeHeightMm   = isVeryLong ? 6.5 : isLong ? 7.0 : 7.5;
-      productLineClamp  = isVeryLong ? 3 : 2;
+      // 30 × 20 mm (Compact)
+      storeHeightMm     = 2.4;
+      storeNameFontPt   = 5.8;
+      productHeightMm   = 4.6;
       productNameFontPt = isVeryLong ? 4.2 : isLong ? 4.6 : 5.0;
+      productLineClamp  = isVeryLong ? 3 : 2;
+      barcodeHeightMm   = isVeryLong ? 7.2 : isLong ? 7.6 : 8.2;
+      textHeightMm      = 2.6;
+      barcodeFontPt     = 6.0;
       letterSpacingPx   = "0.4px";
     } else if (isMedium) {
-      // 38 × 25 mm & 50 × 30 mm (Standard labels)
       const is25mm = label_height_mm <= 26;
-      storeNameFontPt   = is25mm ? 6.5 : 7.5;
-      barcodeFontPt     = is25mm ? 6.2 : 7.2;
-      barcodeHeightMm   = is25mm
-        ? (isVeryLong ? 8.0 : isLong ? 8.8 : 9.5)
-        : (isVeryLong ? 9.5 : isLong ? 10.5 : 11.5);
-      productLineClamp  = isVeryLong ? 4 : 3;
-      productNameFontPt = isVeryLong ? 5.5 : isLong ? 6.2 : isMid ? 6.8 : 7.5;
-      letterSpacingPx   = "0.8px";
+      if (is25mm) {
+        // 38 × 25 mm
+        storeHeightMm     = 2.8;
+        storeNameFontPt   = 7.0;
+        productHeightMm   = 5.6;
+        productNameFontPt = isVeryLong ? 5.2 : isLong ? 5.8 : 6.5;
+        productLineClamp  = isVeryLong ? 3 : 2;
+        barcodeHeightMm   = isVeryLong ? 9.5 : isLong ? 10.2 : 11.2;
+        textHeightMm      = 2.8;
+        barcodeFontPt     = 7.0;
+        letterSpacingPx   = "0.6px";
+      } else {
+        // 50 × 30 mm (Standard)
+        storeHeightMm     = 3.2;
+        storeNameFontPt   = 8.5;
+        productHeightMm   = isVeryLong ? 7.5 : isLong ? 6.8 : 6.0;
+        productNameFontPt = isVeryLong ? 5.8 : isLong ? 6.5 : isMid ? 7.0 : 7.6;
+        productLineClamp  = isVeryLong ? 3 : 2;
+        barcodeHeightMm   = isVeryLong ? 12.8 : isLong ? 13.6 : 14.5;
+        textHeightMm      = 3.2;
+        barcodeFontPt     = 8.0;
+        letterSpacingPx   = "0.8px";
+      }
     } else {
       // 60 × 40 mm, 100 × 50 mm (Large labels)
-      storeNameFontPt   = label_height_mm >= 45 ? 10.5 : 9.0;
-      barcodeFontPt     = label_height_mm >= 45 ? 9.5  : 8.5;
-      barcodeHeightMm   = isVeryLong
-        ? Math.max(12, Math.round(printH * 0.38 * 10) / 10)
-        : Math.max(14, Math.round(printH * 0.44 * 10) / 10);
-      productLineClamp  = 4;
-      productNameFontPt = isVeryLong ? 7.0 : isLong ? 8.0 : 9.0;
+      storeHeightMm     = label_height_mm >= 45 ? 5.5 : 4.2;
+      storeNameFontPt   = label_height_mm >= 45 ? 12.0 : 10.0;
+      productHeightMm   = label_height_mm >= 45 ? 12.0 : 9.0;
+      productNameFontPt = isVeryLong ? 7.5 : isLong ? 8.5 : 10.0;
+      productLineClamp  = 3;
+      barcodeHeightMm   = label_height_mm >= 45 ? 22.0 : 19.0;
+      textHeightMm      = label_height_mm >= 45 ? 5.5 : 4.2;
+      barcodeFontPt     = label_height_mm >= 45 ? 11.0 : 9.0;
       letterSpacingPx   = "1.2px";
     }
 
@@ -236,22 +257,28 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     }
 
     @media print {
+      *, *::before, *::after {
+        box-sizing: border-box !important;
+      }
       html, body {
         width:  ${label_width_mm}mm !important;
         height: ${label_height_mm}mm !important;
+        max-width:  ${label_width_mm}mm !important;
+        max-height: ${label_height_mm}mm !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
       .label-page {
-        page-break-after: always;
-        break-after: page;
+        page-break-after: always !important;
+        break-after: page !important;
       }
       .label-page:last-child {
-        page-break-after: auto;
-        break-after: auto;
+        page-break-after: auto !important;
+        break-after: auto !important;
       }
     }
 
@@ -263,7 +290,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       align-items: center;
       padding: 8px 0;
       gap: 4px;
-      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
     /* ── Label card container ── */
@@ -274,15 +301,12 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       max-height: ${label_height_mm}mm !important;
       background: #ffffff !important;
       overflow: hidden !important;
+      box-sizing: border-box !important;
+      padding: ${margin_top_mm}mm ${margin_right_mm}mm ${margin_bottom_mm}mm ${margin_left_mm}mm !important;
       display: flex !important;
       flex-direction: column !important;
-      align-items: center !important;
       justify-content: space-between !important;
-      box-sizing: border-box !important;
-      padding-top:    ${margin_top_mm}mm !important;
-      padding-bottom: ${margin_bottom_mm}mm !important;
-      padding-left:   ${margin_left_mm}mm !important;
-      padding-right:  ${margin_right_mm}mm !important;
+      align-items: center !important;
       color: #000000 !important;
     }
 
@@ -290,7 +314,8 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     .store-name {
       flex-shrink: 0;
       width:       100%;
-      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height:      ${storeHeightMm}mm;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size:   ${storeNameFontPt}pt;
       font-weight: 800;
       text-transform: uppercase;
@@ -298,7 +323,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       white-space: nowrap;
       overflow:    hidden;
       text-overflow: ellipsis;
-      line-height: 1.15;
+      line-height: ${storeHeightMm}mm;
       letter-spacing: 0.2px;
       color: #000000 !important;
     }
@@ -307,35 +332,32 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     .product-name {
       flex-shrink: 0;
       width:       100%;
-      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height:      ${productHeightMm}mm;
+      max-height:  ${productHeightMm}mm;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size:   ${productNameFontPt}pt;
       font-weight: 600;
       text-transform: none;
       text-align:  left;
-      line-height: ${isSmall ? "1.05" : "1.10"};
+      line-height: 1.15;
       display:     -webkit-box;
       -webkit-line-clamp: ${productLineClamp};
       -webkit-box-orient: vertical;
       overflow:    hidden;
       word-break:  normal;
       overflow-wrap: break-word;
-      margin-top:  ${isSmall ? "0.1mm" : "0.2mm"};
-      margin-bottom: ${isSmall ? "0.1mm" : "0.2mm"};
       color: #000000 !important;
     }
 
-    /* ── Barcode SVG — guaranteed explicit millimeter height so it never collapses ── */
+    /* ── Barcode SVG — full height prominent barcode ── */
     .barcode-svg {
       flex-shrink: 0;
       width:      100%;
       max-width:  ${printW}mm;
       height:     ${barcodeHeightMm}mm !important;
       max-height: ${barcodeHeightMm}mm !important;
-      display:    flex;
-      align-items: center;
-      justify-content: center;
+      display:    block;
       overflow:   hidden;
-      margin:     0.1mm 0;
     }
     .barcode-svg svg {
       width:      100% !important;
@@ -349,13 +371,15 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     .barcode-text {
       flex-shrink:    0;
       width:          100%;
+      height:         ${textHeightMm}mm;
       font-family:    "Courier New", Courier, monospace;
       font-size:      ${barcodeFontPt}pt;
-      font-weight:    700;
+      font-weight:    800;
       text-align:     center;
       letter-spacing: ${letterSpacingPx};
       white-space:    nowrap;
-      line-height:    1.1;
+      overflow:       hidden;
+      line-height:    ${textHeightMm}mm;
       color: #000000 !important;
     }
   </style>
@@ -363,36 +387,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
 <body>
   ${labels}
   <script>
-    function fitTextElements() {
-      // Fit Store Name elements if exceeding physical label width
-      var storeNames = document.querySelectorAll('.store-name');
-      storeNames.forEach(function(el) {
-        var maxW = el.clientWidth;
-        if (!maxW) return;
-        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 10;
-        var minSize = 4.5;
-        while (el.scrollWidth > maxW && curSize > minSize) {
-          curSize -= 0.2;
-          el.style.fontSize = curSize + 'px';
-        }
-      });
-
-      // Fit Barcode Text elements if exceeding physical label width
-      var barcodeTexts = document.querySelectorAll('.barcode-text');
-      barcodeTexts.forEach(function(el) {
-        var maxW = el.clientWidth;
-        if (!maxW) return;
-        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 10;
-        var minSize = 4.5;
-        while (el.scrollWidth > maxW && curSize > minSize) {
-          curSize -= 0.2;
-          el.style.fontSize = curSize + 'px';
-        }
-      });
-    }
-
     function doPrint() {
-      fitTextElements();
       setTimeout(function() {
         window.print();
       }, 100);
