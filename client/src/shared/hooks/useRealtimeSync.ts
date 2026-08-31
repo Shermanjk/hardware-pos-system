@@ -159,6 +159,26 @@ class RealtimeSyncHub {
     this.ensureConnected();
   }
 
+  public disconnect() {
+    this.stopClientHeartbeat();
+    this.stopFastHealthProbe();
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.isConnecting = false;
+    if (this.ws) {
+      try {
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.onmessage = null;
+        this.ws.close(1000, "Normal Closure");
+      } catch {}
+      this.ws = null;
+    }
+    this.updateState({ status: "disconnected", isOffline: false });
+  }
+
   private updateState(partial: Partial<ServerStatusState>) {
     this.state = { ...this.state, ...partial };
     for (const listener of Array.from(this.statusListeners)) {
@@ -321,13 +341,17 @@ class RealtimeSyncHub {
           } else if (data && data.type === "force_logout") {
             const message = data.message || "Your session has been ended by an administrator.";
             clearToken();
-            toast.error("Session Ended", {
-              description: message,
-              duration: 8000,
-            });
-            setTimeout(() => {
-              window.location.href = "/login";
-            }, 600);
+            if (window.location.pathname !== "/login") {
+              toast.error("Session Ended", {
+                description: message,
+                duration: 8000,
+              });
+              setTimeout(() => {
+                if (window.location.pathname !== "/login") {
+                  window.location.href = "/login";
+                }
+              }, 600);
+            }
             return;
           } else if (data && data.type === "server_maintenance") {
             const isMaint = data.status === "started";
@@ -361,7 +385,9 @@ class RealtimeSyncHub {
 
         if (event.code === 1008 || event.code === 4001) {
           clearToken();
-          window.location.href = "/login";
+          if (window.location.pathname !== "/login") {
+            window.location.href = "/login";
+          }
           return;
         }
 

@@ -48,7 +48,9 @@ httpClient.interceptors.response.use(
       // Only force-logout if we had a token (i.e. not a failed login attempt)
       if (stored) {
         clearToken();
-        window.location.href = "/login";
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);

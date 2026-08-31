@@ -1,5 +1,6 @@
 import { loginRequest, logoutRequest } from "@/shared/api/authApi";
 import httpClient from "@/shared/api/httpClient";
+import { realtimeHub } from "@/shared/hooks/useRealtimeSync";
 import {
     clearToken,
     decodeTokenExpiry,
@@ -220,6 +221,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentToken = token || loadToken();
     const currentUserId = user?.id;
     const currentUsername = user?.username;
+
+    // Cleanly disconnect real-time sync hub to prevent 4001 force-logout echoes
+    realtimeHub.disconnect();
 
     // Immediately route to /login atomically so the screen swaps without flash
     setLocation("/login");
