@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import fs from "fs";
 import { createServer } from "http";
 import path from "path";
@@ -41,6 +42,9 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // ─── Gzip Compression for fast LAN streaming ────────────────────────────────
+  app.use(compression());
 
   // ─── Body parsing ────────────────────────────────────────────────────────────
   app.use(express.json({ limit: "100kb" }));
@@ -109,6 +113,9 @@ async function startServer() {
           // Never cache HTML entry point files in browser/kiosk profiles
           if (filePath.endsWith(".html") || filePath.endsWith("sw.js")) {
             setNoCacheHeaders(res);
+          } else if (filePath.includes("assets") || /\.[a-f0-9]{8,}\./.test(filePath)) {
+            // Cache content-hashed static bundles immutably for 1 year — loads from client disk in 0ms!
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           }
         },
       })
