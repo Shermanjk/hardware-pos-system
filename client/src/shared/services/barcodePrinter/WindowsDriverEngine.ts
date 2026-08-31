@@ -127,22 +127,20 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const printW = Math.max(2, label_width_mm  - margin_left_mm  - margin_right_mm);
     const printH = Math.max(2, label_height_mm - margin_top_mm   - margin_bottom_mm);
 
-    // Dynamic typography allocation
+    // Dynamic typography and height allocations
     const nameLen = (productName || "").length;
     const isVeryLong = nameLen > 90;
     const isLong = nameLen > 50;
 
-    const storeNameFontPt   = isSmall ? 6.5 : 9.5;
+    const storeNameFontPt   = isSmall ? 6.5 : 8.5;
     const productNameFontPt = isSmall
-      ? (isVeryLong ? 4.8 : isLong ? 5.1 : 5.5)
-      : (isVeryLong ? 7.0 : isLong ? 7.8 : nameLen > 30 ? 8.2 : 8.5);
-    const barcodeFontPt     = isSmall
-      ? Math.max(5.2, Math.min(7.5, Math.round(label_height_mm * 0.28 * 10) / 10))
-      : Math.max(6.5, Math.min(10.5, Math.round(label_height_mm * 0.28 * 10) / 10));
+      ? (isVeryLong ? 4.8 : isLong ? 5.2 : 5.5)
+      : (isVeryLong ? 6.8 : isLong ? 7.2 : 7.5);
+    const barcodeFontPt     = isSmall ? 6.0 : 8.0;
     const barcodeHeightMm   = isSmall
-      ? (isLong ? 5.2 : Math.max(3.5, Math.round(printH * 0.44 * 10) / 10))
-      : (isVeryLong ? 8.2 : isLong ? 10.5 : Math.max(4, Math.round(printH * 0.48 * 10) / 10));
-    const letterSpacingPx   = isSmall ? "0.4px" : "1.2px";
+      ? (isLong ? 6.5 : 7.5)
+      : (isVeryLong ? 9.5 : isLong ? 11.0 : 12.5);
+    const letterSpacingPx   = isSmall ? "0.4px" : "1.0px";
 
     // Generate barcode SVG using JsBarcode (detached DOM element)
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -153,10 +151,12 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
         margin:       0,
         flat:         true,
         width:        2,
-        height:       Math.round(barcodeHeightMm * 3.78),
+        height:       Math.round(barcodeHeightMm * 3.7795),
+        lineColor:    "#000000",
       });
+      svgEl.setAttribute("preserveAspectRatio", "none");
+      svgEl.setAttribute("style", `width: 100%; height: ${barcodeHeightMm}mm; display: block;`);
     } catch {
-      // If barcode generation fails, render a blank placeholder SVG
       svgEl.setAttribute("viewBox", "0 0 100 30");
     }
 
@@ -224,7 +224,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       }
     }
 
-    /* ── Screen fallback ── */
+    /* ── Screen preview fallback ── */
     body {
       background: #f3f4f6;
       display: flex;
@@ -252,9 +252,10 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       padding-bottom: ${margin_bottom_mm}mm !important;
       padding-left:   ${margin_left_mm}mm !important;
       padding-right:  ${margin_right_mm}mm !important;
+      color: #000000 !important;
     }
 
-    /* ── Store name — pinned to top, dynamic font size ── */
+    /* ── Store name — pinned to top ── */
     .store-name {
       flex-shrink: 0;
       width:       100%;
@@ -265,8 +266,10 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       text-align:  center;
       white-space: nowrap;
       overflow:    hidden;
+      text-overflow: ellipsis;
       line-height: 1.15;
       letter-spacing: 0.2px;
+      color: #000000 !important;
     }
 
     /* ── Product name — left-aligned with natural wrapping ── */
@@ -278,37 +281,37 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       font-weight: 600;
       text-transform: none;
       text-align:  left;
-      line-height: ${isSmall ? "1.08" : "1.12"};
+      line-height: 1.15;
       display:     -webkit-box;
-      -webkit-line-clamp: ${isSmall ? 3 : 4};
+      -webkit-line-clamp: ${isSmall ? 2 : 3};
       -webkit-box-orient: vertical;
       overflow:    hidden;
       word-break:  break-word;
-      margin-top:  ${isSmall ? "0.1mm" : "0.2mm"};
-      margin-bottom: ${isSmall ? "0.2mm" : "0.3mm"};
+      margin-top:  0.2mm;
+      margin-bottom: 0.2mm;
+      color: #000000 !important;
     }
 
-    /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
+    /* ── Barcode SVG — explicit millimeter height so print engine never collapses ── */
     .barcode-svg {
-      flex:       1;
+      flex-shrink: 0;
       width:      100%;
-      max-width:  ${printW}mm;
+      height:     ${barcodeHeightMm}mm !important;
+      max-height: ${barcodeHeightMm}mm !important;
       display:    flex;
       align-items: center;
       justify-content: center;
       overflow:   hidden;
-      min-height: 0;
-      padding:    ${isSmall ? "0.2mm" : "0.5mm"} 0;
+      margin:     0.2mm 0;
     }
     .barcode-svg svg {
-      width:      100%;
-      height:     100%;
-      max-height: 100%;
-      max-width:  ${printW}mm;
-      display:    block;
+      width:      100% !important;
+      height:     ${barcodeHeightMm}mm !important;
+      max-height: ${barcodeHeightMm}mm !important;
+      display:    block !important;
     }
 
-    /* ── Human-readable barcode number — pinned to bottom, dynamic font size ── */
+    /* ── Human-readable barcode number — pinned to bottom ── */
     .barcode-text {
       flex-shrink:    0;
       width:          100%;
@@ -318,7 +321,8 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       text-align:     center;
       letter-spacing: ${letterSpacingPx};
       white-space:    nowrap;
-      line-height:    1.15;
+      line-height:    1.1;
+      color: #000000 !important;
     }
   </style>
 </head>
@@ -339,20 +343,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
         }
       });
 
-      // 2. Fit all Product Name elements across all label copies (for single-line/small labels)
-      var productNames = document.querySelectorAll('.product-name');
-      productNames.forEach(function(el) {
-        var maxW = el.clientWidth;
-        if (!maxW) return;
-        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 10;
-        var minSize = 5;
-        while (el.scrollWidth > maxW && curSize > minSize) {
-          curSize -= 0.3;
-          el.style.fontSize = curSize + 'px';
-        }
-      });
-
-      // 3. Fit all Barcode Text elements across all label copies
+      // 2. Fit all Barcode Text elements across all label copies
       var barcodeTexts = document.querySelectorAll('.barcode-text');
       barcodeTexts.forEach(function(el) {
         var maxW = el.clientWidth;
@@ -370,7 +361,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       fitTextElements();
       setTimeout(function() {
         window.print();
-      }, 80);
+      }, 120);
     }
 
     if (document.readyState === 'complete') {
