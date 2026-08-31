@@ -35,7 +35,6 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const html = this._buildPrintDocument(
       item.barcode,
       item.storeName,
-      item.productName,
       item.quantity,
       config
     );
@@ -47,7 +46,6 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const html = this._buildPrintDocument(
       testBarcode,
       config.storeName || "ISRA HARDWARE TRADING",
-      "TEST PRODUCT 100MM",
       1,
       config
     );
@@ -104,7 +102,6 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
   private _buildPrintDocument(
     barcode: string,
     storeName: string,
-    productName: string | undefined,
     quantity: number,
     config: BarcodePrinterConfig
   ): string {
@@ -121,116 +118,53 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       fontFamily:      font_family,
     } = config;
 
-    const isSmall  = label_width_mm <= 35 || label_height_mm <= 22;
-    const isMedium = !isSmall && (label_width_mm <= 55 || label_height_mm <= 35);
+    const isSmall = label_width_mm <= 35 || label_height_mm <= 22;
 
     // Printable area inside margins
     const printW = Math.max(2, label_width_mm  - margin_left_mm  - margin_right_mm);
     const printH = Math.max(2, label_height_mm - margin_top_mm   - margin_bottom_mm);
 
-    // Dynamic typography and height allocations
-    const nameLen = (productName || "").length;
-    const isVeryLong = nameLen > 90;
-    const isLong     = nameLen > 50;
-    const isMid      = nameLen > 30;
-
-    let storeHeightMm: number;
-    let storeNameFontPt: number;
-    let productHeightMm: number;
-    let productNameFontPt: number;
-    let productLineClamp: number;
-    let barcodeHeightMm: number;
-    let textHeightMm: number;
-    let barcodeFontPt: number;
-    let letterSpacingPx: string;
-
-    if (isSmall) {
-      // 30 × 20 mm (Compact)
-      storeHeightMm     = 2.4;
-      storeNameFontPt   = 5.8;
-      productHeightMm   = 4.6;
-      productNameFontPt = isVeryLong ? 4.2 : isLong ? 4.6 : 5.0;
-      productLineClamp  = isVeryLong ? 3 : 2;
-      barcodeHeightMm   = isVeryLong ? 7.2 : isLong ? 7.6 : 8.2;
-      textHeightMm      = 2.6;
-      barcodeFontPt     = 6.0;
-      letterSpacingPx   = "0.4px";
-    } else if (isMedium) {
-      const is25mm = label_height_mm <= 26;
-      if (is25mm) {
-        // 38 × 25 mm
-        storeHeightMm     = 2.8;
-        storeNameFontPt   = 7.0;
-        productHeightMm   = 5.6;
-        productNameFontPt = isVeryLong ? 5.2 : isLong ? 5.8 : 6.5;
-        productLineClamp  = isVeryLong ? 3 : 2;
-        barcodeHeightMm   = isVeryLong ? 9.5 : isLong ? 10.2 : 11.2;
-        textHeightMm      = 2.8;
-        barcodeFontPt     = 7.0;
-        letterSpacingPx   = "0.6px";
-      } else {
-        // 50 × 30 mm (Standard)
-        storeHeightMm     = 3.2;
-        storeNameFontPt   = 8.5;
-        productHeightMm   = isVeryLong ? 7.5 : isLong ? 6.8 : 6.0;
-        productNameFontPt = isVeryLong ? 5.8 : isLong ? 6.5 : isMid ? 7.0 : 7.6;
-        productLineClamp  = isVeryLong ? 3 : 2;
-        barcodeHeightMm   = isVeryLong ? 12.8 : isLong ? 13.6 : 14.5;
-        textHeightMm      = 3.2;
-        barcodeFontPt     = 8.0;
-        letterSpacingPx   = "0.8px";
-      }
-    } else {
-      // 60 × 40 mm, 100 × 50 mm (Large labels)
-      storeHeightMm     = label_height_mm >= 45 ? 5.5 : 4.2;
-      storeNameFontPt   = label_height_mm >= 45 ? 12.0 : 10.0;
-      productHeightMm   = label_height_mm >= 45 ? 12.0 : 9.0;
-      productNameFontPt = isVeryLong ? 7.5 : isLong ? 8.5 : 10.0;
-      productLineClamp  = 3;
-      barcodeHeightMm   = label_height_mm >= 45 ? 22.0 : 19.0;
-      textHeightMm      = label_height_mm >= 45 ? 5.5 : 4.2;
-      barcodeFontPt     = label_height_mm >= 45 ? 11.0 : 9.0;
-      letterSpacingPx   = "1.2px";
-    }
+    // Dynamic typography and barcode allocation
+    const storeNameFontPt = Math.max(7, Math.min(18, Math.round(label_height_mm * 0.38 * 10) / 10));
+    const barcodeFontPt   = Math.max(6.5, Math.min(16, Math.round(label_height_mm * 0.34 * 10) / 10));
+    const barcodeHeightMm = Math.max(4, Math.round(printH * 0.58 * 10) / 10);
+    const letterSpacingPx = isSmall ? "0.4px" : "1.2px";
 
     // Generate barcode SVG using JsBarcode (detached DOM element)
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     try {
       JsBarcode(svgEl, barcode, {
         format:       barcode_symbology as string,
-        displayValue: false,
+        displayValue: false,               // we render the text ourselves for precise placement
+        height:       barcodeHeightMm * 3.7795, // mm → px (96dpi: 1mm = 3.7795px)
+        width:        1,                   // bar width multiplier — auto scaled via CSS
         margin:       0,
-        flat:         true,
-        width:        2,
-        height:       Math.round(barcodeHeightMm * 3.7795),
+        background:   "#ffffff",
         lineColor:    "#000000",
       });
+      // Ensure barcode bars stretch to fill printable width regardless of barcode length
       svgEl.setAttribute("preserveAspectRatio", "none");
-      svgEl.setAttribute("style", `width: 100%; height: ${barcodeHeightMm}mm; display: block;`);
     } catch {
-      // Fallback placeholder
-      svgEl.setAttribute("viewBox", "0 0 100 30");
+      // Invalid barcode — generate an error label
+      return this._buildErrorDocument(barcode, label_width_mm, label_height_mm);
     }
-
-    const barcodeSvgHtml = svgEl.outerHTML;
+    const svgHTML = svgEl.outerHTML;
 
     // Build one label block
     const storeNameLine = (show_store_name && storeName)
       ? `<div class="store-name">${this._esc(storeName)}</div>`
-      : "";
-    const productNameLine = productName
-      ? `<div class="product-name">${this._esc(productName)}</div>`
       : "";
     const barcodeTextLine = show_barcode_text
       ? `<div class="barcode-text">${this._esc(barcode)}</div>`
       : "";
 
     const singleLabel = `
-      <div class="label-page">
-        ${storeNameLine}
-        ${productNameLine}
-        <div class="barcode-svg">${barcodeSvgHtml}</div>
-        ${barcodeTextLine}
+      <div class="label">
+        <div class="label-inner">
+          ${storeNameLine}
+          <div class="barcode-svg">${svgHTML}</div>
+          ${barcodeTextLine}
+        </div>
       </div>`;
 
     const labels = Array.from({ length: Math.max(1, quantity) })
@@ -238,159 +172,173 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       .join("\n");
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
-  <title>Barcode Print - ${barcode}</title>
+  <title>${this._esc(barcode)}</title>
   <style>
     /* ── Reset ── */
-    *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Page setup — exact mm sizing, zero browser margin ── */
+    /* ── Page = exactly one physical label ── */
     @page {
       size: ${label_width_mm}mm ${label_height_mm}mm;
-      margin: 0;
+      margin: 0mm;
     }
 
     @media print {
-      *, *::before, *::after {
-        box-sizing: border-box !important;
+      @page {
+        size: ${label_width_mm}mm ${label_height_mm}mm;
+        margin: 0mm;
       }
       html, body {
+        width:  100% !important;
+        height: auto !important;
+        margin: 0mm !important;
+        padding: 0mm !important;
+        background: #fff !important;
+        overflow: visible !important;
+      }
+      .label {
         width:  ${label_width_mm}mm !important;
         height: ${label_height_mm}mm !important;
-        max-width:  ${label_width_mm}mm !important;
-        max-height: ${label_height_mm}mm !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: #ffffff !important;
-        overflow: hidden !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      .label-page {
         page-break-after: always !important;
+        page-break-inside: avoid !important;
         break-after: page !important;
+        break-inside: avoid !important;
       }
-      .label-page:last-child {
+      .label:last-child {
         page-break-after: auto !important;
         break-after: auto !important;
       }
     }
 
-    /* ── Screen fallback ── */
-    body {
-      background: #f3f4f6;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 8px 0;
-      gap: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    html, body {
+      width:  100%;
+      height: auto;
+      background: #fff;
+      margin: 0;
+      padding: 0;
     }
 
-    /* ── Label card container ── */
-    .label-page {
+    /* ── One label = one page ── */
+    .label {
+      display: block !important;
       width:  ${label_width_mm}mm !important;
       height: ${label_height_mm}mm !important;
-      max-width:  ${label_width_mm}mm !important;
-      max-height: ${label_height_mm}mm !important;
-      background: #ffffff !important;
+      page-break-after: always !important;
+      page-break-inside: avoid !important;
+      break-after: page !important;
+      break-inside: avoid !important;
       overflow: hidden !important;
       box-sizing: border-box !important;
-      padding: ${margin_top_mm}mm ${margin_right_mm}mm ${margin_bottom_mm}mm ${margin_left_mm}mm !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-      align-items: center !important;
-      color: #000000 !important;
+    }
+    .label:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
     }
 
-    /* ── Store name — pinned to top ── */
+    /* ── Printable inner area (respects margins) ── */
+    .label-inner {
+      width:   100% !important;
+      height:  100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      padding-top:    ${margin_top_mm}mm !important;
+      padding-bottom: ${margin_bottom_mm}mm !important;
+      padding-left:   ${margin_left_mm}mm !important;
+      padding-right:  ${margin_right_mm}mm !important;
+    }
+
+    /* ── Store name — pinned to top, dynamic font size ── */
     .store-name {
       flex-shrink: 0;
       width:       100%;
-      height:      ${storeHeightMm}mm;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size:   ${storeNameFontPt}pt;
       font-weight: 800;
       text-transform: uppercase;
       text-align:  center;
       white-space: nowrap;
       overflow:    hidden;
-      text-overflow: ellipsis;
-      line-height: ${storeHeightMm}mm;
-      letter-spacing: 0.2px;
-      color: #000000 !important;
-    }
-
-    /* ── Product name — left-aligned with clean word wrapping ── */
-    .product-name {
-      flex-shrink: 0;
-      width:       100%;
-      height:      ${productHeightMm}mm;
-      max-height:  ${productHeightMm}mm;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size:   ${productNameFontPt}pt;
-      font-weight: 600;
-      text-transform: none;
-      text-align:  left;
       line-height: 1.15;
-      display:     -webkit-box;
-      -webkit-line-clamp: ${productLineClamp};
-      -webkit-box-orient: vertical;
-      overflow:    hidden;
-      word-break:  normal;
-      overflow-wrap: break-word;
-      color: #000000 !important;
+      letter-spacing: 0.2px;
     }
 
-    /* ── Barcode SVG — full height prominent barcode ── */
+    /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
     .barcode-svg {
-      flex-shrink: 0;
+      flex:       1;
       width:      100%;
       max-width:  ${printW}mm;
-      height:     ${barcodeHeightMm}mm !important;
-      max-height: ${barcodeHeightMm}mm !important;
-      display:    block;
+      display:    flex;
+      align-items: center;
+      justify-content: center;
       overflow:   hidden;
+      min-height: 0;
+      padding:    ${isSmall ? "0.2mm" : "0.5mm"} 0;
     }
     .barcode-svg svg {
-      width:      100% !important;
-      height:     ${barcodeHeightMm}mm !important;
-      max-height: ${barcodeHeightMm}mm !important;
-      max-width:  ${printW}mm !important;
-      display:    block !important;
+      width:      100%;
+      height:     100%;
+      max-height: 100%;
+      max-width:  ${printW}mm;
+      display:    block;
     }
 
-    /* ── Human-readable barcode number — pinned to bottom ── */
+    /* ── Human-readable barcode number — pinned to bottom, dynamic font size ── */
     .barcode-text {
       flex-shrink:    0;
       width:          100%;
-      height:         ${textHeightMm}mm;
-      font-family:    "Courier New", Courier, monospace;
+      font-family:    ${font_family}, "Courier New", monospace;
       font-size:      ${barcodeFontPt}pt;
-      font-weight:    800;
+      font-weight:    700;
       text-align:     center;
       letter-spacing: ${letterSpacingPx};
       white-space:    nowrap;
-      overflow:       hidden;
-      line-height:    ${textHeightMm}mm;
-      color: #000000 !important;
+      line-height:    1.15;
     }
   </style>
 </head>
 <body>
   ${labels}
   <script>
+    function fitTextElements() {
+      // 1. Fit all Store Name elements across all label copies
+      var storeNames = document.querySelectorAll('.store-name');
+      storeNames.forEach(function(el) {
+        var maxW = el.clientWidth;
+        if (!maxW) return;
+        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 12;
+        var minSize = 5;
+        while (el.scrollWidth > maxW && curSize > minSize) {
+          curSize -= 0.3;
+          el.style.fontSize = curSize + 'px';
+        }
+      });
+
+      // 2. Fit all Barcode Text elements across all label copies
+      var barcodeTexts = document.querySelectorAll('.barcode-text');
+      barcodeTexts.forEach(function(el) {
+        var maxW = el.clientWidth;
+        if (!maxW) return;
+        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 12;
+        var minSize = 5;
+        while (el.scrollWidth > maxW && curSize > minSize) {
+          curSize -= 0.3;
+          el.style.fontSize = curSize + 'px';
+        }
+      });
+    }
+
     function doPrint() {
+      fitTextElements();
       setTimeout(function() {
         window.print();
-      }, 100);
+      }, 80);
     }
 
     if (document.readyState === 'complete') {

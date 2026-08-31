@@ -285,8 +285,8 @@ function ProductDetailModal({ product, open, onClose, onPrintBarcode }: ProductD
 // ─── Barcode Print Modal (inline shortcut) ────────────────────────────────────
 
 const INVENTORY_SIZE_PRESETS = [
-  { id: "50x30",  label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
   { id: "30x20",  label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
+  { id: "50x30",  label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
   { id: "38x25",  label: "38 × 25 mm",                     w: 38, h: 25 },
   { id: "60x40",  label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
   { id: "100x50", label: "100 × 50 mm (Large)",            w: 100, h: 50 },
@@ -294,11 +294,11 @@ const INVENTORY_SIZE_PRESETS = [
 ] as const;
 
 function normalizeInventoryPresetKey(key: string | null | undefined): string {
-  if (!key) return "50x30";
+  if (!key) return "30x20";
   const cleaned = key.replace(/[\s\u00d7]/g, "x").toLowerCase();
   if (INVENTORY_SIZE_PRESETS.some((p) => p.id === cleaned)) return cleaned;
   if (cleaned === "custom") return "custom";
-  return "50x30";
+  return "30x20";
 }
 
 interface BarcodePrintModalProps {
@@ -367,10 +367,9 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
       const engine = getPrinterEngine(activeConfig);
       await engine.print(
         {
-          barcode:     product.barcode,
-          storeName:   activeConfig.storeName,
-          productName: product.product_name,
-          quantity:    clampedCount,
+          barcode:   product.barcode,
+          storeName: activeConfig.storeName,
+          quantity:  clampedCount,
         },
         activeConfig
       );
@@ -385,55 +384,17 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
 
   if (!product) return null;
 
-  const isSmall  = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
-  const isMedium = !isSmall && (activeConfig.labelWidthMm <= 55 || activeConfig.labelHeightMm <= 35);
-  const scale    = isSmall ? 6.2 : 4.6;
-  const cardW    = activeConfig.labelWidthMm * scale;
-  const cardH    = activeConfig.labelHeightMm * scale;
-  const nameLen  = (product.product_name || "").length;
-  const isVeryLong = nameLen > 90;
-  const isLong     = nameLen > 50;
-  const isMid      = nameLen > 30;
+  const isSmall = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
+  const scale   = isSmall ? 4.2 : 3.2;
+  const cardW   = activeConfig.labelWidthMm  * scale;
+  const cardH   = activeConfig.labelHeightMm * scale;
+  const pt      = activeConfig.marginTopMm    * scale;
+  const pb      = activeConfig.marginBottomMm * scale;
+  const pl      = activeConfig.marginLeftMm   * scale;
+  const pr      = activeConfig.marginRightMm  * scale;
 
-  let storeFontSize: number;
-  let productFontSize: number;
-  let barcodeFontSize: number;
-  let barcodeHeightMm: number;
-  let productLineClamp: number;
-  let letterSpacingPx: string;
-
-  if (isSmall) {
-    storeFontSize    = 8.5;
-    barcodeFontSize  = 8.0;
-    productFontSize  = isVeryLong ? 6.5 : isLong ? 7.2 : 8.0;
-    productLineClamp = isVeryLong ? 3 : 2;
-    barcodeHeightMm  = isVeryLong ? 7.2 : isLong ? 7.6 : 8.2;
-    letterSpacingPx  = "0.4px";
-  } else if (isMedium) {
-    const is25mm     = activeConfig.labelHeightMm <= 26;
-    if (is25mm) {
-      storeFontSize    = 9.5;
-      barcodeFontSize  = 9.0;
-      productFontSize  = isVeryLong ? 7.8 : isLong ? 8.5 : 9.5;
-      productLineClamp = isVeryLong ? 3 : 2;
-      barcodeHeightMm  = isVeryLong ? 9.5 : isLong ? 10.2 : 11.2;
-      letterSpacingPx  = "0.6px";
-    } else {
-      storeFontSize    = 11.0;
-      barcodeFontSize  = 10.5;
-      productFontSize  = isVeryLong ? 8.5 : isLong ? 9.5 : isMid ? 10.2 : 11.0;
-      productLineClamp = isVeryLong ? 3 : 2;
-      barcodeHeightMm  = isVeryLong ? 12.8 : isLong ? 13.6 : 14.5;
-      letterSpacingPx  = "0.8px";
-    }
-  } else {
-    storeFontSize    = activeConfig.labelHeightMm >= 45 ? 14.0 : 12.5;
-    barcodeFontSize  = activeConfig.labelHeightMm >= 45 ? 13.0 : 11.5;
-    productFontSize  = isVeryLong ? 10.0 : isLong ? 11.5 : 13.0;
-    productLineClamp = 3;
-    barcodeHeightMm  = activeConfig.labelHeightMm >= 45 ? 22.0 : 19.0;
-    letterSpacingPx  = "1.2px";
-  }
+  const storeFontSize   = Math.max(9, Math.min(18, activeConfig.fontSizePt * 1.15));
+  const barcodeFontSize = Math.max(8, Math.min(16, activeConfig.fontSizePt * 0.95));
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -525,58 +486,33 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
               className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm select-none shrink-0"
               style={{
                 width: cardW,
-                maxWidth: cardW,
-                minWidth: cardW,
                 height: cardH,
-                maxHeight: cardH,
-                minHeight: cardH,
-                paddingTop: Math.max(3, activeConfig.marginTopMm * scale),
-                paddingBottom: Math.max(3, activeConfig.marginBottomMm * scale),
-                paddingLeft: Math.max(4, activeConfig.marginLeftMm * scale),
-                paddingRight: Math.max(4, activeConfig.marginRightMm * scale),
+                paddingTop: pt,
+                paddingBottom: pb,
+                paddingLeft: pl,
+                paddingRight: pr,
                 boxSizing: "border-box",
               }}
             >
               {activeConfig.showStoreName && activeConfig.storeName && (
                 <p
-                  className="font-black uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
-                  style={{ fontSize: storeFontSize }}
+                  className="font-extrabold uppercase text-center leading-tight truncate w-full flex-shrink-0 mb-0.5 tracking-tight text-gray-900"
+                  style={{ fontFamily: activeConfig.fontFamily, fontSize: storeFontSize }}
                   title={activeConfig.storeName}
                 >
                   {activeConfig.storeName}
                 </p>
               )}
-              {product.product_name && (
-                <p
-                  className="font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans leading-tight"
-                  style={{
-                    fontSize: productFontSize,
-                    marginTop: isSmall ? "1px" : "2px",
-                    marginBottom: isSmall ? "1px" : "2px",
-                    display: "-webkit-box",
-                    WebkitLineClamp: productLineClamp,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                    wordBreak: "normal",
-                    overflowWrap: "break-word",
-                  }}
-                  title={product.product_name}
-                >
-                  {product.product_name}
-                </p>
-              )}
-              <div
-                className="w-full max-w-full flex items-center justify-center shrink-0 overflow-hidden my-0.5"
-                style={{ height: Math.round(barcodeHeightMm * scale * 0.85) }}
-              >
+              <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden my-0.5">
                 <svg ref={svgCallbackRef} className="w-full h-full block" />
               </div>
               {activeConfig.showBarcodeText && (
                 <p
-                  className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5 truncate w-full max-w-full min-w-0"
+                  className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5"
                   style={{
+                    fontFamily: activeConfig.fontFamily,
                     fontSize: barcodeFontSize,
-                    letterSpacing: letterSpacingPx,
+                    letterSpacing: isSmall ? "0.4px" : "1.2px",
                   }}
                 >
                   {product.barcode}

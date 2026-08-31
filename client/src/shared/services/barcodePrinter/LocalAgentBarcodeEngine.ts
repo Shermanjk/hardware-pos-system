@@ -51,7 +51,6 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
       {
         barcode: "TEST-12345",
         storeName: config.storeName || "ISRA HARDWARE TRADING",
-        productName: "TEST PRODUCT 100MM",
         quantity: 1,
       },
       config
@@ -67,7 +66,6 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
     const h = config.labelHeightMm || 20;
     const qty = Math.max(1, Math.min(500, item.quantity));
     const store = (item.storeName || config.storeName || "").trim();
-    const productName = (item.productName || "").trim();
     const barcode = item.barcode.trim();
 
     // 203 DPI = 8 dots per mm
@@ -76,6 +74,19 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
 
     // Dynamic layout calculations based on label dimensions
     const isSmall = w <= 35 || h <= 22;
+    
+    // Top text: Store Name
+    const storeY = isSmall ? 10 : 16;
+    const storeFont = isSmall ? "1" : "2"; // TSPL Font 1 (8x12), Font 2 (12x20)
+
+    // Barcode dimensions & position
+    const barcodeY = isSmall ? Math.round(heightDots * 0.28) : Math.round(heightDots * 0.32);
+    const barcodeHeight = isSmall
+      ? Math.max(30, Math.round(heightDots * 0.44))
+      : Math.max(40, Math.round(heightDots * 0.48));
+    
+    // Centering offset for barcode (Code 128)
+    const barcodeX = Math.max(10, Math.round(widthDots * 0.06));
 
     let cmd = "";
     cmd += `SIZE ${w} mm, ${h} mm\r\n`;
@@ -84,73 +95,18 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
     cmd += `REFERENCE 0,0\r\n`;
     cmd += `CLS\r\n`;
 
-    // 1. Store Name Header (centered via TSPL TEXT command with alignment = 2)
-    const storeFont = isSmall ? "1" : "2"; // TSPL Font 1 (8x12), Font 2 (12x20)
-    const storeY = isSmall ? 6 : 10;
+    // Store Name Header (centered via TSPL TEXT command with alignment)
     if (config.showStoreName && store) {
-      const cleanStore = store.replace(/"/g, "'").substring(0, isSmall ? 28 : 34);
+      // Clean special characters for TSPL text
+      const cleanStore = store.replace(/"/g, "'").substring(0, 32);
       const centerX = Math.round(widthDots / 2);
+      // Format: TEXT x,y,"font",rotation,x-mul,y-mul,alignment,"content" (alignment 2 = center)
       cmd += `TEXT ${centerX},${storeY},"${storeFont}",0,1,1,2,"${cleanStore}"\r\n`;
     }
 
-    // 2. Product Name (Left-Aligned, alignment = 1)
-    let barcodeY = isSmall ? Math.round(heightDots * 0.28) : Math.round(heightDots * 0.32);
-    let barcodeHeight = isSmall
-      ? Math.max(30, Math.round(heightDots * 0.44))
-      : Math.max(40, Math.round(heightDots * 0.48));
-
-    if (productName) {
-      const cleanProduct = productName.replace(/"/g, "'");
-      const leftMarginX = isSmall ? 10 : Math.max(12, Math.round(widthDots * 0.04));
-
-      if (isSmall) {
-        // Small label (30x20): Natural wrapping — up to 2 lines
-        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~26 chars for Font 1
-        const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 2);
-
-        if (lines.length <= 1) {
-          cmd += `TEXT ${leftMarginX},20,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
-          barcodeY = 36;
-          barcodeHeight = Math.max(30, heightDots - barcodeY - (config.showBarcodeText ? 28 : 10));
-        } else {
-          cmd += `TEXT ${leftMarginX},18,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},30,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          barcodeY = 46;
-          barcodeHeight = Math.max(26, heightDots - barcodeY - (config.showBarcodeText ? 26 : 8));
-        }
-      } else {
-        // Standard label (50x30): Font 1 (8x12 dots) for smaller, proportional product name distinct from Store Name
-        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~45 chars for Font 1
-        const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 4);
-
-        if (lines.length <= 1) {
-          cmd += `TEXT ${leftMarginX},32,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
-          barcodeY = 52;
-          barcodeHeight = Math.max(40, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
-        } else if (lines.length === 2) {
-          cmd += `TEXT ${leftMarginX},30,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},44,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          barcodeY = 64;
-          barcodeHeight = Math.max(36, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
-        } else if (lines.length === 3) {
-          cmd += `TEXT ${leftMarginX},28,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},42,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},56,"1",0,1,1,1,"${lines[2]}"\r\n`;
-          barcodeY = 76;
-          barcodeHeight = Math.max(32, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
-        } else {
-          cmd += `TEXT ${leftMarginX},26,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},38,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},50,"1",0,1,1,1,"${lines[2]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},62,"1",0,1,1,1,"${lines[3]}"\r\n`;
-          barcodeY = 82;
-          barcodeHeight = Math.max(30, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
-        }
-      }
-    }
-
-    // 3. Barcode: Code 128
-    const barcodeX = Math.max(10, Math.round(widthDots * 0.06));
+    // Barcode: Code 128
+    // Format: BARCODE x,y,"type",height,human_readable,rotation,narrow,wide,"content"
+    // human_readable: 1 (bottom), 0 (none)
     const readable = config.showBarcodeText ? 1 : 0;
     const narrow = isSmall ? 2 : 2;
     const wide = isSmall ? 2 : 3;
@@ -160,44 +116,5 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
     cmd += `PRINT 1,${qty}\r\n`;
 
     return new TextEncoder().encode(cmd);
-  }
-
-  /** Natural word wrapping helper that splits into up to maxLines lines when reaching the right edge */
-  private _wrapWords(text: string, maxLen: number, maxLines: number = 3): string[] {
-    const trimmed = text.trim();
-    if (!trimmed) return [];
-    if (trimmed.length <= maxLen) {
-      return [trimmed];
-    }
-    const words = trimmed.split(/\s+/);
-    const lines: string[] = [];
-    let currentLine = "";
-
-    for (let i = 0; i < words.length; i++) {
-      const candidate = currentLine ? `${currentLine} ${words[i]}` : words[i];
-      if (candidate.length <= maxLen) {
-        currentLine = candidate;
-      } else {
-        if (currentLine) {
-          lines.push(currentLine);
-          currentLine = words[i];
-          if (lines.length === maxLines - 1) {
-            const remaining = words.slice(i).join(" ");
-            const lastLine = remaining.length > maxLen
-              ? remaining.substring(0, maxLen - 2) + ".."
-              : remaining;
-            lines.push(lastLine);
-            return lines;
-          }
-        } else {
-          lines.push(candidate.substring(0, maxLen));
-          currentLine = candidate.substring(maxLen);
-        }
-      }
-    }
-    if (currentLine && lines.length < maxLines) {
-      lines.push(currentLine);
-    }
-    return lines;
   }
 }
