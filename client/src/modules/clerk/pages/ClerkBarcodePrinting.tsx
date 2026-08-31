@@ -357,7 +357,7 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Number of Labels</label>
             <div className="flex items-center gap-2">
               <Button
-                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold"
+                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold text-gray-900 bg-white border-gray-300 hover:bg-gray-100"
                 onClick={() => setQuantity((n) => Math.max(1, n - 1))}
                 disabled={printing}
               >−</Button>
@@ -365,22 +365,22 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
                 type="number" min={1} max={500}
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
-                className="h-10 w-20 text-center font-bold text-lg"
+                className="h-10 w-20 text-center font-bold text-lg text-gray-900 bg-white border-gray-300"
                 disabled={printing}
               />
               <Button
-                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold"
+                variant="outline" size="sm" className="h-10 w-10 p-0 text-lg font-bold text-gray-900 bg-white border-gray-300 hover:bg-gray-100"
                 onClick={() => setQuantity((n) => Math.min(500, n + 1))}
                 disabled={printing}
               >+</Button>
-              <span className="text-xs text-gray-400 ml-1">max 500</span>
+              <span className="text-xs text-gray-500 ml-1">max 500</span>
             </div>
           </div>
         </div>
 
         <div className="flex justify-between gap-3 pt-2 border-t border-gray-100">
-          <Button variant="outline" onClick={onClose} disabled={printing} className="gap-2">
-            <X className="h-4 w-4" /> Cancel
+          <Button variant="outline" onClick={onClose} disabled={printing} className="gap-2 text-gray-700 bg-white border-gray-300 hover:bg-gray-100">
+            <X className="h-4 w-4 text-gray-600" /> Cancel
           </Button>
           <Button
             onClick={handlePrint}
