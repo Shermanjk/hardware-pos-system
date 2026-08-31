@@ -272,11 +272,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       color: #000000 !important;
     }
 
-    /* ── Product name — left-aligned with natural wrapping ── */
+    /* ── Product name — left-aligned with natural whole-word wrapping ── */
     .product-name {
       flex-shrink: 0;
       width:       100%;
-      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       font-size:   ${productNameFontPt}pt;
       font-weight: 600;
       text-transform: none;
@@ -286,7 +286,8 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       -webkit-line-clamp: ${isSmall ? 2 : 3};
       -webkit-box-orient: vertical;
       overflow:    hidden;
-      word-break:  break-word;
+      word-break:  normal;
+      overflow-wrap: break-word;
       margin-top:  0.2mm;
       margin-bottom: 0.2mm;
       color: #000000 !important;
@@ -315,7 +316,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     .barcode-text {
       flex-shrink:    0;
       width:          100%;
-      font-family:    ${font_family}, "Courier New", monospace;
+      font-family:    "Courier New", Courier, monospace;
       font-size:      ${barcodeFontPt}pt;
       font-weight:    700;
       text-align:     center;

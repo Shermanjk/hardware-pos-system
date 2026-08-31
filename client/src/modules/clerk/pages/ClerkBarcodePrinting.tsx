@@ -121,13 +121,14 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       {product.product_name && (
         <p
           className={`font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans ${
-            isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
+            isSmall ? "line-clamp-2 leading-tight" : "line-clamp-3 leading-snug"
           }`}
           style={{
             fontSize: productFontSize,
             marginTop: isSmall ? "1px" : "2px",
             marginBottom: isSmall ? "1px" : "2px",
-            wordBreak: "break-word",
+            wordBreak: "normal",
+            overflowWrap: "break-word",
           }}
           title={product.product_name}
         >

@@ -92,7 +92,7 @@ export function createDynamicBarcodeConfig(
     storeName:        overrides?.storeName        ?? "ISRA HARDWARE TRADING",
     showStoreName:    overrides?.showStoreName    ?? true,
     showBarcodeText:  overrides?.showBarcodeText  ?? true,
-    fontFamily:       overrides?.fontFamily       ?? "monospace",
+    fontFamily:       overrides?.fontFamily       ?? "Arial, Helvetica, sans-serif",
     fontSizePt,
   };
 }
