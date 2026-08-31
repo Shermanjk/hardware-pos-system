@@ -15,6 +15,7 @@ import {
     lookupProduct, type ProductRecord,
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import { formatQuantity } from "@/shared/utils/quantityFormat";
@@ -173,6 +174,8 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
     setErrors((e) => ({ ...e, product: "" }));
   };
 
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
   // Barcode scan — exact match only, via API lookup
   const handleBarcodeScan = useCallback(async (val: string) => {
     if (!val.trim()) return;
@@ -189,6 +192,13 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
       setLookupError("Failed to scan barcode.");
     }
   }, []);
+
+  const { handleKeyDown: handleBarcodeKeyDown, handleFocus: handleBarcodeFocus } = useBarcodeScanner({
+    setValue: (val) => { setBarcodeInput(val); setLookupError(""); },
+    onScan: handleBarcodeScan,
+    inputRef: barcodeInputRef,
+    enabled: !selectedProduct,
+  });
 
   // Derived new quantity preview
   const qtyNum = parseInt(qty, 10) || 0;
@@ -312,10 +322,12 @@ function AdjustmentModal({ open, onClose, prefillProduct, onSaved }: AdjustmentM
                   <div className="relative">
                     <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none" />
                     <Input
+                      ref={barcodeInputRef}
                       placeholder="Scan barcode then press Enter…"
                       value={barcodeInput}
                       onChange={(e) => { setBarcodeInput(e.target.value); setLookupError(""); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeScan(barcodeInput); } }}
+                      onKeyDown={handleBarcodeKeyDown}
+                      onFocus={handleBarcodeFocus}
                       className="pl-9 h-10 font-mono bg-blue-50 border-blue-200 focus:border-blue-400 placeholder:text-blue-400"
                     />
                   </div>

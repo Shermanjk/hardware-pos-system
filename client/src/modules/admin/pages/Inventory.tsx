@@ -29,6 +29,7 @@ import {
     X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -687,6 +688,25 @@ export default function Inventory() {
     loadItems(search);
   });
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    setSearch(barcode);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    loadItems(barcode);
+  }, [loadItems]);
+
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: (val) => {
+      setSearch(val);
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      searchTimeout.current = setTimeout(() => loadItems(val), 350);
+    },
+    onScan: handleBarcodeScan,
+    inputRef: searchInputRef,
+    enableGlobalScan: !detailsItem && !logItem,
+  });
+
   const handleSearchChange = (val: string) => {
     setSearch(val);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -740,8 +760,11 @@ export default function Inventory() {
           <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
             <Search className="h-4 w-4 text-slate-400 shrink-0" />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={handleSearchFocus}
               placeholder="Search product or barcode…"
               className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
             />

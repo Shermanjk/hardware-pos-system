@@ -29,6 +29,7 @@ import {
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantityParts } from "@/shared/utils/quantityFormat";
 import axios from "axios";
@@ -213,6 +214,15 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
     barcodeInputRef.current?.select();
   };
 
+  const isStore = form.barcode_source === "store";
+
+  const modalScanner = useBarcodeScanner({
+    setValue: (val) => set("barcode", val.replace(/\s/g, "")),
+    onScan: (val) => set("barcode", val.replace(/\s/g, "")),
+    inputRef: barcodeInputRef,
+    enabled: !isStore,
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clientErrors = validateForm(form);
@@ -255,8 +265,6 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
       setIsLoading(false);
     }
   };
-
-  const isStore = form.barcode_source === "store";
 
   return (
     <>
@@ -449,7 +457,11 @@ function ProductFormModal({ mode, open, initial, categories, suppliers, units, o
                   <div className="flex gap-2">
                     <Input ref={barcodeInputRef} value={form.barcode}
                       onChange={(e) => set("barcode", e.target.value.replace(/\s/g, ""))}
-                      onKeyDown={(e) => e.key === " " && e.preventDefault()}
+                      onKeyDown={(e) => {
+                        if (e.key === " ") e.preventDefault();
+                        modalScanner.handleKeyDown(e);
+                      }}
+                      onFocus={modalScanner.handleFocus}
                       placeholder="Scan or enter manufacturer barcode"
                       disabled={isLoading}
                       className={`flex-1 ${errors.barcode ? "border-red-400" : "border-gray-300"}`} />
@@ -913,6 +925,25 @@ export default function Products() {
     loadProducts(search);
   });
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    setSearch(barcode);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    loadProducts(barcode);
+  }, [loadProducts]);
+
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: (val) => {
+      setSearch(val);
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      searchTimeout.current = setTimeout(() => loadProducts(val), 350);
+    },
+    onScan: handleBarcodeScan,
+    inputRef: searchInputRef,
+    enableGlobalScan: !showAdd && !editTarget && !viewTarget && !deleteTarget,
+  });
+
   const handleSearchChange = (val: string) => {
     setSearch(val);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -991,9 +1022,15 @@ export default function Products() {
           {/* Search */}
           <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
             <Search className="h-4 w-4 text-slate-400 shrink-0" />
-            <input value={search} onChange={(e) => handleSearchChange(e.target.value)}
+            <input
+              ref={searchInputRef}
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={handleSearchFocus}
               placeholder="Search name or barcode…"
-              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 min-w-0 text-slate-800 font-medium" />
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 min-w-0 text-slate-800 font-medium"
+            />
             {search && (
               <button onClick={() => handleSearchChange("")} className="text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />

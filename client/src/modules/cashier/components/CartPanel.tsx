@@ -78,6 +78,11 @@ export default function CartPanel({
   const lastScanKeyTimeRef = useRef(0);
   const scanIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Focused input scanner burst detection refs
+  const lastFocusedKeyTimeRef = useRef(0);
+  const focusedBurstBufferRef = useRef("");
+  const isFocusedBurstingRef = useRef(false);
+
   const loadDiscounts = async () => {
     setDiscountsLoading(true);
     try {
@@ -337,6 +342,35 @@ export default function CartPanel({
   }, [noShift, barcodeRef, handleScanComplete]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // ── Focused input burst detection & replacement ─────────────────────────
+    const now = Date.now();
+    const gap = now - lastFocusedKeyTimeRef.current;
+    lastFocusedKeyTimeRef.current = now;
+
+    if (e.key === "Enter") {
+      isFocusedBurstingRef.current = false;
+      focusedBurstBufferRef.current = "";
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (gap > SCAN_IDLE_MS) {
+        isFocusedBurstingRef.current = false;
+        focusedBurstBufferRef.current = e.key;
+      } else if (gap < SCAN_GAP_MS) {
+        if (!isFocusedBurstingRef.current) {
+          isFocusedBurstingRef.current = true;
+          focusedBurstBufferRef.current += e.key;
+          setBarcodeInput(focusedBurstBufferRef.current);
+          e.preventDefault();
+        } else {
+          focusedBurstBufferRef.current += e.key;
+          setBarcodeInput(focusedBurstBufferRef.current);
+          e.preventDefault();
+        }
+      } else {
+        isFocusedBurstingRef.current = false;
+        focusedBurstBufferRef.current = "";
+      }
+    }
+
     // ── Search dropdown arrow navigation & selection ────────────────────────
     if (showDropdown && searchResults.length > 0) {
       if (e.key === "ArrowDown") {
@@ -498,7 +532,10 @@ export default function CartPanel({
             onChange={(e) => { if (!noShift) handleBarcodeChange(e.target.value); }}
             onKeyDown={handleKeyDown}
             onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-            onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+            onFocus={(e) => {
+              if (searchResults.length > 0) setShowDropdown(true);
+              try { e.currentTarget.select(); } catch {}
+            }}
             placeholder={
               noShift
                 ? "Start your shift to begin scanning…"

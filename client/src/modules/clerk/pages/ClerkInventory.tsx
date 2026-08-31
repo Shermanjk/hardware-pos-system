@@ -21,6 +21,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getInventoryLogs, type InventoryLog } from "@/shared/api/inventoryApi";
 import { deriveStatus, getCategories, getProducts, getSuppliers, lookupProduct, type ProductRecord } from "@/shared/api/productsApi";
 import { getStoreSettings, type StoreSettings } from "@/shared/api/settingsApi";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import {
     BARCODE_PRINTER_CONFIG,
@@ -835,6 +836,33 @@ export default function ClerkInventory() {
 
   // ─── Barcode scan handler ───────────────────────────────────────────────────
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBarcodeSearchScan = useCallback((scannedVal: string) => {
+    const val = scannedVal.trim();
+    if (!val) return;
+    const isBarcode = /^[\d\w-]+$/.test(val);
+    if (isBarcode && val.length >= 4) {
+      const results = products.filter(
+        (p) => p.barcode.toLowerCase() === val.toLowerCase()
+      );
+      if (results.length >= 1) {
+        setDetailProduct(results[0]);
+        setDetailOpen(true);
+        setSearch("");
+        return;
+      }
+    }
+    setSearch(val);
+  }, [products]);
+
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: setSearch,
+    onScan: handleBarcodeSearchScan,
+    inputRef: searchInputRef,
+    enableGlobalScan: !detailOpen && !printOpen && !logOpen,
+  });
+
   const handleBarcodeScan = useCallback(async () => {
     const val = barcodeInput.trim();
     if (!val) return;
@@ -975,32 +1003,12 @@ export default function ClerkInventory() {
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
+                ref={searchInputRef}
                 placeholder="Search by product name or scan barcode…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const val = search.trim();
-                    if (val) {
-                      const isBarcode = /^[\d\w-]+$/.test(val);
-                      if (isBarcode && val.length >= 4) {
-                        setBarcodeInput(val);
-                        setTimeout(() => {
-                          const results = products.filter(p => 
-                            p.barcode.toLowerCase() === val.toLowerCase()
-                          );
-                          if (results.length >= 1) {
-                            setDetailProduct(results[0]);
-                            setDetailOpen(true);
-                            setSearch("");
-                          } else {
-                            toast.error("Product not found. Try a different search term.");
-                          }
-                        }, 50);
-                      }
-                    }
-                  }
-                }}
+                onKeyDown={handleSearchKeyDown}
+                onFocus={handleSearchFocus}
                 className="pl-10 pr-20 h-10 text-sm border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded">

@@ -23,6 +23,7 @@ import {
     type Supplier,
 } from "@/shared/api/productsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { formatQuantity } from "@/shared/utils/quantityFormat";
 import {
@@ -652,6 +653,16 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
     }
   };
 
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: (val) => handleInputChange(val),
+    onScan: (val) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      lookup(val);
+    },
+    inputRef: barcodeRef,
+    enabled: !matched,
+  });
+
   const selectResult = (product: CashierProduct) => {
     setMatched(product);
     setQtyInput("");
@@ -763,13 +774,10 @@ function Step2({ session, suppliers, items, setItems, onBack, onNext, onRefreshL
                   value={barcodeInput}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (debounceRef.current) clearTimeout(debounceRef.current);
-                      lookup(barcodeInput);
-                    }
                     if (e.key === "Escape") clearSearch();
+                    else handleSearchKeyDown(e);
                   }}
+                  onFocus={handleSearchFocus}
                   className="pl-11 pr-8 h-12 text-base bg-white border-2 border-gray-300 hover:border-blue-400 focus:border-blue-500 rounded-lg shadow-sm"
                   autoFocus
                 />

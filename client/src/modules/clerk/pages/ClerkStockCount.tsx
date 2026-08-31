@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AdjustmentReason, getInventory, getInventoryLogs, type CreateAdjustmentRequestPayload } from "@/shared/api/inventoryApi";
 import { createStockCountRequest, getRequestHistory, type UnifiedRequest, type CreateStockCountPayload } from "@/shared/api/requestsApi";
 import DraftRecoveryPrompt from "@/shared/components/DraftRecoveryPrompt";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useRealtimeSync } from "@/shared/hooks/useRealtimeSync";
 import ClerkAuthModal from "../components/ClerkAuthModal";
@@ -42,7 +43,7 @@ import {
     X,
     XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Reason Lists ───────────────────────────────────────────────────────────────
@@ -195,6 +196,14 @@ export default function ClerkStockCount() {
   // Batch Auth modal — shown when count session contains products with discrepancies
   const [batchDiscrepancies, setBatchDiscrepancies] = useState<BatchStockCountItem[]>([]);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: setSearch,
+    onScan: setSearch,
+    inputRef: searchInputRef,
+    enableGlobalScan: activeTab === "session" && !confirmOpen && !batchModalOpen,
+  });
 
   // Real-time synchronization when requests are approved/rejected or inventory adjusted
   useRealtimeSync(["inventory", "requests", "products", "dashboard"], () => {
@@ -526,9 +535,12 @@ export default function ClerkStockCount() {
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <Input
+                  ref={searchInputRef}
                   placeholder="Search products by name or barcode…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  onFocus={handleSearchFocus}
                   className="pl-10 h-10 text-sm bg-white border-slate-200 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all"
                 />
               </div>

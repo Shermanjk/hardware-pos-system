@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Search, X, RefreshCw, AlertCircle, Package, Ban, RotateCcw, XCircle, CheckCircle2, Check, CheckCheck, ListChecks, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -155,6 +156,14 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
+  const exchangeBarcodeRef = useRef<HTMLInputElement>(null);
+  const exchangeBarcodeScanner = useBarcodeScanner({
+    setValue: (val) => setExchangeBarcode(val || undefined),
+    onScan: (val) => setExchangeBarcode(val || undefined),
+    inputRef: exchangeBarcodeRef,
+    enabled: resolution === "exchange",
+  });
 
   useEffect(() => {
     if (!open) {
@@ -416,9 +425,12 @@ function ReturnApprovalDialog({ open, req, onConfirm, onCancel, loading }: Retur
               <div>
                 <Label className="font-semibold mb-1 block">Exchange Barcode</Label>
                 <Input
+                  ref={exchangeBarcodeRef}
                   type="text"
                   value={exchangeBarcode || ""}
                   onChange={(e) => setExchangeBarcode(e.target.value || undefined)}
+                  onKeyDown={exchangeBarcodeScanner.handleKeyDown}
+                  onFocus={exchangeBarcodeScanner.handleFocus}
                   placeholder="Enter barcode"
                 />
               </div>
@@ -1004,6 +1016,14 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
   const [returnApprovalTarget, setReturnApprovalTarget] = useState<UnifiedRequest | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchScanner = useBarcodeScanner({
+    setValue: setSearch,
+    onScan: setSearch,
+    inputRef: searchInputRef,
+    enableGlobalScan: !detailReq && !rejectTarget && !returnApprovalTarget,
+  });
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -1130,8 +1150,11 @@ function RequestsList({ mainTab, subTab }: { mainTab: MainTabKey; subTab: SubTab
           <div className="flex-1 min-w-56 flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
             <Search className="h-4 w-4 text-slate-400 shrink-0" />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={searchScanner.handleKeyDown}
+              onFocus={searchScanner.handleFocus}
               placeholder="Search reference, product, invoice, user…"
               className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-slate-400 text-slate-800 font-medium"
             />

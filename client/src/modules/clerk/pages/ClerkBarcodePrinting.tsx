@@ -33,7 +33,8 @@ import {
     Barcode, Layers, Package,
     Printer, ScanLine, Tag, X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBarcodeScanner } from "@/shared/hooks/useBarcodeScanner";
 import { toast } from "sonner";
 
 // ─── Barcode SVG preview (real JsBarcode — fully scannable) ──────────────────
@@ -465,9 +466,11 @@ export default function ClerkBarcodePrinting() {
     [products, search]
   );
 
-  const handleSearch = () => {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBarcodeScan = useCallback((scannedVal: string) => {
     setLookupError("");
-    const val = search.trim();
+    const val = scannedVal.trim();
     if (!val) return;
     const exact = products.find((p) => p.barcode.toLowerCase() === val.toLowerCase());
     if (exact) {
@@ -476,9 +479,26 @@ export default function ClerkBarcodePrinting() {
       setSearch("");
       return;
     }
-    if (filtered.length === 0) {
+    setSearch(val);
+    const hasMatch = products.some((p) =>
+      p.product_name.toLowerCase().includes(val.toLowerCase()) ||
+      p.barcode.toLowerCase().includes(val.toLowerCase()) ||
+      p.category.toLowerCase().includes(val.toLowerCase())
+    );
+    if (!hasMatch) {
       setLookupError("No products found. Try scanning a barcode or searching by name.");
     }
+  }, [products]);
+
+  const { handleKeyDown: handleSearchKeyDown, handleFocus: handleSearchFocus } = useBarcodeScanner({
+    setValue: (val) => { setSearch(val); setLookupError(""); },
+    onScan: handleBarcodeScan,
+    inputRef: searchInputRef,
+    enableGlobalScan: !modalOpen,
+  });
+
+  const handleSearch = () => {
+    handleBarcodeScan(search);
   };
 
   const openModal = (product: ProductRecord) => {
@@ -501,10 +521,12 @@ export default function ClerkBarcodePrinting() {
         <div className="relative">
           <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 pointer-events-none" />
           <Input
+            ref={searchInputRef}
             placeholder="Scan barcode with scanner or search by product name…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setLookupError(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSearch(); } }}
+            onKeyDown={handleSearchKeyDown}
+            onFocus={handleSearchFocus}
             className="pl-12 h-11 text-base border-slate-200 bg-white font-medium rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
           />
         </div>
