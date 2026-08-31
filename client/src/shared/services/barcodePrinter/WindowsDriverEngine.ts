@@ -132,12 +132,10 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const isVeryLong = nameLen > 90;
     const isLong = nameLen > 50;
 
-    const storeNameFontPt   = isSmall
-      ? Math.max(6.5, Math.min(9.0, Math.round(label_height_mm * 0.32 * 10) / 10))
-      : Math.max(8.5, Math.min(13.0, Math.round(label_height_mm * 0.34 * 10) / 10));
+    const storeNameFontPt   = isSmall ? 6.5 : 9.5;
     const productNameFontPt = isSmall
-      ? (isVeryLong ? 4.5 : isLong ? 5.0 : 5.8)
-      : (isVeryLong ? 5.6 : isLong ? 6.2 : nameLen > 30 ? 6.8 : 7.4);
+      ? (isVeryLong ? 4.8 : isLong ? 5.1 : 5.5)
+      : (isVeryLong ? 7.0 : isLong ? 7.8 : nameLen > 30 ? 8.2 : 8.5);
     const barcodeFontPt     = isSmall
       ? Math.max(5.2, Math.min(7.5, Math.round(label_height_mm * 0.28 * 10) / 10))
       : Math.max(6.5, Math.min(10.5, Math.round(label_height_mm * 0.28 * 10) / 10));
