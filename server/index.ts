@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import compression from "compression";
 import fs from "fs";
 import { createServer } from "http";
 import path from "path";
@@ -43,8 +42,14 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // ─── Gzip Compression for fast LAN streaming ────────────────────────────────
-  app.use(compression());
+  // ─── Gzip Compression for fast LAN streaming (with resilient fallback) ─────
+  try {
+    const compressionModule = await import("compression");
+    const compression = compressionModule.default || compressionModule;
+    app.use(compression());
+  } catch {
+    // Graceful fallback: continue without compression if module is missing
+  }
 
   // ─── Body parsing ────────────────────────────────────────────────────────────
   app.use(express.json({ limit: "100kb" }));
