@@ -162,13 +162,21 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 // ─── Label size presets ───────────────────────────────────────────────────────
 
 const SIZE_PRESETS = [
-  { label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
-  { label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
-  { label: "38 × 25 mm",                     w: 38, h: 25 },
-  { label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
-  { label: "100 × 50 mm (Large)",            w: 100, h: 50 },
-  { label: "Custom Size",                    w: 0,  h: 0  },
+  { id: "30x20",  label: "30 × 20 mm (Small / XP-365B)", w: 30, h: 20 },
+  { id: "50x30",  label: "50 × 30 mm (Standard)",         w: 50, h: 30 },
+  { id: "38x25",  label: "38 × 25 mm",                     w: 38, h: 25 },
+  { id: "60x40",  label: "60 × 40 mm (Medium)",            w: 60, h: 40 },
+  { id: "100x50", label: "100 × 50 mm (Large)",            w: 100, h: 50 },
+  { id: "custom", label: "Custom Size",                    w: 0,  h: 0  },
 ] as const;
+
+function normalizePresetKey(key: string | null | undefined): string {
+  if (!key) return "30x20";
+  const cleaned = key.replace(/[\s\u00d7]/g, "x").toLowerCase();
+  if (SIZE_PRESETS.some((p) => p.id === cleaned)) return cleaned;
+  if (cleaned === "custom") return "custom";
+  return "30x20";
+}
 
 // ─── Print Modal ──────────────────────────────────────────────────────────────
 
@@ -183,21 +191,21 @@ interface PrintModalProps {
 function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintModalProps) {
   const [quantity,   setQuantity]   = useState(1);
   const [printing,   setPrinting]   = useState(false);
-  const [presetKey,  setPresetKey]  = useState(() => localStorage.getItem("pos_barcode_label_preset") || "30×20");
+  const [presetKey,  setPresetKey]  = useState(() => normalizePresetKey(localStorage.getItem("pos_barcode_label_preset")));
   const [customW,    setCustomW]    = useState(30);
   const [customH,    setCustomH]    = useState(20);
 
   useEffect(() => {
     if (open) {
       setQuantity(1);
-      const savedPreset = localStorage.getItem("pos_barcode_label_preset") || "30×20";
-      setPresetKey(savedPreset);
+      setPresetKey(normalizePresetKey(localStorage.getItem("pos_barcode_label_preset")));
     }
   }, [open, product?.id]);
 
   const handlePresetChange = (newKey: string) => {
-    setPresetKey(newKey);
-    localStorage.setItem("pos_barcode_label_preset", newKey);
+    const validKey = normalizePresetKey(newKey);
+    setPresetKey(validKey);
+    localStorage.setItem("pos_barcode_label_preset", validKey);
   };
 
   const storeName = storeSettings?.store_name || BARCODE_PRINTER_CONFIG.storeName || "ISRA HARDWARE TRADING";
@@ -209,7 +217,7 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
       const h = Math.max(5, customH);
       return createDynamicBarcodeConfig(w, h, { storeName });
     }
-    const preset = SIZE_PRESETS.find((p) => `${p.w}×${p.h}` === presetKey);
+    const preset = SIZE_PRESETS.find((p) => p.id === presetKey);
     if (!preset || preset.w === 0) {
       return createDynamicBarcodeConfig(30, 20, { storeName });
     }
@@ -277,14 +285,17 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
               onValueChange={handlePresetChange}
               disabled={printing}
             >
-              <SelectTrigger className="h-9">
-                <SelectValue />
+              <SelectTrigger className="h-9 w-full bg-white text-gray-900 border-gray-300">
+                <SelectValue placeholder="Select Label Size">
+                  {SIZE_PRESETS.find((p) => p.id === presetKey)?.label || "30 × 20 mm (Small / XP-365B)"}
+                </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white text-gray-900 border border-gray-200 shadow-lg z-[99999]">
                 {SIZE_PRESETS.map((p) => (
                   <SelectItem
-                    key={p.w === 0 ? "custom" : `${p.w}×${p.h}`}
-                    value={p.w === 0 ? "custom" : `${p.w}×${p.h}`}
+                    key={p.id}
+                    value={p.id}
+                    className="text-gray-900 focus:bg-blue-50 focus:text-blue-900 cursor-pointer py-2"
                   >
                     {p.label}
                   </SelectItem>
