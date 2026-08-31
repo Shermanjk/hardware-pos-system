@@ -130,7 +130,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
 
     const nameLen = (productName || "").trim().length;
     const isVeryLong = nameLen > 60;
-    const isLong     = nameLen > 28;
+    const isLong     = nameLen > 25;
 
     let storeNameFontPt: number;
     let productNameFontPt: number;
@@ -138,42 +138,47 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     let barcodeHeightMm: number;
     let productLineClamp: number;
     let letterSpacingPx: string;
+    let gapTopMm: number;
 
     if (isSmall) {
       // 30 × 20 mm (Compact)
-      storeNameFontPt   = isLong ? 5.2 : 5.5;
-      productNameFontPt = isLong ? 4.2 : 4.8;
-      barcodeFontPt     = isLong ? 5.0 : 5.5;
-      barcodeHeightMm   = isLong ? 7.5 : 9.5;
+      storeNameFontPt   = 5.5;
+      productNameFontPt = isLong ? 4.8 : 5.5; // Same size as store name (5.5pt)
+      barcodeFontPt     = 5.5;
+      barcodeHeightMm   = isLong ? 7.0 : 8.5;
       productLineClamp  = isLong ? 2 : 1;
       letterSpacingPx   = "0.4px";
+      gapTopMm          = 0.7; // 1-space separation gap
     } else if (isMedium) {
       // 38 × 25 mm & 50 × 30 mm (Standard)
       const is25mm = label_height_mm <= 26;
       if (is25mm) {
-        storeNameFontPt   = isVeryLong ? 6.2 : isLong ? 6.5 : 7.0;
-        productNameFontPt = isVeryLong ? 4.8 : isLong ? 5.4 : 6.0;
-        barcodeFontPt     = isVeryLong ? 6.0 : isLong ? 6.5 : 7.0;
-        barcodeHeightMm   = isVeryLong ? 9.5 : isLong ? 11.0 : 13.0;
+        storeNameFontPt   = 7.0;
+        productNameFontPt = isVeryLong ? 5.5 : isLong ? 6.2 : 7.0; // Same size (7.0pt)
+        barcodeFontPt     = 6.8;
+        barcodeHeightMm   = isVeryLong ? 9.0 : isLong ? 10.5 : 12.0;
         productLineClamp  = isVeryLong ? 3 : isLong ? 2 : 1;
         letterSpacingPx   = "0.6px";
+        gapTopMm          = 0.8;
       } else {
         // 50 × 30 mm
-        storeNameFontPt   = isVeryLong ? 7.0 : isLong ? 7.5 : 8.0;
-        productNameFontPt = isVeryLong ? 5.2 : isLong ? 5.8 : 6.5;
-        barcodeFontPt     = isVeryLong ? 6.8 : isLong ? 7.0 : 7.5;
-        barcodeHeightMm   = isVeryLong ? 11.5 : isLong ? 13.5 : 16.0;
+        storeNameFontPt   = 8.0;
+        productNameFontPt = isVeryLong ? 6.2 : isLong ? 7.2 : 8.0; // Same size as store name (8.0pt)
+        barcodeFontPt     = 7.5;
+        barcodeHeightMm   = isVeryLong ? 11.0 : isLong ? 12.8 : 14.8;
         productLineClamp  = isVeryLong ? 3 : isLong ? 2 : 1;
         letterSpacingPx   = "0.8px";
+        gapTopMm          = 0.9; // 1-space separation gap (~1mm)
       }
     } else {
       // Large labels (60 × 40 mm, 100 × 50 mm)
       storeNameFontPt   = label_height_mm >= 45 ? 12.0 : 10.0;
-      productNameFontPt = label_height_mm >= 45 ? 9.5  : 8.0;
+      productNameFontPt = label_height_mm >= 45 ? 12.0 : 10.0;
       barcodeFontPt     = label_height_mm >= 45 ? 11.0 : 9.0;
-      barcodeHeightMm   = label_height_mm >= 45 ? 26.0 : 20.0;
+      barcodeHeightMm   = label_height_mm >= 45 ? 24.0 : 18.5;
       productLineClamp  = 3;
       letterSpacingPx   = "1.2px";
+      gapTopMm          = label_height_mm >= 45 ? 1.8 : 1.4;
     }
 
     // Generate barcode SVG using JsBarcode (detached DOM element)
@@ -320,16 +325,16 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       color: #000000 !important;
     }
 
-    /* ── Product name — left-aligned with distinct font size and natural wrapping ── */
+    /* ── Product name — left-aligned, matching font size, 1-space separation gap ── */
     .product-name {
       flex-shrink: 0;
       width:       100%;
       font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size:   ${productNameFontPt}pt;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: none;
       text-align:  left;
-      line-height: 1.12;
+      line-height: 1.15;
       display:     -webkit-box;
       -webkit-line-clamp: ${productLineClamp};
       -webkit-box-orient: vertical;
@@ -337,8 +342,8 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       word-break:  normal;
       overflow-wrap: break-word;
       color: #000000 !important;
-      margin-top: 0.1mm;
-      margin-bottom: 0.1mm;
+      margin-top: ${gapTopMm}mm;
+      margin-bottom: 0.2mm;
     }
 
     /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
@@ -351,7 +356,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       justify-content: center;
       overflow:   hidden;
       min-height: 0;
-      padding:    ${isSmall ? "0.2mm" : "0.4mm"} 0;
+      padding:    ${isSmall ? "0.2mm" : "0.3mm"} 0;
     }
     .barcode-svg svg {
       width:      100%;

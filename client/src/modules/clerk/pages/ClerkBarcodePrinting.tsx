@@ -80,7 +80,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
 
   const nameLen = (product.product_name || "").trim().length;
   const isVeryLong = nameLen > 60;
-  const isLong     = nameLen > 28;
+  const isLong     = nameLen > 25;
 
   let storeFontSize: number;
   let productFontSize: number;
@@ -88,38 +88,43 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
   let barcodeHeightMm: number;
   let productLineClamp: number;
   let letterSpacingPx: string;
+  let gapPx: number;
 
   if (isSmall) {
-    storeFontSize    = isLong ? 7.8 : 8.5;
-    productFontSize  = isLong ? 6.2 : 7.2;
-    barcodeFontSize  = isLong ? 7.5 : 8.0;
-    barcodeHeightMm  = isLong ? 7.5 : 9.5;
+    storeFontSize    = 8.5;
+    productFontSize  = isLong ? 7.2 : 8.5; // Equal size
+    barcodeFontSize  = 8.0;
+    barcodeHeightMm  = isLong ? 7.0 : 8.5;
     productLineClamp = isLong ? 2 : 1;
     letterSpacingPx  = "0.4px";
+    gapPx            = 3;
   } else if (isMedium) {
     const is25mm = config.labelHeightMm <= 26;
     if (is25mm) {
-      storeFontSize    = isVeryLong ? 8.5 : isLong ? 9.0 : 9.5;
-      productFontSize  = isVeryLong ? 6.8 : isLong ? 7.5 : 8.5;
-      barcodeFontSize  = isVeryLong ? 8.0 : isLong ? 8.5 : 9.0;
-      barcodeHeightMm  = isVeryLong ? 9.5 : isLong ? 11.0 : 13.0;
+      storeFontSize    = 9.5;
+      productFontSize  = isVeryLong ? 7.5 : isLong ? 8.5 : 9.5; // Equal size
+      barcodeFontSize  = 9.0;
+      barcodeHeightMm  = isVeryLong ? 9.0 : isLong ? 10.5 : 12.0;
       productLineClamp = isVeryLong ? 3 : isLong ? 2 : 1;
       letterSpacingPx  = "0.6px";
+      gapPx            = 3.5;
     } else {
-      storeFontSize    = isVeryLong ? 9.5 : isLong ? 10.2 : 11.0;
-      productFontSize  = isVeryLong ? 7.2 : isLong ? 8.2 : 9.2;
-      barcodeFontSize  = isVeryLong ? 9.2 : isLong ? 9.8 : 10.5;
-      barcodeHeightMm  = isVeryLong ? 11.5 : isLong ? 13.5 : 16.0;
+      storeFontSize    = 11.0;
+      productFontSize  = isVeryLong ? 8.5 : isLong ? 9.8 : 11.0; // Equal size
+      barcodeFontSize  = 10.5;
+      barcodeHeightMm  = isVeryLong ? 11.0 : isLong ? 12.8 : 14.8;
       productLineClamp = isVeryLong ? 3 : isLong ? 2 : 1;
       letterSpacingPx  = "0.8px";
+      gapPx            = 4;
     }
   } else {
     storeFontSize    = config.labelHeightMm >= 45 ? 14.0 : 12.5;
-    productFontSize  = config.labelHeightMm >= 45 ? 11.0 : 9.5;
+    productFontSize  = config.labelHeightMm >= 45 ? 14.0 : 12.5;
     barcodeFontSize  = config.labelHeightMm >= 45 ? 13.0 : 11.5;
-    barcodeHeightMm  = config.labelHeightMm >= 45 ? 26.0 : 20.0;
+    barcodeHeightMm  = config.labelHeightMm >= 45 ? 24.0 : 18.5;
     productLineClamp = 3;
     letterSpacingPx  = "1.2px";
+    gapPx            = 6;
   }
 
   return (
@@ -146,9 +151,10 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       )}
       {product.product_name && (
         <p
-          className="font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 leading-tight"
+          className="font-bold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 leading-tight"
           style={{
             fontSize: productFontSize,
+            marginTop: `${gapPx}px`,
             display: "-webkit-box",
             WebkitLineClamp: productLineClamp,
             WebkitBoxOrient: "vertical",

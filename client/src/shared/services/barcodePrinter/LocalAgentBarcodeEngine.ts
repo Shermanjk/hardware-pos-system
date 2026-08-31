@@ -86,58 +86,63 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
 
     // 1. Store Name Header (centered via TSPL TEXT command with alignment = 2)
     const storeFont = isSmall ? "1" : "2"; // TSPL Font 1 (8x12), Font 2 (12x20)
-    const storeY = isSmall ? 6 : 10;
+    const storeY = isSmall ? 6 : 8;
     if (config.showStoreName && store) {
       const cleanStore = store.replace(/"/g, "'").substring(0, isSmall ? 28 : 34);
       const centerX = Math.round(widthDots / 2);
       cmd += `TEXT ${centerX},${storeY},"${storeFont}",0,1,1,2,"${cleanStore}"\r\n`;
     }
 
-    // 2. Product Name (Left-Aligned, alignment = 1)
-    let barcodeY = isSmall ? Math.round(heightDots * 0.28) : Math.round(heightDots * 0.32);
+    // 2. Product Name (Left-Aligned, alignment = 1) with 1-space gap below store name
+    let barcodeY = isSmall ? Math.round(heightDots * 0.30) : Math.round(heightDots * 0.34);
     let barcodeHeight = isSmall
-      ? Math.max(30, Math.round(heightDots * 0.44))
-      : Math.max(40, Math.round(heightDots * 0.48));
+      ? Math.max(30, Math.round(heightDots * 0.42))
+      : Math.max(40, Math.round(heightDots * 0.46));
 
     if (productName) {
       const cleanProduct = productName.replace(/"/g, "'");
       const leftMarginX = isSmall ? 10 : Math.max(12, Math.round(widthDots * 0.04));
 
       if (isSmall) {
-        // Small label (30x20): 1 or 2 lines
-        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~26 chars for Font 1
+        // Small label (30x20): Font 1 (8x12 dots)
+        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~26 chars
         const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 2);
 
         if (lines.length <= 1) {
-          cmd += `TEXT ${leftMarginX},20,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
-          barcodeY = 36;
-          barcodeHeight = Math.max(30, heightDots - barcodeY - (config.showBarcodeText ? 28 : 10));
+          // 1-space gap (Y=22 vs Store Y=6)
+          cmd += `TEXT ${leftMarginX},22,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
+          barcodeY = 38;
+          barcodeHeight = Math.max(28, heightDots - barcodeY - (config.showBarcodeText ? 28 : 10));
         } else {
-          cmd += `TEXT ${leftMarginX},18,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},30,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          barcodeY = 46;
-          barcodeHeight = Math.max(26, heightDots - barcodeY - (config.showBarcodeText ? 26 : 8));
+          cmd += `TEXT ${leftMarginX},20,"1",0,1,1,1,"${lines[0]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},32,"1",0,1,1,1,"${lines[1]}"\r\n`;
+          barcodeY = 48;
+          barcodeHeight = Math.max(24, heightDots - barcodeY - (config.showBarcodeText ? 26 : 8));
         }
       } else {
-        // Standard label (50x30): Font 1 (8x12 dots)
-        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~45 chars for Font 1
-        const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 3);
+        // Standard label (50x30): Font 2 (12x20 dots, matching Store Name) for 1 line, Font 1 for 2+ lines
+        const maxCharsPerLineFont2 = Math.floor((widthDots - leftMarginX * 2) / 12); // ~30 chars
+        const maxCharsPerLineFont1 = Math.floor((widthDots - leftMarginX * 2) / 8);  // ~45 chars
 
-        if (lines.length <= 1) {
-          cmd += `TEXT ${leftMarginX},32,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
-          barcodeY = 50;
-          barcodeHeight = Math.max(45, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
-        } else if (lines.length === 2) {
-          cmd += `TEXT ${leftMarginX},30,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},44,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          barcodeY = 62;
-          barcodeHeight = Math.max(38, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+        if (cleanProduct.length <= maxCharsPerLineFont2) {
+          // 1-line matching font size (Font 2 = 12x20 dots) with 1-space gap (Y=36 vs Store Y=8 + height 20)
+          cmd += `TEXT ${leftMarginX},36,"2",0,1,1,1,"${cleanProduct}"\r\n`;
+          barcodeY = 64;
+          barcodeHeight = Math.max(42, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
         } else {
-          cmd += `TEXT ${leftMarginX},28,"1",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},42,"1",0,1,1,1,"${lines[1]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},56,"1",0,1,1,1,"${lines[2]}"\r\n`;
-          barcodeY = 74;
-          barcodeHeight = Math.max(32, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+          const lines = this._wrapWords(cleanProduct, maxCharsPerLineFont1, 3);
+          if (lines.length === 2) {
+            cmd += `TEXT ${leftMarginX},34,"1",0,1,1,1,"${lines[0]}"\r\n`;
+            cmd += `TEXT ${leftMarginX},48,"1",0,1,1,1,"${lines[1]}"\r\n`;
+            barcodeY = 66;
+            barcodeHeight = Math.max(36, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+          } else {
+            cmd += `TEXT ${leftMarginX},32,"1",0,1,1,1,"${lines[0]}"\r\n`;
+            cmd += `TEXT ${leftMarginX},46,"1",0,1,1,1,"${lines[1]}"\r\n`;
+            cmd += `TEXT ${leftMarginX},60,"1",0,1,1,1,"${lines[2]}"\r\n`;
+            barcodeY = 76;
+            barcodeHeight = Math.max(30, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+          }
         }
       }
     }
