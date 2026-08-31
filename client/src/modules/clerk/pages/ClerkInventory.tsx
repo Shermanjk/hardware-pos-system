@@ -359,9 +359,10 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
       const engine = getPrinterEngine(activeConfig);
       await engine.print(
         {
-          barcode: product.barcode,
-          storeName: activeConfig.storeName,
-          quantity: clampedCount,
+          barcode:     product.barcode,
+          storeName:   activeConfig.storeName,
+          productName: product.product_name,
+          quantity:    clampedCount,
         },
         activeConfig
       );
@@ -377,18 +378,30 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
   if (!product) return null;
 
   const isSmall = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
-  const scale = isSmall ? 4.2 : 3.2;
+  const scale = isSmall ? 6.2 : 4.6;
   const cardW = activeConfig.labelWidthMm * scale;
   const cardH = activeConfig.labelHeightMm * scale;
-  const storeFontSize = Math.max(9, Math.min(18, activeConfig.fontSizePt * 1.15));
-  const barcodeFontSize = Math.max(8, Math.min(16, activeConfig.fontSizePt * 0.95));
+  const nameLen = (product.product_name || "").length;
+  const isVeryLong = nameLen > 90;
+  const isLong = nameLen > 50;
+
+  const storeFontSize   = isSmall ? Math.max(8.0, Math.min(11, activeConfig.fontSizePt * 0.9)) : Math.max(9.0, Math.min(13, activeConfig.fontSizePt * 1.0));
+  const productFontSize = isSmall
+    ? (isVeryLong ? 6.8 : isLong ? 7.5 : 8.5)
+    : (isVeryLong ? 7.4 : isLong ? 8.5 : nameLen > 30 ? 9.5 : 10.5);
+  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, activeConfig.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, activeConfig.fontSizePt * 0.88));
+
+  // Dynamically allocate barcode height so long text never gets truncated
+  const dynamicBarcodeHeightMm = isSmall
+    ? (isLong ? 5.2 : 7.2)
+    : (isVeryLong ? 8.2 : isLong ? 10.5 : activeConfig.barcodeHeightMm);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-full max-w-md overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Printer className="h-5 w-5 text-blue-600" />
+            <Printer className="h-5 w-5 text-blue-600 shrink-0" />
             Print Barcode Labels
           </DialogTitle>
           <DialogDescription>
@@ -396,14 +409,14 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-w-full min-w-0 overflow-hidden">
           {/* Product info */}
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 max-w-full min-w-0 overflow-hidden">
             <div className="p-2 bg-blue-100 rounded-lg shrink-0">
               <Package className="h-4 w-4 text-blue-700" />
             </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm truncate">{product.product_name}</p>
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <p className="font-semibold text-gray-900 text-sm leading-snug break-words" title={product.product_name}>{product.product_name}</p>
               <p className="text-xs text-gray-500 mt-0.5 font-mono">{product.barcode}</p>
             </div>
           </div>
@@ -467,33 +480,55 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
               Preview ({activeConfig.labelWidthMm} × {activeConfig.labelHeightMm} mm)
             </p>
             <div
-              className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm"
+              className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm select-none shrink-0"
               style={{
                 width: cardW,
+                maxWidth: cardW,
+                minWidth: cardW,
                 height: cardH,
-                paddingTop: activeConfig.marginTopMm * scale,
-                paddingBottom: activeConfig.marginBottomMm * scale,
-                paddingLeft: activeConfig.marginLeftMm * scale,
-                paddingRight: activeConfig.marginRightMm * scale,
+                maxHeight: cardH,
+                minHeight: cardH,
+                paddingTop: Math.max(3, activeConfig.marginTopMm * scale),
+                paddingBottom: Math.max(3, activeConfig.marginBottomMm * scale),
+                paddingLeft: Math.max(4, activeConfig.marginLeftMm * scale),
+                paddingRight: Math.max(4, activeConfig.marginRightMm * scale),
                 boxSizing: "border-box",
               }}
             >
               {activeConfig.showStoreName && activeConfig.storeName && (
                 <p
-                  className="font-extrabold uppercase text-center leading-tight truncate w-full flex-shrink-0 mb-0.5 tracking-tight text-gray-900"
-                  style={{ fontFamily: activeConfig.fontFamily, fontSize: storeFontSize }}
+                  className="font-extrabold uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
+                  style={{ fontSize: storeFontSize }}
                 >
                   {activeConfig.storeName}
                 </p>
               )}
-              <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden my-0.5">
+              {product.product_name && (
+                <p
+                  className={`font-bold uppercase text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-900 font-sans ${
+                    isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
+                  }`}
+                  style={{
+                    fontSize: productFontSize,
+                    marginTop: isSmall ? "1px" : "2px",
+                    marginBottom: isSmall ? "1px" : "2px",
+                    wordBreak: "break-word",
+                  }}
+                  title={product.product_name}
+                >
+                  {product.product_name}
+                </p>
+              )}
+              <div
+                className="w-full max-w-full flex items-center justify-center min-h-0 overflow-hidden my-0.5"
+                style={{ height: Math.round(dynamicBarcodeHeightMm * scale * 0.78) }}
+              >
                 <svg ref={svgCallbackRef} className="w-full h-full block" />
               </div>
               {activeConfig.showBarcodeText && (
                 <p
-                  className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5"
+                  className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5 truncate w-full max-w-full min-w-0"
                   style={{
-                    fontFamily: activeConfig.fontFamily,
                     fontSize: barcodeFontSize,
                     letterSpacing: isSmall ? "0.4px" : "1.2px",
                   }}

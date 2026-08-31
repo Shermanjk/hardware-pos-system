@@ -69,23 +69,39 @@ function BarcodePreview({ code, heightMm, symbology }: {
 
 function LabelCard({ product, config }: { product: ProductRecord; config: BarcodePrinterConfig }) {
   const isSmall = config.labelWidthMm <= 35 || config.labelHeightMm <= 22;
-  const scale   = isSmall ? 4.2 : 3.2; // px per mm for crisp on-screen preview
+  const scale   = isSmall ? 6.2 : 4.6; // Higher resolution scale for crisp on-screen legibility
   const w       = config.labelWidthMm  * scale;
   const h       = config.labelHeightMm * scale;
-  const pt      = config.marginTopMm    * scale;
-  const pb      = config.marginBottomMm * scale;
-  const pl      = config.marginLeftMm   * scale;
-  const pr      = config.marginRightMm  * scale;
+  const pt      = Math.max(3, config.marginTopMm    * scale);
+  const pb      = Math.max(3, config.marginBottomMm * scale);
+  const pl      = Math.max(4, config.marginLeftMm   * scale);
+  const pr      = Math.max(4, config.marginRightMm  * scale);
 
-  const storeFontSize   = Math.max(9, Math.min(18, config.fontSizePt * 1.15));
-  const barcodeFontSize = Math.max(8, Math.min(16, config.fontSizePt * 0.95));
+  const nameLen = (product.product_name || "").length;
+  const isVeryLong = nameLen > 90;
+  const isLong = nameLen > 50;
+
+  const storeFontSize   = isSmall ? Math.max(8.0, Math.min(11, config.fontSizePt * 0.9)) : Math.max(9.0, Math.min(13, config.fontSizePt * 1.0));
+  const productFontSize = isSmall
+    ? (isVeryLong ? 6.8 : isLong ? 7.5 : 8.5)
+    : (isVeryLong ? 7.4 : isLong ? 8.5 : nameLen > 30 ? 9.5 : 10.5);
+  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, config.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, config.fontSizePt * 0.88));
+
+  // Dynamically allocate barcode height so long text never gets truncated
+  const dynamicBarcodeHeightMm = isSmall
+    ? (isLong ? 5.2 : 7.2)
+    : (isVeryLong ? 8.2 : isLong ? 10.5 : config.barcodeHeightMm);
 
   return (
     <div
-      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm"
+      className="bg-white border-2 border-gray-800 flex flex-col items-center justify-between overflow-hidden shadow-md rounded-sm select-none shrink-0"
       style={{
         width: w,
+        maxWidth: w,
+        minWidth: w,
         height: h,
+        maxHeight: h,
+        minHeight: h,
         paddingTop: pt,
         paddingBottom: pb,
         paddingLeft: pl,
@@ -95,25 +111,43 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
     >
       {config.showStoreName && config.storeName && (
         <p
-          className="font-extrabold uppercase text-center leading-tight truncate w-full flex-shrink-0 mb-0.5 tracking-tight text-gray-900"
-          style={{ fontFamily: config.fontFamily, fontSize: storeFontSize }}
+          className="font-extrabold uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
+          style={{ fontSize: storeFontSize }}
           title={config.storeName}
         >
           {config.storeName}
         </p>
       )}
-      <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden my-0.5">
+      {product.product_name && (
+        <p
+          className={`font-bold uppercase text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-900 font-sans ${
+            isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
+          }`}
+          style={{
+            fontSize: productFontSize,
+            marginTop: isSmall ? "1px" : "2px",
+            marginBottom: isSmall ? "1px" : "2px",
+            wordBreak: "break-word",
+          }}
+          title={product.product_name}
+        >
+          {product.product_name}
+        </p>
+      )}
+      <div
+        className="w-full max-w-full flex items-center justify-center min-h-0 overflow-hidden my-0.5"
+        style={{ height: Math.round(dynamicBarcodeHeightMm * scale * 0.78) }}
+      >
         <BarcodePreview
           code={product.barcode}
-          heightMm={config.barcodeHeightMm}
+          heightMm={dynamicBarcodeHeightMm}
           symbology={config.barcodeSymbology}
         />
       </div>
       {config.showBarcodeText && (
         <p
-          className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5"
+          className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5 truncate w-full max-w-full min-w-0"
           style={{
-            fontFamily: config.fontFamily,
             fontSize: barcodeFontSize,
             letterSpacing: isSmall ? "0.4px" : "1.2px",
           }}
@@ -191,9 +225,10 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
       const engine = getPrinterEngine(activeConfig);
       await engine.print(
         {
-          barcode:   product.barcode,
-          storeName: activeConfig.storeName,
-          quantity:  clampedQty,
+          barcode:     product.barcode,
+          storeName:   activeConfig.storeName,
+          productName: product.product_name,
+          quantity:    clampedQty,
         },
         activeConfig
       );
@@ -211,10 +246,10 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-full max-w-md overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Printer className="h-5 w-5 text-blue-600" />
+            <Printer className="h-5 w-5 text-blue-600 shrink-0" />
             Print Barcode Labels
           </DialogTitle>
           <DialogDescription>
@@ -222,14 +257,14 @@ function PrintModal({ product, storeSettings, open, onClose, onPrinted }: PrintM
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-w-full min-w-0 overflow-hidden">
           {/* Product info */}
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 max-w-full min-w-0 overflow-hidden">
             <div className="p-2 bg-blue-100 rounded-lg shrink-0">
               <Package className="h-4 w-4 text-blue-700" />
             </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm truncate">{product.product_name}</p>
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <p className="font-semibold text-gray-900 text-sm leading-snug break-words" title={product.product_name}>{product.product_name}</p>
               <p className="text-xs text-gray-500 mt-0.5 font-mono">{product.barcode}</p>
             </div>
           </div>

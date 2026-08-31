@@ -35,6 +35,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const html = this._buildPrintDocument(
       item.barcode,
       item.storeName,
+      item.productName,
       item.quantity,
       config
     );
@@ -46,6 +47,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const html = this._buildPrintDocument(
       testBarcode,
       config.storeName || "ISRA HARDWARE TRADING",
+      "TEST PRODUCT 100MM",
       1,
       config
     );
@@ -102,6 +104,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
   private _buildPrintDocument(
     barcode: string,
     storeName: string,
+    productName: string | undefined,
     quantity: number,
     config: BarcodePrinterConfig
   ): string {
@@ -124,11 +127,24 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const printW = Math.max(2, label_width_mm  - margin_left_mm  - margin_right_mm);
     const printH = Math.max(2, label_height_mm - margin_top_mm   - margin_bottom_mm);
 
-    // Dynamic typography and barcode allocation
-    const storeNameFontPt = Math.max(7, Math.min(18, Math.round(label_height_mm * 0.38 * 10) / 10));
-    const barcodeFontPt   = Math.max(6.5, Math.min(16, Math.round(label_height_mm * 0.34 * 10) / 10));
-    const barcodeHeightMm = Math.max(4, Math.round(printH * 0.58 * 10) / 10);
-    const letterSpacingPx = isSmall ? "0.4px" : "1.2px";
+    // Dynamic typography allocation
+    const nameLen = (productName || "").length;
+    const isVeryLong = nameLen > 90;
+    const isLong = nameLen > 50;
+
+    const storeNameFontPt   = isSmall
+      ? Math.max(5.5, Math.min(8.5, Math.round(label_height_mm * 0.28 * 10) / 10))
+      : Math.max(7, Math.min(12, Math.round(label_height_mm * 0.30 * 10) / 10));
+    const productNameFontPt = isSmall
+      ? (isVeryLong ? 4.8 : isLong ? 5.5 : 6.8)
+      : (isVeryLong ? 6.2 : isLong ? 7.2 : nameLen > 30 ? 8.2 : 9.5);
+    const barcodeFontPt     = isSmall
+      ? Math.max(5.2, Math.min(7.5, Math.round(label_height_mm * 0.28 * 10) / 10))
+      : Math.max(6.5, Math.min(10.5, Math.round(label_height_mm * 0.28 * 10) / 10));
+    const barcodeHeightMm   = isSmall
+      ? (isLong ? 5.2 : Math.max(3.5, Math.round(printH * 0.44 * 10) / 10))
+      : (isVeryLong ? 8.2 : isLong ? 10.5 : Math.max(4, Math.round(printH * 0.48 * 10) / 10));
+    const letterSpacingPx   = isSmall ? "0.4px" : "1.2px";
 
     // Generate barcode SVG using JsBarcode (detached DOM element)
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -154,6 +170,9 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const storeNameLine = (show_store_name && storeName)
       ? `<div class="store-name">${this._esc(storeName)}</div>`
       : "";
+    const productNameLine = productName
+      ? `<div class="product-name">${this._esc(productName)}</div>`
+      : "";
     const barcodeTextLine = show_barcode_text
       ? `<div class="barcode-text">${this._esc(barcode)}</div>`
       : "";
@@ -162,6 +181,7 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       <div class="label">
         <div class="label-inner">
           ${storeNameLine}
+          ${productNameLine}
           <div class="barcode-svg">${svgHTML}</div>
           ${barcodeTextLine}
         </div>
@@ -269,6 +289,25 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       letter-spacing: 0.2px;
     }
 
+    /* ── Product name — left-aligned with natural wrapping ── */
+    .product-name {
+      flex-shrink: 0;
+      width:       100%;
+      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size:   ${productNameFontPt}pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align:  left;
+      line-height: ${isSmall ? "1.08" : "1.12"};
+      display:     -webkit-box;
+      -webkit-line-clamp: ${isSmall ? 2 : 3};
+      -webkit-box-orient: vertical;
+      overflow:    hidden;
+      word-break:  break-word;
+      margin-top:  ${isSmall ? "0.1mm" : "0.2mm"};
+      margin-bottom: ${isSmall ? "0.2mm" : "0.3mm"};
+    }
+
     /* ── Barcode SVG — fills remaining space, dynamically fills full width and height ── */
     .barcode-svg {
       flex:       1;
@@ -320,7 +359,20 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
         }
       });
 
-      // 2. Fit all Barcode Text elements across all label copies
+      // 2. Fit all Product Name elements across all label copies (for single-line/small labels)
+      var productNames = document.querySelectorAll('.product-name');
+      productNames.forEach(function(el) {
+        var maxW = el.clientWidth;
+        if (!maxW) return;
+        var curSize = parseFloat(window.getComputedStyle(el).fontSize) || 10;
+        var minSize = 5;
+        while (el.scrollWidth > maxW && curSize > minSize) {
+          curSize -= 0.3;
+          el.style.fontSize = curSize + 'px';
+        }
+      });
+
+      // 3. Fit all Barcode Text elements across all label copies
       var barcodeTexts = document.querySelectorAll('.barcode-text');
       barcodeTexts.forEach(function(el) {
         var maxW = el.clientWidth;

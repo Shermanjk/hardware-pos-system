@@ -1,6 +1,6 @@
-# 🖥️ Isra POS — Kiosk Launchers & Autostart
+# 🖥️ Isra POS — Kiosk Launchers, Shortcuts & Autostart
 
-This folder contains the scripts for running the POS in full-screen Kiosk mode and configuring Windows autostart on boot.
+This folder contains all the tools needed to launch the POS in full-screen Kiosk mode, generate Desktop shortcuts, and configure Windows autostart on boot.
 
 ---
 
@@ -8,20 +8,26 @@ This folder contains the scripts for running the POS in full-screen Kiosk mode a
 
 | File | Description |
 | :--- | :--- |
-| **`Launch_POS_Kiosk.bat`** | Launches Chrome in Full-Screen Kiosk Mode with direct silent printing (`--kiosk --kiosk-printing`). Also ensures the local print agent is running. |
-| **`Launch_POS_Kiosk_Silent.vbs`** | Silent launcher script that starts `Launch_POS_Kiosk.bat` in the background with **zero black CMD prompt popups**. |
-| **`enable-kiosk-autostart.bat`** | **1-Click Autostart Setup**: Links the silent kiosk launcher to your Windows Startup folder (`shell:startup`) so it automatically starts whenever the PC boots/logs in. |
-| **`disable-kiosk-autostart.bat`** | **1-Click Disable**: Removes the kiosk startup shortcut from Windows Startup folder. |
+| **`Kiosk_Manager.bat`** | **⭐ All-in-One Menu Tool**: Lets you launch the POS, create desktop shortcuts, enable/disable autostart, and change the server IP from a single interactive menu. |
+| **`Launch_POS_Kiosk.bat`** | Launches Chrome in Full-Screen Kiosk Mode with direct silent printing (`--kiosk --kiosk-printing`). |
+| **`Launch_POS_Kiosk_Silent.vbs`** | Silent launcher script that starts the Kiosk with **zero black CMD prompt popups**. |
+| **`create-desktop-shortcut.bat`** | **1-Click Desktop Shortcut**: Places an "Isra POS" icon shortcut directly onto your Windows Desktop. |
+| **`enable-kiosk-autostart.bat`** | **1-Click Autostart Setup**: Automatically starts the POS when Windows boots up / logs in. |
+| **`disable-kiosk-autostart.bat`** | **1-Click Disable**: Removes the kiosk startup shortcut from Windows. |
 
 ---
 
-## 🚀 How to Use
+## 🚀 Quick Instructions
 
-### 1. Manual Launch
-Double-click **`Launch_POS_Kiosk.bat`** anytime to open the POS terminal in fullscreen kiosk mode.
+### Option 1: Use the All-in-One Kiosk Manager
+Double-click **`Kiosk_Manager.bat`** and select from the menu:
+- Press `1` to Launch POS Kiosk immediately
+- Press `2` to create the Desktop Shortcut
+- Press `3` to enable Autostart on boot
+- Press `4` to disable Autostart
+- Press `5` to update the Server IP URL
 
-### 2. Enable Auto-Launch on PC Boot
-Double-click **`enable-kiosk-autostart.bat`**. That's it! The POS will now start automatically whenever the computer powers on.
-
-### 3. Change Server Address (For Cashier PC)
-If the Cashier PC connects to a remote server IP (e.g. `192.168.1.100`), right-click `Launch_POS_Kiosk.bat`, select **Edit**, and replace `http://isra-pos-server:3001` with your server URL.
+### Option 2: 1-Click Standalone Scripts
+- To create a Desktop Shortcut: Double-click **`create-desktop-shortcut.bat`**
+- To run automatically on boot: Double-click **`enable-kiosk-autostart.bat`**
+- To launch immediately: Double-click **`Launch_POS_Kiosk.bat`**

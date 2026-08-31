@@ -36,6 +36,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$s.TargetPath = '%TARGET_FILE%'; " ^
     "$s.WorkingDirectory = '%SCRIPT_DIR%'; " ^
     "$s.Description = 'Isra POS Kiosk Autostart'; " ^
+    "if (Test-Path '%SCRIPT_DIR%icon.ico') { $s.IconLocation = '%SCRIPT_DIR%icon.ico'; } " ^
     "$s.WindowStyle = 7; " ^
     "$s.Save()"
 
