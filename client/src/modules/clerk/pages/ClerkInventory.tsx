@@ -386,23 +386,23 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
   if (!product) return null;
 
   const isSmall = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
-  const scale = isSmall ? 6.2 : 4.6;
+  const scale = isSmall ? 6.5 : 5.4;
   const cardW = activeConfig.labelWidthMm * scale;
   const cardH = activeConfig.labelHeightMm * scale;
   const nameLen = (product.product_name || "").length;
   const isVeryLong = nameLen > 90;
   const isLong = nameLen > 50;
 
-  const storeFontSize   = isSmall ? 9.5 : 11.0;
+  const storeFontSize   = isSmall ? 8.5 : 9.5;
   const productFontSize = isSmall
-    ? (isVeryLong ? 7.2 : isLong ? 7.8 : 8.5)
-    : (isVeryLong ? 8.2 : isLong ? 9.0 : nameLen > 30 ? 9.5 : 10.0);
-  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, activeConfig.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, activeConfig.fontSizePt * 0.88));
+    ? (isVeryLong ? 6.5 : isLong ? 7.0 : 7.5)
+    : (isVeryLong ? 7.2 : isLong ? 7.8 : 8.5);
+  const barcodeFontSize = isSmall ? 7.5 : 9.0;
 
   // Dynamically allocate barcode height so long text never gets truncated
   const dynamicBarcodeHeightMm = isSmall
-    ? (isLong ? 5.2 : 7.2)
-    : (isVeryLong ? 8.2 : isLong ? 10.5 : activeConfig.barcodeHeightMm);
+    ? (isLong ? 5.5 : 7.0)
+    : (isVeryLong ? 8.5 : isLong ? 10.0 : 12.0);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
