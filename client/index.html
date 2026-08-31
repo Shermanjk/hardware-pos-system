@@ -88,6 +88,41 @@
       100% { transform: translateX(350%); }
     }
   </style>
+  <script>
+    /* ─── Kiosk Auto-Recovery Watchdog ────────────────────────────────────────── */
+    /* Automatically detects stale cached assets or unmounted splash screens after */
+    /* server updates and auto-reloads with cache busting without Ctrl+Shift+R!  */
+    (function() {
+      var hasReloaded = false;
+      function recoverKiosk() {
+        if (hasReloaded) return;
+        hasReloaded = true;
+        var path = window.location.pathname;
+        var search = window.location.search;
+        var sep = search ? '&' : '?';
+        window.location.replace(path + search + sep + '_kiosk=' + Date.now() + window.location.hash);
+      }
+
+      window.addEventListener('error', function(e) {
+        var msg = (e && e.message) ? e.message.toLowerCase() : '';
+        if (msg.indexOf('dynamically imported module') !== -1 ||
+            msg.indexOf('loading chunk') !== -1 ||
+            msg.indexOf('mime type') !== -1 ||
+            msg.indexOf('unexpected token') !== -1 ||
+            (e.target && e.target.tagName === 'SCRIPT')) {
+          recoverKiosk();
+        }
+      }, true);
+
+      setTimeout(function() {
+        var splash = document.getElementById('initial-kiosk-splash');
+        var root = document.getElementById('root');
+        if (splash && root && root.contains(splash)) {
+          recoverKiosk();
+        }
+      }, 3500);
+    })();
+  </script>
 </head>
 
 <body>

@@ -125,6 +125,10 @@ async function startServer() {
         },
       })
     );
+    // Explicit 404 for missing hashed assets so browser never receives HTML for JS/CSS
+    app.use("/assets", (_req, res) => {
+      res.status(404).type("text/plain").send("Asset not found");
+    });
     app.get("*", (_req, res) => {
       setNoCacheHeaders(res);
       res.sendFile(path.join(staticPath, "index.html"));
