@@ -69,29 +69,28 @@ function BarcodePreview({ code, heightMm, symbology }: {
 
 function LabelCard({ product, config }: { product: ProductRecord; config: BarcodePrinterConfig }) {
   const isSmall = config.labelWidthMm <= 35 || config.labelHeightMm <= 22;
-  const scale   = isSmall ? 6.5 : 5.4; // Proportional scale for crisp on-screen legibility
+  const scale   = isSmall ? 6.2 : 4.6; // Higher resolution scale for crisp on-screen legibility
   const w       = config.labelWidthMm  * scale;
   const h       = config.labelHeightMm * scale;
   const pt      = Math.max(3, config.marginTopMm    * scale);
   const pb      = Math.max(3, config.marginBottomMm * scale);
-  const pl      = Math.max(5, config.marginLeftMm   * scale);
-  const pr      = Math.max(5, config.marginRightMm  * scale);
+  const pl      = Math.max(4, config.marginLeftMm   * scale);
+  const pr      = Math.max(4, config.marginRightMm  * scale);
 
   const nameLen = (product.product_name || "").length;
   const isVeryLong = nameLen > 90;
   const isLong = nameLen > 50;
 
-  // Visual hierarchy: Store name is prominent (9.8px), Product name is distinctly smaller (8.0px / 7.4px / 6.8px)
-  const storeFontSize   = isSmall ? 7.2 : 9.8;
+  const storeFontSize   = isSmall ? 9.5 : 11.0;
   const productFontSize = isSmall
-    ? (isVeryLong ? 5.0 : isLong ? 5.4 : 5.8)
-    : (isVeryLong ? 6.8 : isLong ? 7.4 : 8.0);
-  const barcodeFontSize = isSmall ? 6.2 : 8.5;
+    ? (isVeryLong ? 7.2 : isLong ? 7.8 : 8.5)
+    : (isVeryLong ? 8.2 : isLong ? 9.0 : nameLen > 30 ? 9.5 : 10.0);
+  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, config.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, config.fontSizePt * 0.88));
 
   // Dynamically allocate barcode height so long text never gets truncated
   const dynamicBarcodeHeightMm = isSmall
-    ? (isLong ? 5.5 : 7.0)
-    : (isVeryLong ? 8.5 : isLong ? 10.0 : 12.0);
+    ? (isLong ? 5.2 : 7.2)
+    : (isVeryLong ? 8.2 : isLong ? 10.5 : config.barcodeHeightMm);
 
   return (
     <div
@@ -122,14 +121,13 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       {product.product_name && (
         <p
           className={`font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans ${
-            isSmall ? "line-clamp-2 leading-tight" : "line-clamp-4 leading-snug"
+            isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
           }`}
           style={{
             fontSize: productFontSize,
             marginTop: isSmall ? "1px" : "2px",
             marginBottom: isSmall ? "1px" : "2px",
-            wordBreak: "normal",
-            overflowWrap: "break-word",
+            wordBreak: "break-word",
           }}
           title={product.product_name}
         >
