@@ -119,24 +119,31 @@ export class LocalAgentBarcodeEngine implements BarcodePrinterEngine {
           barcodeHeight = Math.max(26, heightDots - barcodeY - (config.showBarcodeText ? 26 : 8));
         }
       } else {
-        // Standard label (50x30): Natural wrapping — up to 3 lines
-        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 12); // ~30 chars for Font 2
-        const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 3);
+        // Standard label (50x30): Font 1 (8x12 dots) for smaller, proportional product name distinct from Store Name
+        const maxCharsPerLine = Math.floor((widthDots - leftMarginX * 2) / 8); // ~45 chars for Font 1
+        const lines = this._wrapWords(cleanProduct, maxCharsPerLine, 4);
 
         if (lines.length <= 1) {
-          cmd += `TEXT ${leftMarginX},34,"2",0,1,1,1,"${lines[0] || ""}"\r\n`;
-          barcodeY = 62;
+          cmd += `TEXT ${leftMarginX},32,"1",0,1,1,1,"${lines[0] || ""}"\r\n`;
+          barcodeY = 52;
           barcodeHeight = Math.max(40, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
         } else if (lines.length === 2) {
-          cmd += `TEXT ${leftMarginX},32,"2",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},54,"2",0,1,1,1,"${lines[1]}"\r\n`;
-          barcodeY = 80;
-          barcodeHeight = Math.max(34, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+          cmd += `TEXT ${leftMarginX},30,"1",0,1,1,1,"${lines[0]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},44,"1",0,1,1,1,"${lines[1]}"\r\n`;
+          barcodeY = 64;
+          barcodeHeight = Math.max(36, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
+        } else if (lines.length === 3) {
+          cmd += `TEXT ${leftMarginX},28,"1",0,1,1,1,"${lines[0]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},42,"1",0,1,1,1,"${lines[1]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},56,"1",0,1,1,1,"${lines[2]}"\r\n`;
+          barcodeY = 76;
+          barcodeHeight = Math.max(32, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
         } else {
-          cmd += `TEXT ${leftMarginX},28,"2",0,1,1,1,"${lines[0]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},48,"2",0,1,1,1,"${lines[1]}"\r\n`;
-          cmd += `TEXT ${leftMarginX},68,"2",0,1,1,1,"${lines[2]}"\r\n`;
-          barcodeY = 94;
+          cmd += `TEXT ${leftMarginX},26,"1",0,1,1,1,"${lines[0]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},38,"1",0,1,1,1,"${lines[1]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},50,"1",0,1,1,1,"${lines[2]}"\r\n`;
+          cmd += `TEXT ${leftMarginX},62,"1",0,1,1,1,"${lines[3]}"\r\n`;
+          barcodeY = 82;
           barcodeHeight = Math.max(30, heightDots - barcodeY - (config.showBarcodeText ? 30 : 10));
         }
       }

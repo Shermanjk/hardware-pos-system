@@ -81,10 +81,10 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
   const isVeryLong = nameLen > 90;
   const isLong = nameLen > 50;
 
-  const storeFontSize   = isSmall ? Math.max(8.0, Math.min(11, config.fontSizePt * 0.9)) : Math.max(9.0, Math.min(13, config.fontSizePt * 1.0));
+  const storeFontSize   = isSmall ? Math.max(9.0, Math.min(12, config.fontSizePt * 0.95)) : Math.max(10.5, Math.min(14, config.fontSizePt * 1.1));
   const productFontSize = isSmall
-    ? (isVeryLong ? 6.8 : isLong ? 7.5 : 8.5)
-    : (isVeryLong ? 7.4 : isLong ? 8.5 : nameLen > 30 ? 9.5 : 10.5);
+    ? (isVeryLong ? 6.2 : isLong ? 6.8 : 7.4)
+    : (isVeryLong ? 7.0 : isLong ? 7.6 : nameLen > 30 ? 8.2 : 8.8);
   const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, config.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, config.fontSizePt * 0.88));
 
   // Dynamically allocate barcode height so long text never gets truncated
@@ -111,7 +111,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
     >
       {config.showStoreName && config.storeName && (
         <p
-          className="font-extrabold uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
+          className="font-black uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
           style={{ fontSize: storeFontSize }}
           title={config.storeName}
         >
@@ -120,7 +120,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       )}
       {product.product_name && (
         <p
-          className={`font-bold uppercase text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-900 font-sans ${
+          className={`font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans ${
             isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
           }`}
           style={{

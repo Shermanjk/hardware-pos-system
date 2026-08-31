@@ -133,11 +133,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
     const isLong = nameLen > 50;
 
     const storeNameFontPt   = isSmall
-      ? Math.max(5.5, Math.min(8.5, Math.round(label_height_mm * 0.28 * 10) / 10))
-      : Math.max(7, Math.min(12, Math.round(label_height_mm * 0.30 * 10) / 10));
+      ? Math.max(6.5, Math.min(9.0, Math.round(label_height_mm * 0.32 * 10) / 10))
+      : Math.max(8.5, Math.min(13.0, Math.round(label_height_mm * 0.34 * 10) / 10));
     const productNameFontPt = isSmall
-      ? (isVeryLong ? 4.8 : isLong ? 5.5 : 6.8)
-      : (isVeryLong ? 6.2 : isLong ? 7.2 : nameLen > 30 ? 8.2 : 9.5);
+      ? (isVeryLong ? 4.5 : isLong ? 5.0 : 5.8)
+      : (isVeryLong ? 5.6 : isLong ? 6.2 : nameLen > 30 ? 6.8 : 7.4);
     const barcodeFontPt     = isSmall
       ? Math.max(5.2, Math.min(7.5, Math.round(label_height_mm * 0.28 * 10) / 10))
       : Math.max(6.5, Math.min(10.5, Math.round(label_height_mm * 0.28 * 10) / 10));
@@ -152,19 +152,17 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       JsBarcode(svgEl, barcode, {
         format:       barcode_symbology as string,
         displayValue: false,               // we render the text ourselves for precise placement
-        height:       barcodeHeightMm * 3.7795, // mm → px (96dpi: 1mm = 3.7795px)
-        width:        1,                   // bar width multiplier — auto scaled via CSS
         margin:       0,
-        background:   "#ffffff",
-        lineColor:    "#000000",
+        flat:         true,
+        width:        2,
+        height:       Math.round(barcodeHeightMm * 3.78),
       });
-      // Ensure barcode bars stretch to fill printable width regardless of barcode length
-      svgEl.setAttribute("preserveAspectRatio", "none");
     } catch {
-      // Invalid barcode — generate an error label
-      return this._buildErrorDocument(barcode, label_width_mm, label_height_mm);
+      // If barcode generation fails, render a blank placeholder SVG
+      svgEl.setAttribute("viewBox", "0 0 100 30");
     }
-    const svgHTML = svgEl.outerHTML;
+
+    const barcodeSvgHtml = svgEl.outerHTML;
 
     // Build one label block
     const storeNameLine = (show_store_name && storeName)
@@ -178,13 +176,11 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       : "";
 
     const singleLabel = `
-      <div class="label">
-        <div class="label-inner">
-          ${storeNameLine}
-          ${productNameLine}
-          <div class="barcode-svg">${svgHTML}</div>
-          ${barcodeTextLine}
-        </div>
+      <div class="label-page">
+        ${storeNameLine}
+        ${productNameLine}
+        <div class="barcode-svg">${barcodeSvgHtml}</div>
+        ${barcodeTextLine}
       </div>`;
 
     const labels = Array.from({ length: Math.max(1, quantity) })
@@ -192,81 +188,67 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       .join("\n");
 
     return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>${this._esc(barcode)}</title>
+  <title>Barcode Print - ${barcode}</title>
   <style>
     /* ── Reset ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-    /* ── Page = exactly one physical label ── */
+    /* ── Page setup — exact mm sizing, zero browser margin ── */
     @page {
       size: ${label_width_mm}mm ${label_height_mm}mm;
-      margin: 0mm;
+      margin: 0;
     }
 
     @media print {
-      @page {
-        size: ${label_width_mm}mm ${label_height_mm}mm;
-        margin: 0mm;
-      }
       html, body {
-        width:  100% !important;
-        height: auto !important;
-        margin: 0mm !important;
-        padding: 0mm !important;
-        background: #fff !important;
-        overflow: visible !important;
-      }
-      .label {
         width:  ${label_width_mm}mm !important;
         height: ${label_height_mm}mm !important;
-        page-break-after: always !important;
-        page-break-inside: avoid !important;
-        break-after: page !important;
-        break-inside: avoid !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
-      .label:last-child {
-        page-break-after: auto !important;
-        break-after: auto !important;
+      .label-page {
+        page-break-after: always;
+        break-after: page;
+      }
+      .label-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
       }
     }
 
-    html, body {
-      width:  100%;
-      height: auto;
-      background: #fff;
-      margin: 0;
-      padding: 0;
+    /* ── Screen fallback ── */
+    body {
+      background: #f3f4f6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 4px;
+      font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* ── One label = one page ── */
-    .label {
-      display: block !important;
+    /* ── Label card container ── */
+    .label-page {
       width:  ${label_width_mm}mm !important;
       height: ${label_height_mm}mm !important;
-      page-break-after: always !important;
-      page-break-inside: avoid !important;
-      break-after: page !important;
-      break-inside: avoid !important;
+      max-width:  ${label_width_mm}mm !important;
+      max-height: ${label_height_mm}mm !important;
+      background: #ffffff !important;
       overflow: hidden !important;
-      box-sizing: border-box !important;
-    }
-    .label:last-child {
-      page-break-after: auto !important;
-      break-after: auto !important;
-    }
-
-    /* ── Printable inner area (respects margins) ── */
-    .label-inner {
-      width:   100% !important;
-      height:  100% !important;
       display: flex !important;
       flex-direction: column !important;
       align-items: center !important;
       justify-content: space-between !important;
-      overflow: hidden !important;
       box-sizing: border-box !important;
       padding-top:    ${margin_top_mm}mm !important;
       padding-bottom: ${margin_bottom_mm}mm !important;
@@ -295,12 +277,12 @@ export class WindowsDriverEngine implements BarcodePrinterEngine {
       width:       100%;
       font-family: ${font_family}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size:   ${productNameFontPt}pt;
-      font-weight: 700;
-      text-transform: uppercase;
+      font-weight: 600;
+      text-transform: none;
       text-align:  left;
       line-height: ${isSmall ? "1.08" : "1.12"};
       display:     -webkit-box;
-      -webkit-line-clamp: ${isSmall ? 2 : 3};
+      -webkit-line-clamp: ${isSmall ? 3 : 4};
       -webkit-box-orient: vertical;
       overflow:    hidden;
       word-break:  break-word;
