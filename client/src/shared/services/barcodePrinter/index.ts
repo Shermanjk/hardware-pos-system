@@ -32,6 +32,10 @@ export function getPrinterEngine(config: BarcodePrinterConfig): BarcodePrinterEn
   let engine: BarcodePrinterEngine;
 
   switch (printerType) {
+    case "agent":
+    case "tspl":
+      engine = new LocalAgentBarcodeEngine();
+      break;
     case "windows_driver":
     default:
       engine = new WindowsDriverEngine();

@@ -52,10 +52,10 @@ export function getDynamicBarcodeMargins(widthMm: number, heightMm: number) {
   const isMedium = !isSmall && (widthMm <= 55 || heightMm <= 35);
 
   return {
-    marginTopMm:    isSmall ? 0.8 : isMedium ? 1.2 : 1.5,
-    marginBottomMm: isSmall ? 0.8 : isMedium ? 1.2 : 1.5,
-    marginLeftMm:   isSmall ? 1.0 : isMedium ? 1.5 : 2.0,
-    marginRightMm:  isSmall ? 1.0 : isMedium ? 1.5 : 2.0,
+    marginTopMm:    isSmall ? 0.8 : isMedium ? 1.0 : 1.5,
+    marginBottomMm: isSmall ? 0.8 : isMedium ? 1.0 : 1.5,
+    marginLeftMm:   isSmall ? 1.0 : isMedium ? 1.2 : 1.5,
+    marginRightMm:  isSmall ? 1.0 : isMedium ? 1.2 : 1.5,
   };
 }
 
@@ -73,9 +73,20 @@ export function createDynamicBarcodeConfig(
   const marginLeftMm   = overrides?.marginLeftMm   ?? margins.marginLeftMm;
   const marginRightMm  = overrides?.marginRightMm  ?? margins.marginRightMm;
 
-  const printableHeightMm = Math.max(2, heightMm - marginTopMm - marginBottomMm);
-  const barcodeHeightMm = overrides?.barcodeHeightMm ?? Math.max(4, Math.round(printableHeightMm * 0.58 * 10) / 10);
-  const fontSizePt = overrides?.fontSizePt ?? Math.max(7, Math.min(18, Math.round(heightMm * 0.38 * 10) / 10));
+  const isSmall = widthMm <= 35 || heightMm <= 22;
+  const isMedium = !isSmall && (widthMm <= 55 || heightMm <= 35);
+  const is25mm = isMedium && heightMm <= 26;
+
+  const defaultBarcodeHeightMm = isSmall
+    ? 7.5
+    : is25mm
+    ? 9.5
+    : isMedium
+    ? 11.5
+    : Math.max(14, Math.round((heightMm - marginTopMm - marginBottomMm) * 0.44 * 10) / 10);
+
+  const barcodeHeightMm = overrides?.barcodeHeightMm ?? defaultBarcodeHeightMm;
+  const fontSizePt = overrides?.fontSizePt ?? (isSmall ? 5.4 : isMedium ? 7.2 : 8.5);
 
   return {
     printerName:      overrides?.printerName      ?? "",

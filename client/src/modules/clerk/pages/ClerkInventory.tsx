@@ -385,24 +385,50 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
 
   if (!product) return null;
 
-  const isSmall = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
-  const scale = isSmall ? 6.2 : 4.6;
-  const cardW = activeConfig.labelWidthMm * scale;
-  const cardH = activeConfig.labelHeightMm * scale;
-  const nameLen = (product.product_name || "").length;
+  const isSmall  = activeConfig.labelWidthMm <= 35 || activeConfig.labelHeightMm <= 22;
+  const isMedium = !isSmall && (activeConfig.labelWidthMm <= 55 || activeConfig.labelHeightMm <= 35);
+  const scale    = isSmall ? 6.2 : 4.6;
+  const cardW    = activeConfig.labelWidthMm * scale;
+  const cardH    = activeConfig.labelHeightMm * scale;
+  const nameLen  = (product.product_name || "").length;
   const isVeryLong = nameLen > 90;
-  const isLong = nameLen > 50;
+  const isLong     = nameLen > 50;
+  const isMid      = nameLen > 30;
 
-  const storeFontSize   = isSmall ? 9.5 : 11.0;
-  const productFontSize = isSmall
-    ? (isVeryLong ? 7.2 : isLong ? 7.8 : 8.5)
-    : (isVeryLong ? 8.2 : isLong ? 9.0 : nameLen > 30 ? 9.5 : 10.0);
-  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, activeConfig.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, activeConfig.fontSizePt * 0.88));
+  let storeFontSize: number;
+  let productFontSize: number;
+  let barcodeFontSize: number;
+  let barcodeHeightMm: number;
+  let productLineClamp: number;
+  let letterSpacingPx: string;
 
-  // Dynamically allocate barcode height so long text never gets truncated
-  const dynamicBarcodeHeightMm = isSmall
-    ? (isLong ? 5.2 : 7.2)
-    : (isVeryLong ? 8.2 : isLong ? 10.5 : activeConfig.barcodeHeightMm);
+  if (isSmall) {
+    storeFontSize    = 8.5;
+    barcodeFontSize  = 8.0;
+    productFontSize  = isVeryLong ? 6.5 : isLong ? 7.2 : 8.0;
+    productLineClamp = isVeryLong ? 3 : 2;
+    barcodeHeightMm  = isVeryLong ? 6.5 : isLong ? 7.0 : 7.5;
+    letterSpacingPx  = "0.4px";
+  } else if (isMedium) {
+    const is25mm     = activeConfig.labelHeightMm <= 26;
+    storeFontSize    = is25mm ? 9.5 : 11.0;
+    barcodeFontSize  = is25mm ? 9.0 : 10.5;
+    productFontSize  = isVeryLong ? 8.0 : isLong ? 9.0 : isMid ? 9.8 : 10.5;
+    productLineClamp = isVeryLong ? 4 : 3;
+    barcodeHeightMm  = is25mm
+      ? (isVeryLong ? 8.0 : isLong ? 8.8 : 9.5)
+      : (isVeryLong ? 9.5 : isLong ? 10.5 : 11.5);
+    letterSpacingPx  = "0.8px";
+  } else {
+    storeFontSize    = activeConfig.labelHeightMm >= 45 ? 14.0 : 12.5;
+    barcodeFontSize  = activeConfig.labelHeightMm >= 45 ? 13.0 : 11.5;
+    productFontSize  = isVeryLong ? 10.0 : isLong ? 11.5 : 13.0;
+    productLineClamp = 4;
+    barcodeHeightMm  = isVeryLong
+      ? Math.max(12, Math.round((activeConfig.labelHeightMm - activeConfig.marginTopMm - activeConfig.marginBottomMm) * 0.38 * 10) / 10)
+      : Math.max(14, Math.round((activeConfig.labelHeightMm - activeConfig.marginTopMm - activeConfig.marginBottomMm) * 0.44 * 10) / 10);
+    letterSpacingPx  = "1.2px";
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -510,20 +536,24 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
                 <p
                   className="font-black uppercase text-center leading-tight truncate w-full max-w-full min-w-0 flex-shrink-0 tracking-tight text-gray-900 font-sans"
                   style={{ fontSize: storeFontSize }}
+                  title={activeConfig.storeName}
                 >
                   {activeConfig.storeName}
                 </p>
               )}
               {product.product_name && (
                 <p
-                  className={`font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans ${
-                    isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
-                  }`}
+                  className="font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans leading-tight"
                   style={{
                     fontSize: productFontSize,
                     marginTop: isSmall ? "1px" : "2px",
                     marginBottom: isSmall ? "1px" : "2px",
-                    wordBreak: "break-word",
+                    display: "-webkit-box",
+                    WebkitLineClamp: productLineClamp,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    wordBreak: "normal",
+                    overflowWrap: "break-word",
                   }}
                   title={product.product_name}
                 >
@@ -531,8 +561,8 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
                 </p>
               )}
               <div
-                className="w-full max-w-full flex items-center justify-center min-h-0 overflow-hidden my-0.5"
-                style={{ height: Math.round(dynamicBarcodeHeightMm * scale * 0.78) }}
+                className="w-full max-w-full flex items-center justify-center shrink-0 overflow-hidden my-0.5"
+                style={{ height: Math.round(barcodeHeightMm * scale * 0.85) }}
               >
                 <svg ref={svgCallbackRef} className="w-full h-full block" />
               </div>
@@ -541,7 +571,7 @@ function BarcodePrintModal({ product, storeSettings, open, onClose }: BarcodePri
                   className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5 truncate w-full max-w-full min-w-0"
                   style={{
                     fontSize: barcodeFontSize,
-                    letterSpacing: isSmall ? "0.4px" : "1.2px",
+                    letterSpacing: letterSpacingPx,
                   }}
                 >
                   {product.barcode}

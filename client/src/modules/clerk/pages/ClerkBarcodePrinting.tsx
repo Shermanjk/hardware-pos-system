@@ -67,30 +67,58 @@ function BarcodePreview({ code, heightMm, symbology }: {
 
 // ─── To-scale dynamic label preview card ─────────────────────────────────────
 
+// ─── To-scale dynamic label preview card ─────────────────────────────────────
+
 function LabelCard({ product, config }: { product: ProductRecord; config: BarcodePrinterConfig }) {
-  const isSmall = config.labelWidthMm <= 35 || config.labelHeightMm <= 22;
-  const scale   = isSmall ? 6.2 : 4.6; // Higher resolution scale for crisp on-screen legibility
-  const w       = config.labelWidthMm  * scale;
-  const h       = config.labelHeightMm * scale;
-  const pt      = Math.max(3, config.marginTopMm    * scale);
-  const pb      = Math.max(3, config.marginBottomMm * scale);
-  const pl      = Math.max(4, config.marginLeftMm   * scale);
-  const pr      = Math.max(4, config.marginRightMm  * scale);
+  const isSmall  = config.labelWidthMm <= 35 || config.labelHeightMm <= 22;
+  const isMedium = !isSmall && (config.labelWidthMm <= 55 || config.labelHeightMm <= 35);
+  const scale    = isSmall ? 6.2 : 4.6; // High resolution scale for crisp on-screen legibility
+  const w        = config.labelWidthMm  * scale;
+  const h        = config.labelHeightMm * scale;
+  const pt       = Math.max(3, config.marginTopMm    * scale);
+  const pb       = Math.max(3, config.marginBottomMm * scale);
+  const pl       = Math.max(4, config.marginLeftMm   * scale);
+  const pr       = Math.max(4, config.marginRightMm  * scale);
 
   const nameLen = (product.product_name || "").length;
   const isVeryLong = nameLen > 90;
-  const isLong = nameLen > 50;
+  const isLong     = nameLen > 50;
+  const isMid      = nameLen > 30;
 
-  const storeFontSize   = isSmall ? 9.5 : 11.0;
-  const productFontSize = isSmall
-    ? (isVeryLong ? 7.2 : isLong ? 7.8 : 8.5)
-    : (isVeryLong ? 8.2 : isLong ? 9.0 : nameLen > 30 ? 9.5 : 10.0);
-  const barcodeFontSize = isSmall ? Math.max(7.2, Math.min(10, config.fontSizePt * 0.82)) : Math.max(8.0, Math.min(12, config.fontSizePt * 0.88));
+  let storeFontSize: number;
+  let productFontSize: number;
+  let barcodeFontSize: number;
+  let barcodeHeightMm: number;
+  let productLineClamp: number;
+  let letterSpacingPx: string;
 
-  // Dynamically allocate barcode height so long text never gets truncated
-  const dynamicBarcodeHeightMm = isSmall
-    ? (isLong ? 5.2 : 7.2)
-    : (isVeryLong ? 8.2 : isLong ? 10.5 : config.barcodeHeightMm);
+  if (isSmall) {
+    storeFontSize    = 8.5;
+    barcodeFontSize  = 8.0;
+    productFontSize  = isVeryLong ? 6.5 : isLong ? 7.2 : 8.0;
+    productLineClamp = isVeryLong ? 3 : 2;
+    barcodeHeightMm  = isVeryLong ? 6.5 : isLong ? 7.0 : 7.5;
+    letterSpacingPx  = "0.4px";
+  } else if (isMedium) {
+    const is25mm     = config.labelHeightMm <= 26;
+    storeFontSize    = is25mm ? 9.5 : 11.0;
+    barcodeFontSize  = is25mm ? 9.0 : 10.5;
+    productFontSize  = isVeryLong ? 8.0 : isLong ? 9.0 : isMid ? 9.8 : 10.5;
+    productLineClamp = isVeryLong ? 4 : 3;
+    barcodeHeightMm  = is25mm
+      ? (isVeryLong ? 8.0 : isLong ? 8.8 : 9.5)
+      : (isVeryLong ? 9.5 : isLong ? 10.5 : 11.5);
+    letterSpacingPx  = "0.8px";
+  } else {
+    storeFontSize    = config.labelHeightMm >= 45 ? 14.0 : 12.5;
+    barcodeFontSize  = config.labelHeightMm >= 45 ? 13.0 : 11.5;
+    productFontSize  = isVeryLong ? 10.0 : isLong ? 11.5 : 13.0;
+    productLineClamp = 4;
+    barcodeHeightMm  = isVeryLong
+      ? Math.max(12, Math.round((config.labelHeightMm - config.marginTopMm - config.marginBottomMm) * 0.38 * 10) / 10)
+      : Math.max(14, Math.round((config.labelHeightMm - config.marginTopMm - config.marginBottomMm) * 0.44 * 10) / 10);
+    letterSpacingPx  = "1.2px";
+  }
 
   return (
     <div
@@ -120,14 +148,17 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
       )}
       {product.product_name && (
         <p
-          className={`font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans ${
-            isSmall ? "line-clamp-3 leading-tight" : "line-clamp-4 leading-snug"
-          }`}
+          className="font-semibold text-left w-full max-w-full min-w-0 flex-shrink-0 text-gray-800 font-sans leading-tight"
           style={{
             fontSize: productFontSize,
             marginTop: isSmall ? "1px" : "2px",
             marginBottom: isSmall ? "1px" : "2px",
-            wordBreak: "break-word",
+            display: "-webkit-box",
+            WebkitLineClamp: productLineClamp,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            wordBreak: "normal",
+            overflowWrap: "break-word",
           }}
           title={product.product_name}
         >
@@ -135,12 +166,12 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
         </p>
       )}
       <div
-        className="w-full max-w-full flex items-center justify-center min-h-0 overflow-hidden my-0.5"
-        style={{ height: Math.round(dynamicBarcodeHeightMm * scale * 0.78) }}
+        className="w-full max-w-full flex items-center justify-center shrink-0 overflow-hidden my-0.5"
+        style={{ height: Math.round(barcodeHeightMm * scale * 0.85) }}
       >
         <BarcodePreview
           code={product.barcode}
-          heightMm={dynamicBarcodeHeightMm}
+          heightMm={barcodeHeightMm}
           symbology={config.barcodeSymbology}
         />
       </div>
@@ -149,7 +180,7 @@ function LabelCard({ product, config }: { product: ProductRecord; config: Barcod
           className="font-mono text-center font-bold text-gray-900 leading-none flex-shrink-0 mt-0.5 truncate w-full max-w-full min-w-0"
           style={{
             fontSize: barcodeFontSize,
-            letterSpacing: isSmall ? "0.4px" : "1.2px",
+            letterSpacing: letterSpacingPx,
           }}
         >
           {product.barcode}
