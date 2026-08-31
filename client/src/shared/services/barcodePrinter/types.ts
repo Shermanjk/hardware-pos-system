@@ -14,9 +14,10 @@ export type { BarcodePrinterConfig };
 // ─── Print job descriptor ─────────────────────────────────────────────────────
 
 export interface BarcodePrintItem {
-  barcode:   string;   // The barcode value to encode (CODE128 or configured symbology)
-  storeName: string;   // Header text — line 1 of the label
-  quantity:  number;   // Number of identical labels to print
+  barcode:      string;   // The barcode value to encode (CODE128 or configured symbology)
+  storeName:    string;   // Header text — line 1 of the label
+  productName?: string;   // Product description text (left-aligned)
+  quantity:     number;   // Number of identical labels to print
 }
 
 // ─── Engine interface ─────────────────────────────────────────────────────────
