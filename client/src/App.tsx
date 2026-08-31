@@ -38,9 +38,9 @@ const Users                = lazy(() => import("./modules/admin/pages/Users"));
 // ─── Lazy-loaded cashier page ─────────────────────────────────────────────────
 const Cashier = lazy(() => import("./modules/cashier/pages/Cashier"));
 
-// ─── Lazy-loaded public pages ─────────────────────────────────────────────────
-const ChangePassword = lazy(() => import("./pages/ChangePassword"));
-const Login          = lazy(() => import("./pages/Login"));
+// ─── Eagerly-loaded public pages (prevents kiosk screen flicker/blink on logout) ───
+import ChangePassword from "./pages/ChangePassword";
+import Login from "./pages/Login";
 
 // ─── Lazy-loaded clerk pages (layout is eager — see import above) ─────────────
 const ClerkBarcodePrinting  = lazy(() => import("./modules/clerk/pages/ClerkBarcodePrinting"));
@@ -118,43 +118,40 @@ function AdminRouter() {
 
 function Router() {
   return (
-    // Root Suspense only fires on the very first cold load of public pages
-    // (Login, ChangePassword) or the Cashier terminal chunk.
-    // Admin and Clerk terminals have their own inner Suspense boundaries.
-    <Suspense fallback={<PageSkeleton />}>
-      <Switch>
-        {/* Public routes */}
-        <Route path="/login"           component={Login}          />
-        <Route path="/change-password" component={ChangePassword} />
+    <Switch>
+      {/* Public routes — eager loaded, zero fallback flash on login/logout */}
+      <Route path="/login"           component={Login}          />
+      <Route path="/change-password" component={ChangePassword} />
 
-        {/* Cashier terminal — Cashier role only */}
-        <Route path="/cashier">
+      {/* Cashier terminal — Cashier role only */}
+      <Route path="/cashier">
+        <Suspense fallback={<PageSkeleton />}>
           <ProtectedRoute allowedRoles={["Cashier"]}>
             <PasswordChangeGuard>
               <Cashier />
             </PasswordChangeGuard>
           </ProtectedRoute>
-        </Route>
+        </Suspense>
+      </Route>
 
-        {/* Inventory Clerk module */}
-        <Route path="/clerk/:rest*">
-          <ProtectedRoute allowedRoles={["Inventory Clerk"]}>
-            <PasswordChangeGuard>
-              <ClerkRouter />
-            </PasswordChangeGuard>
-          </ProtectedRoute>
-        </Route>
+      {/* Inventory Clerk module */}
+      <Route path="/clerk/:rest*">
+        <ProtectedRoute allowedRoles={["Inventory Clerk"]}>
+          <PasswordChangeGuard>
+            <ClerkRouter />
+          </PasswordChangeGuard>
+        </ProtectedRoute>
+      </Route>
 
-        {/* Admin module — catches everything else */}
-        <Route>
-          <ProtectedRoute allowedRoles={["Admin"]}>
-            <PasswordChangeGuard>
-              <AdminRouter />
-            </PasswordChangeGuard>
-          </ProtectedRoute>
-        </Route>
-      </Switch>
-    </Suspense>
+      {/* Admin module — catches everything else */}
+      <Route>
+        <ProtectedRoute allowedRoles={["Admin"]}>
+          <PasswordChangeGuard>
+            <AdminRouter />
+          </PasswordChangeGuard>
+        </ProtectedRoute>
+      </Route>
+    </Switch>
   );
 }
 

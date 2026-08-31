@@ -151,11 +151,11 @@ export type ReturnNotification = ReturnRequestNotification;
 import { pool } from "./db.js";
 
 // ─── Heartbeat constants ──────────────────────────────────────────────────────
-// Every 30 s we ping each connected socket. If no pong arrives within 10 s we
+// Every 5 s we ping each connected socket. If no pong arrives within 3 s we
 // terminate the connection. This prevents zombie sockets from accumulating in
 // adminClients / cashierClients over a long business day.
-const HEARTBEAT_INTERVAL_MS = 30_000; // how often we ping
-const PONG_TIMEOUT_MS        = 10_000; // how long we wait for pong before terminating
+const HEARTBEAT_INTERVAL_MS = 5_000;  // how often we ping (5 s)
+const PONG_TIMEOUT_MS        = 3_000;  // how long we wait for pong before terminating (3 s)
 
 // Track all connected authenticated sockets for system-wide sync
 const allClients = new Set<WebSocket>();
@@ -204,6 +204,20 @@ export function terminateUserSockets(userId: number, reason = "Session ended."):
 function attachHeartbeat(ws: WebSocket, userId?: number): () => void {
   let pongTimer: ReturnType<typeof setTimeout> | null = null;
   let lastDbUpdate = Date.now();
+
+  // Instant response to client-initiated heartbeat pulses
+  ws.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      if (msg && msg.type === "heartbeat") {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "heartbeat_ack", timestamp: Date.now() }));
+        }
+      }
+    } catch {
+      /* ignore non-json messages */
+    }
+  });
 
   // Kick off a recurring ping every HEARTBEAT_INTERVAL_MS.
   const heartbeatInterval = setInterval(() => {

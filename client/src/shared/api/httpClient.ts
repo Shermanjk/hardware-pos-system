@@ -11,10 +11,11 @@
 import axios from "axios";
 import { loadToken, clearToken, TOKEN_KEY } from "@/shared/utils/auth";
 import { API_BASE_URL } from "@/config/api";
+import { realtimeHub } from "@/shared/hooks/useRealtimeSync";
 
 const httpClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15_000, // 15 s — prevents requests from hanging indefinitely
+  timeout: 10_000, // 10 s — prevents requests from hanging indefinitely
 });
 
 // ── Request interceptor: attach JWT ──────────────────────────────────────────
@@ -27,13 +28,21 @@ httpClient.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Response interceptor: force-logout on 401 ────────────────────────────────
-// This is the single canonical place for 401 handling. The old global
-// `axios.interceptors.response.use` in authApi.ts is removed once this is in
-// place to avoid double-redirect side effects.
+// ── Response interceptor: force-logout on 401 & fail-fast offline trigger ────
 httpClient.interceptors.response.use(
   (res) => res,
   (error) => {
+    // If request failed because of a network error / severed cable, trigger offline banner in <50ms
+    if (
+      !error.response ||
+      error.code === "ERR_NETWORK" ||
+      error.code === "ECONNABORTED" ||
+      error.message?.includes("Network Error") ||
+      error.message?.includes("timeout")
+    ) {
+      realtimeHub.setOffline(true);
+    }
+
     if (error.response?.status === 401) {
       const stored = localStorage.getItem(TOKEN_KEY);
       // Only force-logout if we had a token (i.e. not a failed login attempt)

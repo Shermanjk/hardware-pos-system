@@ -40,7 +40,7 @@ import type { CartItem, CustomerInfo, SaleReceiptParams } from "../utils/receipt
 import { printCreditPaymentReceipt, printSaleReceipt } from "../utils/receipt";
 
 // ─── Polling constants ────────────────────────────────────────────────────────
-const HEALTH_POLL_MS   = 15_000; // check server reachability every 15 s
+const HEALTH_POLL_MS   = 2_000;  // check server reachability every 2 s as rapid backup
 const PENDING_POLL_MS  = 60_000; // refresh pending returns/voids every 60 s
 
 // ─── Draft type ───────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export default function Cashier() {
 
   const checkHealth = useCallback(async () => {
     try {
-      await httpClient.get("/api/health", { timeout: 5_000 });
+      await httpClient.get("/api/health", { timeout: 1_500 });
       setIsHealthOffline(false);
     } catch {
       setIsHealthOffline(true);

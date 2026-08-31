@@ -45,9 +45,13 @@ type StatusCallback = (state: ServerStatusState) => void;
 class RealtimeSyncHub {
   private ws: WebSocket | null = null;
   private retryDelay = 1000;
-  private readonly maxDelay = 15_000; // Cap at 15 s for fast POS reconnects
+  private readonly maxDelay = 10_000; // Cap at 10 s for fast POS reconnects
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private healthProbeTimer: ReturnType<typeof setInterval> | null = null;
+  private clientHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatMissedTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly HEARTBEAT_PULSE_MS = 1500;   // 1.5s client heartbeat pulse
+  private readonly HEARTBEAT_TIMEOUT_MS = 1500; // 1.5s ack deadline -> split-second offline detection
   private listeners = new Map<EntityType, Set<SyncCallback>>();
   private wildcardListeners = new Set<SyncCallback>();
   private statusListeners = new Set<StatusCallback>();
@@ -82,12 +86,22 @@ class RealtimeSyncHub {
 
       window.addEventListener("offline", () => {
         this.updateState({ status: "disconnected", isOffline: true });
+        this.startFastHealthProbe();
       });
     }
   }
 
   public getStatus(): ServerStatusState {
     return { ...this.state };
+  }
+
+  public setOffline(offline: boolean) {
+    if (offline) {
+      this.updateState({ status: "disconnected", isOffline: true });
+      this.startFastHealthProbe();
+    } else {
+      this.updateState({ isOffline: false });
+    }
   }
 
   public subscribeStatus(callback: StatusCallback): () => void {
@@ -129,6 +143,7 @@ class RealtimeSyncHub {
   }
 
   public reconnectNow() {
+    this.stopClientHeartbeat();
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
@@ -157,14 +172,14 @@ class RealtimeSyncHub {
 
   private startFastHealthProbe() {
     if (this.healthProbeTimer) return;
-    // Fast probing every 3 seconds while disconnected to reconnect immediately when server starts
+    // Rapid probing every 1.0s while disconnected to auto-reconnect instantly when LAN cable is reconnected
     this.healthProbeTimer = setInterval(async () => {
       if (this.state.status === "connected") {
         this.stopFastHealthProbe();
         return;
       }
       try {
-        const res = await axios.get("/api/health", { timeout: 2000 });
+        const res = await axios.get("/api/health", { timeout: 1200 });
         if (res.status === 200) {
           this.stopFastHealthProbe();
           this.reconnectNow();
@@ -172,7 +187,7 @@ class RealtimeSyncHub {
       } catch {
         // Still down
       }
-    }, 3000);
+    }, 1000);
   }
 
   private stopFastHealthProbe() {
@@ -180,6 +195,52 @@ class RealtimeSyncHub {
       clearInterval(this.healthProbeTimer);
       this.healthProbeTimer = null;
     }
+  }
+
+  private startClientHeartbeat() {
+    this.stopClientHeartbeat();
+    this.clientHeartbeatInterval = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        this.stopClientHeartbeat();
+        return;
+      }
+
+      try {
+        this.ws.send(JSON.stringify({ type: "heartbeat" }));
+      } catch {
+        this.handleHeartbeatMissed();
+        return;
+      }
+
+      if (!this.heartbeatMissedTimer) {
+        this.heartbeatMissedTimer = setTimeout(() => {
+          this.handleHeartbeatMissed();
+        }, this.HEARTBEAT_TIMEOUT_MS);
+      }
+    }, this.HEARTBEAT_PULSE_MS);
+  }
+
+  private stopClientHeartbeat() {
+    if (this.clientHeartbeatInterval) {
+      clearInterval(this.clientHeartbeatInterval);
+      this.clientHeartbeatInterval = null;
+    }
+    if (this.heartbeatMissedTimer) {
+      clearTimeout(this.heartbeatMissedTimer);
+      this.heartbeatMissedTimer = null;
+    }
+  }
+
+  private handleHeartbeatMissed() {
+    this.stopClientHeartbeat();
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    this.updateState({ status: "disconnected", isOffline: true });
+    this.startFastHealthProbe();
   }
 
   private ensureConnected() {
@@ -208,6 +269,7 @@ class RealtimeSyncHub {
         this.isConnecting = false;
         this.retryDelay = 1000;
         this.stopFastHealthProbe();
+        this.startClientHeartbeat();
         this.updateState({
           status: "connected",
           isOffline: false,
@@ -229,6 +291,15 @@ class RealtimeSyncHub {
       this.ws.onmessage = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
+          if (data && data.type === "heartbeat_ack") {
+            // Heartbeat acknowledged by server — connection is verified alive!
+            if (this.heartbeatMissedTimer) {
+              clearTimeout(this.heartbeatMissedTimer);
+              this.heartbeatMissedTimer = null;
+            }
+            return;
+          }
+
           if (data && data.type === "entity_updated") {
             this.notifyListeners(data as EntityUpdateEvent);
             window.dispatchEvent(new CustomEvent("entity_updated", { detail: data }));
@@ -277,6 +348,7 @@ class RealtimeSyncHub {
       };
 
       this.ws.onclose = (event: CloseEvent) => {
+        this.stopClientHeartbeat();
         this.isConnecting = false;
         this.ws = null;
 
@@ -303,10 +375,13 @@ class RealtimeSyncHub {
       };
 
       this.ws.onerror = () => {
+        this.stopClientHeartbeat();
         this.isConnecting = false;
         this.updateState({ status: "disconnected", isOffline: true });
+        this.startFastHealthProbe();
       };
     } catch {
+      this.stopClientHeartbeat();
       this.isConnecting = false;
       this.updateState({ status: "disconnected", isOffline: true });
       this.startFastHealthProbe();

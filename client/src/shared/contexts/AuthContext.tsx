@@ -221,12 +221,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentUserId = user?.id;
     const currentUsername = user?.username;
 
-    logoutRequest(currentToken, currentUserId, currentUsername);
+    // Immediately route to /login atomically so the screen swaps without flash
+    setLocation("/login");
     clearAllTimers();
     clearToken();
     setToken(null);
     setUser(null);
-    setLocation("/login");
+
+    // Asynchronously notify server in background
+    logoutRequest(currentToken, currentUserId, currentUsername);
   }, [token, user, setLocation, clearAllTimers]);
 
   return (
