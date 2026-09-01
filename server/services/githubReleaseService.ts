@@ -15,6 +15,7 @@ const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/
 export interface GitHubReleaseInfo {
   tagName: string;
   version: string;
+  targetDatabaseVersion?: string;
   name: string;
   body: string;
   publishedAt: string;
@@ -72,6 +73,21 @@ export async function fetchLatestRelease(): Promise<GitHubReleaseInfo | null> {
     const tagName = data.tag_name || "";
     const cleanVersion = tagName.replace(/^v/i, "");
 
+    // Fetch target database version from raw version.json for this tag/main
+    let targetDatabaseVersion = "000";
+    try {
+      const rawVersionUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${tagName || "main"}/config/version.json`;
+      const rawRes = await axios.get(rawVersionUrl, {
+        headers: process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {},
+        timeout: 5000,
+      });
+      if (rawRes.data?.databaseVersion) {
+        targetDatabaseVersion = String(rawRes.data.databaseVersion);
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+
     // Find the release zip asset (pre-compiled bundle if attached by Actions)
     const zipAsset = Array.isArray(data.assets)
       ? data.assets.find((asset: any) =>
@@ -89,6 +105,7 @@ export async function fetchLatestRelease(): Promise<GitHubReleaseInfo | null> {
     return {
       tagName,
       version: cleanVersion || "1.0.0",
+      targetDatabaseVersion,
       name: data.name || tagName,
       body: data.body || "",
       publishedAt: data.published_at || "",

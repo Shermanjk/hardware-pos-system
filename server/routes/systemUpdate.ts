@@ -14,7 +14,7 @@ import {
 import { checkForUpdates, pullApplicationUpdate } from "../services/gitUpdateService.js";
 import { maintenanceService } from "../services/maintenanceService.js";
 import { executePendingMigrations } from "../services/migrationService.js";
-import { getVersionStatus, updateInstalledVersion } from "../services/versionService.js";
+import { getVersionStatus, updateInstalledVersion, compareVersions } from "../services/versionService.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { broadcastServerMaintenance } from "../ws.js";
 
@@ -27,6 +27,11 @@ router.get("/version", authenticate, async (req: Request, res: Response) => {
     
     // Optionally augment with latest release info if reachable
     let releaseInfo = null;
+    let targetDbVersion = status.downloadedDatabaseVersion;
+    let databaseUpdateRequired = status.databaseUpdateRequired;
+    let updateAvailable = status.updateAvailable;
+    let downloadedVersion = status.downloadedVersion;
+
     try {
       const check = await checkForReleaseUpdates();
       if (check.release) {
@@ -37,6 +42,12 @@ router.get("/version", authenticate, async (req: Request, res: Response) => {
           publishedAt: check.release.publishedAt,
           hasUpdate: check.hasUpdate,
         };
+        downloadedVersion = check.latestVersion;
+        updateAvailable = check.hasUpdate;
+        if (check.release.targetDatabaseVersion && check.release.targetDatabaseVersion !== "000") {
+          targetDbVersion = check.release.targetDatabaseVersion;
+          databaseUpdateRequired = compareVersions(targetDbVersion, status.installedDatabaseVersion) > 0;
+        }
       }
     } catch {
       // Offline or GitHub unreachable - proceed with local status
@@ -44,6 +55,10 @@ router.get("/version", authenticate, async (req: Request, res: Response) => {
 
     res.status(200).json({
       ...status,
+      downloadedVersion,
+      downloadedDatabaseVersion: targetDbVersion,
+      updateAvailable,
+      databaseUpdateRequired,
       releaseInfo,
     });
   } catch (error) {
@@ -87,13 +102,21 @@ router.post("/fetch", authenticate, requireRole("Admin"), async (req: Request, r
     }
 
     if (releaseCheck?.release) {
-      const hasUpdates = releaseCheck.hasUpdate || versionStatus.databaseUpdateRequired;
+      let targetDbVersion = versionStatus.downloadedDatabaseVersion;
+      let databaseUpdateRequired = versionStatus.databaseUpdateRequired;
+      if (releaseCheck.release.targetDatabaseVersion && releaseCheck.release.targetDatabaseVersion !== "000") {
+        targetDbVersion = releaseCheck.release.targetDatabaseVersion;
+        databaseUpdateRequired = compareVersions(targetDbVersion, versionStatus.installedDatabaseVersion) > 0;
+      }
+      const hasUpdates = releaseCheck.hasUpdate || databaseUpdateRequired;
       return res.status(200).json({
         ...versionStatus,
         message: hasUpdates ? "New release update available" : "Already running latest version",
         hasUpdates,
         updateAvailable: releaseCheck.hasUpdate,
+        databaseUpdateRequired,
         downloadedVersion: releaseCheck.latestVersion,
+        downloadedDatabaseVersion: targetDbVersion,
         release: releaseCheck.release,
       });
     }

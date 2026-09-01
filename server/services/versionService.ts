@@ -28,7 +28,7 @@ interface VersionStatus {
   databaseUpdateRequired: boolean;
 }
 
-function compareVersions(left: string, right: string): number {
+export function compareVersions(left: string, right: string): number {
   const a = left.split(".").map((part) => Number(part) || 0);
   const b = right.split(".").map((part) => Number(part) || 0);
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
