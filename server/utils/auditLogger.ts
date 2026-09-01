@@ -78,6 +78,9 @@ export type AuditAction =
   | "SYSTEM_SETTINGS_UPDATED"
   | "TAX_CONFIGURATION_UPDATED"
   | "BUSINESS_INFORMATION_UPDATED"
+  | "TERMINAL_CREATED"
+  | "TERMINAL_UPDATED"
+  | "TERMINAL_DEACTIVATED"
   // ── Backup & Update ───────────────────────────────────────────────────────────
   | "BACKUP_CREATED"
   | "BACKUP_UPLOADED"

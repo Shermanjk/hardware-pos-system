@@ -13,7 +13,8 @@ import { useAuth } from "@/shared/contexts/AuthContext";
 import LoadingSpinner from "@/shared/components/LoadingSpinner";
 import { saveToken } from "@/shared/utils/auth";
 import axios from "axios";
-import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Pencil, X } from "lucide-react";
+import { fetchAllTerminals, createTerminal, updateTerminal, deleteTerminal, type POSTerminal } from "@/shared/api/terminalsApi";
+import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, Laptop, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BackupSettings from "./BackupSettings";
 import SystemUpdate from "./SystemUpdate";
@@ -313,23 +314,7 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
         />
 
         <div className="border-t border-gray-100 pt-4 space-y-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">POS Machine Registration & Accreditation</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EditableField
-              label="MIN (Machine Identification No.)"
-              fieldKey="pos_min"
-              savedValue={saved.pos_min}
-              placeholder="e.g. 000-123456789"
-              onSave={handleSave}
-            />
-            <EditableField
-              label="S/N (POS Serial Number)"
-              fieldKey="pos_serial"
-              savedValue={saved.pos_serial}
-              placeholder="e.g. SN-20250001"
-              onSave={handleSave}
-            />
-          </div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">BIR Permit & Software Accreditation</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <EditableField
               label="PTU / ACCN Number"
@@ -362,10 +347,329 @@ function BusinessTab({ initial, onSettingsChange }: { initial: StoreSettings | n
               onSave={handleSave}
             />
           </div>
-          <p className="mt-2 text-xs text-gray-400">These identifiers will be printed on every official receipt and Z-reading in compliance with BIR regulations.</p>
+          <p className="mt-2 text-xs text-gray-400">These permit details will be printed on every official receipt and Z-reading in compliance with BIR regulations.</p>
         </div>
+
+        {/* ── POS Terminals & Checkout Counters Management ── */}
+        <TerminalsManagementCard />
+
       </div>
     </Card>
+  );
+}
+
+// ─── Terminals Management Card ────────────────────────────────────────────────
+
+function TerminalsManagementCard() {
+  const [terminals, setTerminals] = useState<POSTerminal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingTerminal, setEditingTerminal] = useState<POSTerminal | null>(null);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    terminal_code: "",
+    terminal_name: "",
+    pos_serial: "",
+    pos_min: "",
+  });
+
+  const loadTerminals = useCallback(async () => {
+    try {
+      setLoading(true);
+      const list = await fetchAllTerminals();
+      setTerminals(list);
+    } catch (err) {
+      console.warn("[Settings] Failed to fetch terminals:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTerminals();
+  }, [loadTerminals]);
+
+  const handleOpenAdd = () => {
+    const nextNum = terminals.length + 1;
+    const code = `TERM-${String(nextNum).padStart(2, "0")}`;
+    setFormData({
+      terminal_code: code,
+      terminal_name: `Counter ${nextNum}`,
+      pos_serial: "",
+      pos_min: "",
+    });
+    setIsAddOpen(true);
+  };
+
+  const handleOpenEdit = (t: POSTerminal) => {
+    setEditingTerminal(t);
+    setFormData({
+      terminal_code: t.terminal_code,
+      terminal_name: t.terminal_name,
+      pos_serial: t.pos_serial || "",
+      pos_min: t.pos_min || "",
+    });
+  };
+
+  const handleSaveAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.terminal_code.trim() || !formData.terminal_name.trim()) return;
+    setSaving(true);
+    try {
+      await createTerminal({
+        terminal_code: formData.terminal_code.trim(),
+        terminal_name: formData.terminal_name.trim(),
+        pos_serial: formData.pos_serial.trim(),
+        pos_min: formData.pos_min.trim(),
+      });
+      setIsAddOpen(false);
+      await loadTerminals();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Failed to create terminal.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTerminal) return;
+    setSaving(true);
+    try {
+      await updateTerminal(editingTerminal.id, {
+        terminal_code: formData.terminal_code.trim(),
+        terminal_name: formData.terminal_name.trim(),
+        pos_serial: formData.pos_serial.trim(),
+        pos_min: formData.pos_min.trim(),
+      });
+      setEditingTerminal(null);
+      await loadTerminals();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Failed to update terminal.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border border-blue-100 bg-blue-50/40 rounded-xl p-5 space-y-4 mt-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+            <Laptop className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">
+              Registered POS Terminals / Checkout Counters
+            </h3>
+            <p className="text-xs text-gray-500">
+              Configure each checkout computer with its own hardware Serial Number (S/N) and BIR Machine ID (MIN).
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleOpenAdd}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold gap-1.5 h-8"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Counter
+        </Button>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-2xs">
+        {loading ? (
+          <div className="p-6 text-center text-xs text-gray-500">Loading terminals...</div>
+        ) : terminals.length === 0 ? (
+          <div className="p-6 text-center text-xs text-gray-500">
+            No terminals registered yet. Click &quot;Add Counter&quot; to register your first cashier terminal.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-4">Code</th>
+                  <th className="py-2.5 px-4">Counter Name</th>
+                  <th className="py-2.5 px-4 font-mono">Hardware S/N</th>
+                  <th className="py-2.5 px-4 font-mono">BIR MIN</th>
+                  <th className="py-2.5 px-4 text-center">Status</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {terminals.map((t) => (
+                  <tr key={t.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-blue-700">
+                      {t.terminal_code}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-gray-900">
+                      {t.terminal_name}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-gray-700">
+                      {t.pos_serial || <span className="text-gray-400 italic">Not set</span>}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-gray-700">
+                      {t.pos_min || <span className="text-gray-400 italic">Not set</span>}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        t.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {t.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenEdit(t)}
+                        className="h-7 px-2.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      >
+                        <Pencil className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Dialog: Add Terminal ── */}
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="max-w-md p-6">
+          <form onSubmit={handleSaveAdd}>
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-gray-900">
+                Add POS Terminal / Counter
+              </DialogTitle>
+              <DialogDescription className="text-xs text-gray-500">
+                Register a new checkout counter workstation.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 mt-4">
+              <div>
+                <Label className="text-xs font-semibold">Terminal Code</Label>
+                <Input
+                  required
+                  placeholder="e.g. TERM-03"
+                  value={formData.terminal_code}
+                  onChange={(e) => setFormData((p) => ({ ...p, terminal_code: e.target.value.toUpperCase() }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Counter Name</Label>
+                <Input
+                  required
+                  placeholder="e.g. Counter 3 (Hardware Desk)"
+                  value={formData.terminal_name}
+                  onChange={(e) => setFormData((p) => ({ ...p, terminal_name: e.target.value }))}
+                  className="h-9 text-xs mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Hardware S/N (Serial Number)</Label>
+                <Input
+                  placeholder="e.g. PF3QX4HD (from Windows PowerShell)"
+                  value={formData.pos_serial}
+                  onChange={(e) => setFormData((p) => ({ ...p, pos_serial: e.target.value }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+                <p className="text-[11px] text-gray-400 mt-0.5">Run <code>(Get-CimInstance Win32_BIOS).SerialNumber</code> on that PC.</p>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">BIR MIN (Machine Identification No.)</Label>
+                <Input
+                  placeholder="e.g. 0000-932749903"
+                  value={formData.pos_min}
+                  onChange={(e) => setFormData((p) => ({ ...p, pos_min: e.target.value }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-5">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)} className="text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                {saving ? "Saving..." : "Add Terminal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog: Edit Terminal ── */}
+      <Dialog open={Boolean(editingTerminal)} onOpenChange={(open) => !open && setEditingTerminal(null)}>
+        <DialogContent className="max-w-md p-6">
+          <form onSubmit={handleSaveEdit}>
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-gray-900">
+                Edit POS Terminal: {editingTerminal?.terminal_code}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-gray-500">
+                Update counter details, hardware serial number, or BIR MIN.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 mt-4">
+              <div>
+                <Label className="text-xs font-semibold">Terminal Code</Label>
+                <Input
+                  required
+                  value={formData.terminal_code}
+                  onChange={(e) => setFormData((p) => ({ ...p, terminal_code: e.target.value.toUpperCase() }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Counter Name</Label>
+                <Input
+                  required
+                  value={formData.terminal_name}
+                  onChange={(e) => setFormData((p) => ({ ...p, terminal_name: e.target.value }))}
+                  className="h-9 text-xs mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Hardware S/N (Serial Number)</Label>
+                <Input
+                  placeholder="e.g. PF3QX4HD"
+                  value={formData.pos_serial}
+                  onChange={(e) => setFormData((p) => ({ ...p, pos_serial: e.target.value }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+                <p className="text-[11px] text-gray-400 mt-0.5">Run <code>(Get-CimInstance Win32_BIOS).SerialNumber</code> on that PC.</p>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">BIR MIN (Machine Identification No.)</Label>
+                <Input
+                  placeholder="e.g. 0000-932749901"
+                  value={formData.pos_min}
+                  onChange={(e) => setFormData((p) => ({ ...p, pos_min: e.target.value }))}
+                  className="h-9 text-xs font-mono mt-1"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-5">
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingTerminal(null)} className="text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

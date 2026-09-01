@@ -14,9 +14,11 @@ import { DRAFT_KEYS, useDraftRecovery } from "@/shared/hooks/useDraftRecovery";
 import { useReturnDecisions, useVoidDecisions, type ReturnDecisionNotification, type VoidDecisionNotification } from "@/shared/hooks/useReturnNotifications";
 import { useRealtimeSync, useServerStatus } from "@/shared/hooks/useRealtimeSync";
 import { ServerStatusBanner, ServerStatusBadge } from "@/shared/components/ServerStatusBanner";
-import { ChevronDown, Clock, CreditCard, HandCoins, LogOut, PowerOff, Printer, User, WifiOff } from "lucide-react";
+import { ChevronDown, Clock, CreditCard, HandCoins, Laptop, LogOut, PowerOff, Printer, User, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
+import { TerminalBindingModal } from "../components/TerminalBindingModal";
 import CartPanel from "../components/CartPanel";
 import CashierVoidRequestsPanel from "../components/CashierVoidRequestsPanel";
 import CustomerPanel from "../components/CustomerPanel";
@@ -118,6 +120,10 @@ export default function Cashier() {
     cash_drawer_enabled: false,
   });
   useEffect(() => { getSettings().then(setStoreSettings).catch(() => {}); }, []);
+
+  // ── Active Terminal & Workstation Station Binding ────────────────────────
+  const { terminals, activeTerminal, terminalInfo, bindTerminal, refreshTerminals } = useActiveTerminal(storeSettings);
+  const [showTerminalModal, setShowTerminalModal] = useState(false);
 
   // ── Offline & Server Health indicator ─────────────────────────────────────
   // Combines sub-second WebSocket connection status with active HTTP health check polling.
@@ -893,6 +899,10 @@ export default function Cashier() {
           paymentType: saleResult.payment_type ?? "CASH",
           creditBalance: saleResult.credit_balance !== null ? Math.round((saleResult.credit_balance ?? 0) * 100) : null,
           downPaymentCents: paymentMode === "CREDIT" ? Math.round(downPaymentAmt * 100) : undefined,
+          // Terminal workstation overrides
+          terminalId: terminalInfo.terminalCode,
+          posMin: terminalInfo.posMin,
+          posSerial: terminalInfo.posSerial,
         };
 
         setLastSaleReceiptParams(receiptParams);
@@ -965,6 +975,9 @@ export default function Cashier() {
           cashierName: user?.username || "Cashier",
           notes: utangPaymentNotes.trim() || undefined,
           settings: settingsRes.data || {},
+          terminalId: terminalInfo.terminalCode,
+          posMin: terminalInfo.posMin,
+          posSerial: terminalInfo.posSerial,
         });
       } catch (printErr) {
         console.error("Collection receipt print error:", printErr);
@@ -1263,7 +1276,18 @@ export default function Cashier() {
             </div>
             <span className="font-bold text-gray-900 text-base">Isra Hardware</span>
             <span className="text-gray-300 text-lg">|</span>
-            <span className="text-sm font-medium text-blue-600">POS Terminal</span>
+            <button
+              type="button"
+              onClick={() => setShowTerminalModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all bg-white border-slate-300 hover:border-blue-400 hover:bg-blue-50 text-slate-700 shadow-2xs cursor-pointer"
+              title="Click to assign or change workstation counter (S/N and MIN)"
+            >
+              <Laptop className="h-3.5 w-3.5 text-blue-600" />
+              <span className="max-w-[140px] truncate">{terminalInfo.isBound ? terminalInfo.terminalName : "Assign Station"}</span>
+              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${terminalInfo.isBound ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
+                {terminalInfo.terminalCode}
+              </span>
+            </button>
           </div>
           <div className="hidden md:flex items-center gap-5 text-xs text-gray-500">
             <span className="flex items-center gap-1.5">
@@ -1580,6 +1604,16 @@ export default function Cashier() {
           setIsLogoutShiftFlow(true);
           setShowEndShift(true);
         }}
+      />
+
+      {/* ── Terminal Workstation Binding Modal ── */}
+      <TerminalBindingModal
+        open={showTerminalModal}
+        onOpenChange={setShowTerminalModal}
+        terminals={terminals}
+        currentTerminalId={activeTerminal?.id ?? null}
+        onSelectTerminal={bindTerminal}
+        onRefresh={refreshTerminals}
       />
 
     </div>

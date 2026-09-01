@@ -210,8 +210,9 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   const proprietor = settings.proprietor || "";
   const isVat = settings.vat_enabled ?? false;
   const storeTIN = formatTIN(settings);
-  const posMin = settings.pos_min || "";
-  const posSerial = settings.pos_serial || "";
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const docType = settings.document_type || "SALES INVOICE";
@@ -256,6 +257,8 @@ export function buildSaleReceiptEscpos(params: SaleReceiptParams): Uint8Array {
   b.row("SI No:", cleanInvoiceNumber(invoiceNumber));
   b.row("Date:", dateStr);
   b.row("Time:", timeStr);
+  b.row("Cashier:", (cashierName || "").toUpperCase());
+  if (terminalId) b.row("Terminal:", terminalId.toUpperCase());
   b.divider();
 
   // Customer Info

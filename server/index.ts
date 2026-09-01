@@ -31,6 +31,7 @@ import settingsRoutes from "./routes/settings.js";
 import suppliersRoutes from "./routes/suppliers.js";
 import suspendedSalesRoutes from "./routes/suspendedSales.js";
 import systemUpdateRoutes from "./routes/systemUpdate.js";
+import terminalsRoutes from "./routes/terminals.js";
 import unitsRoutes from "./routes/units.js";
 import usersRoutes from "./routes/users.js";
 import { initWebSocket } from "./ws.js";
@@ -96,6 +97,7 @@ async function startServer() {
   app.use("/api/cash-reconciliation", cashReconciliationRoutes);
   app.use("/api/customers", customersRoutes);
   app.use("/api/credit-limit-overrides", creditLimitOverridesRoutes);
+  app.use("/api/terminals", terminalsRoutes);
   app.use("/api/bir", birRoutes);
 
   // ─── Static files (production only) ──────────────────────────────────────────

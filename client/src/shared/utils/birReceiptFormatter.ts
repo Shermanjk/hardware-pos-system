@@ -77,6 +77,8 @@ export interface SalesInvoiceParams {
   dateTime: string | Date;
   cashierName: string;
   terminalId?: string;
+  posMin?: string;
+  posSerial?: string;
   customer: {
     name: string;
     tin?: string;
@@ -115,6 +117,9 @@ export interface XReadingParams {
   sessionId: number;
   shiftLabel: string;
   cashierName: string;
+  terminalId?: string;
+  posMin?: string;
+  posSerial?: string;
   openedAt: string | Date;
   closedAt?: string | Date | null;
   begInvoiceNo?: string | null;
@@ -139,6 +144,9 @@ export interface ZReadingParams {
   id?: number;
   zCounterNo: number;
   resetCounterNo: number;
+  terminalId?: string;
+  posMin?: string;
+  posSerial?: string;
   readingDate: string | Date;
   openedAt: string | Date;
   closedAt: string | Date;
@@ -187,15 +195,19 @@ export function formatStoreTIN(settings: StoreSettings): string {
   return tinFormatted;
 }
 
-export function buildStoreHeaderLines(settings: StoreSettings, docTitle?: string): string[] {
+export function buildStoreHeaderLines(
+  settings: StoreSettings,
+  docTitle?: string,
+  overrides?: { posMin?: string; posSerial?: string }
+): string[] {
   const lines: string[] = [];
   const storeName = settings.store_name || "HARDWARE POS STORE";
   const registeredName = settings.registered_taxpayer_name || "";
   const address = settings.address || "";
   const fullTin = formatStoreTIN(settings);
   const vatStatus = settings.vat_enabled ? "VAT REGISTERED" : "NON-VAT REGISTERED";
-  const min = settings.pos_min || "N/A";
-  const serial = settings.pos_serial || "N/A";
+  const min = overrides?.posMin !== undefined && overrides?.posMin !== "" ? overrides.posMin : (settings.pos_min || "N/A");
+  const serial = overrides?.posSerial !== undefined && overrides?.posSerial !== "" ? overrides.posSerial : (settings.pos_serial || "N/A");
   const ptu = settings.ptu_or_accn_no || "";
 
   lines.push(doubleDivider());
@@ -235,7 +247,10 @@ export function formatSalesInvoiceText(params: SalesInvoiceParams): string {
   const dateStr = dateObj.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
   const timeStr = dateObj.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  lines.push(...buildStoreHeaderLines(settings, settings.document_type || "SALES INVOICE"));
+  lines.push(...buildStoreHeaderLines(settings, settings.document_type || "SALES INVOICE", {
+    posMin: params.posMin,
+    posSerial: params.posSerial,
+  }));
 
   lines.push(padLine("SI No:", cleanInvoiceNumber(params.invoiceNumber)));
   lines.push(padLine("Date & Time:", `${dateStr} ${timeStr}`));
@@ -359,10 +374,16 @@ export function formatXReadingText(params: XReadingParams): string {
     : "STILL OPEN";
 
   // Full BIR Header with PTU/ACCN
-  lines.push(...buildStoreHeaderLines(settings, "X - READING\n(CASHIER SHIFT REPORT)"));
+  lines.push(...buildStoreHeaderLines(settings, "X - READING\n(CASHIER SHIFT REPORT)", {
+    posMin: params.posMin,
+    posSerial: params.posSerial,
+  }));
 
   lines.push(padLine("Shift Session ID:", String(params.sessionId)));
   lines.push(padLine("Shift Label:", params.shiftLabel));
+  if (params.terminalId) {
+    lines.push(padLine("Terminal:", params.terminalId.toUpperCase()));
+  }
   lines.push(padLine("Cashier:", params.cashierName));
   lines.push(padLine("Shift Opened:", openDate));
   lines.push(padLine("Shift Closed:", closeDate));
@@ -428,7 +449,10 @@ export function formatZReadingText(params: ZReadingParams): string {
   });
 
   // Full BIR Header with PTU/ACCN
-  lines.push(...buildStoreHeaderLines(settings, "Z - READING\n(END OF DAY AUDIT REPORT)"));
+  lines.push(...buildStoreHeaderLines(settings, "Z - READING\n(END OF DAY AUDIT REPORT)", {
+    posMin: params.posMin,
+    posSerial: params.posSerial,
+  }));
 
   lines.push(padLine("Z-Counter No.:", pad4(params.zCounterNo)));
   lines.push(padLine("Reset Counter No.:", String(params.resetCounterNo || 0)));

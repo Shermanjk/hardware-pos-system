@@ -19,6 +19,7 @@ import {
 import { getXReading, createZReading, getZReading, type ZReadingRecord } from "@/shared/api/birApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { formatXReadingText, formatZReadingText, printThermalMonospace } from "@/shared/utils/birReceiptFormatter";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
 import { AlertCircle, CheckCircle2, FileCheck, LogOut, Printer, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -111,6 +112,7 @@ export default function EndShiftModal({
   isLogoutFlow = false,
   onLogoutAfterShift,
 }: EndShiftModalProps) {
+  const { terminalInfo } = useActiveTerminal();
   const [step, setStep] = useState<ModalStep>("loading");
   const [session, setSession] = useState<CashSession | null>(null);
   const [shiftLabel, setShiftLabel] = useState("Day Shift");
@@ -198,6 +200,9 @@ export default function EndShiftModal({
         sessionId: xData.session_id,
         shiftLabel: xData.shift_label,
         cashierName: xData.cashier_name,
+        terminalId: terminalInfo.terminalCode,
+        posMin: terminalInfo.posMin,
+        posSerial: terminalInfo.posSerial,
         openedAt: xData.opened_at,
         closedAt: xData.closed_at,
         begInvoiceNo: xData.beg_invoice_no,

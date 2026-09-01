@@ -66,6 +66,12 @@ export interface SaleReceiptParams {
   creditBalance?: number | null;
   /** Down payment amount in centavos (credit sales). */
   downPaymentCents?: number;
+  /** Terminal Code (e.g. "TERM-01") */
+  terminalId?: string;
+  /** Terminal BIR MIN override */
+  posMin?: string;
+  /** Terminal Hardware S/N override */
+  posSerial?: string;
 }
 
 export interface CreditPaymentReceiptParams {
@@ -77,6 +83,9 @@ export interface CreditPaymentReceiptParams {
   cashierName: string;
   notes?: string;
   settings: StoreSettings;
+  terminalId?: string;
+  posMin?: string;
+  posSerial?: string;
 }
 
 function buildReceiptHTML(params: SaleReceiptParams): string {
@@ -113,8 +122,9 @@ function buildReceiptHTML(params: SaleReceiptParams): string {
   const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
   const documentType = settings.document_type || "SALES INVOICE";
   const currSym = "";
-  const posMin = settings.pos_min || "";
-  const posSerial = settings.pos_serial || "";
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
 
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -438,8 +448,9 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
   const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
   const ptuNo = settings.ptu_or_accn_no || "";
-  const posMin = settings.pos_min || "";
-  const posSerial = settings.pos_serial || "";
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
   const documentType = settings.document_type || "SALES INVOICE";
   const currSym = "";
 
@@ -473,7 +484,9 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
       vatableNetCents = snaps
         .filter((s) => s.tax_type === "VATABLE")
         .reduce((acc, s) => acc + toCentavos(Number(s.taxable_amount)), 0);
-      vatAmountCents = displayTaxCents;
+      vatAmountCents = snaps
+        .filter((s) => s.tax_type === "VATABLE")
+        .reduce((acc, s) => acc + toCentavos(Number(s.vat_amount)), 0);
       vatExemptCentsCalculated = snaps
         .filter((s) => s.tax_type === "VAT_EXEMPT")
         .reduce((acc, s) => acc + toCentavos(Number(s.line_subtotal)), 0);
@@ -502,6 +515,8 @@ export function buildSaleReceiptText(params: SaleReceiptParams): string {
   lines.push(`SI No:          ${cleanInvoiceNumber(invoiceNumber)}`);
   lines.push(`Date:           ${dateStr}`);
   lines.push(`Time:           ${timeStr}`);
+  lines.push(`Cashier:        ${(cashierName || "").toUpperCase()}`);
+  if (terminalId) lines.push(`Terminal:       ${terminalId.toUpperCase()}`);
   lines.push("----------------------------------------");
   lines.push("QTY  UNIT  DESCRIPTION        PRICE    TOTAL");
   lines.push("----------------------------------------");
@@ -603,7 +618,15 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   const storeName = settings.store_name || "ISRA HARDWARE TRADING";
   const registeredTaxpayerName = settings.registered_taxpayer_name || "";
   const storeAddress = settings.address || "";
-  const storeTIN = settings.tin || settings.business_license || "";
+  const cleanTin = (settings.tin || "000000000").replace(/[^0-9]/g, "");
+  const tinFormatted = cleanTin.length === 9
+    ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
+    : (settings.tin || "000-000-000");
+  const rawBranch = String(settings.branch_code || "").replace(/[^0-9]/g, "");
+  const storeTIN = (rawBranch && rawBranch.trim() !== "") ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}` : tinFormatted;
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
   const currSym = "";
 
   const now = new Date();
@@ -616,12 +639,15 @@ export function buildCreditPaymentReceiptText(params: CreditPaymentReceiptParams
   lines.push(storeName.toUpperCase());
   if (registeredTaxpayerName) lines.push(registeredTaxpayerName);
   if (storeAddress) lines.push(storeAddress);
-  lines.push(`TIN: ${storeTIN}`);
+  lines.push(`${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${storeTIN}`);
+  if (posMin || posSerial) lines.push(`MIN: ${posMin} | S/N: ${posSerial}`);
   lines.push("----------------------------------------");
   lines.push("  COLLECTION RECEIPT / PAYMENT ACKNOWLEDGEMENT");
   lines.push(`Receipt No:     ${receiptNumber}`);
   lines.push(`Date:           ${dateStr}`);
   lines.push(`Time:           ${timeStr}`);
+  lines.push(`Cashier:        ${(cashierName || "").toUpperCase()}`);
+  if (terminalId) lines.push(`Terminal:       ${terminalId.toUpperCase()}`);
   lines.push("----------------------------------------");
   lines.push(`Received From:  ${(customerName || "").toUpperCase()}`);
   if (customerCode) lines.push(`Customer Code:  ${customerCode.toUpperCase()}`);
@@ -664,8 +690,9 @@ export function buildCreditPaymentReceiptHTML(params: CreditPaymentReceiptParams
   const hasAccreditation = Boolean(settings.accreditation_no && settings.accreditation_no.trim() && settings.accreditation_no.trim() !== "000-000000000-000000");
   const accNo = hasAccreditation ? settings.accreditation_no!.trim() : "";
   const accDate = (hasAccreditation && settings.accreditation_date_issued) ? ` Date: ${settings.accreditation_date_issued}` : "";
-  const posMin = settings.pos_min || "";
-  const posSerial = settings.pos_serial || "";
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
 
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
