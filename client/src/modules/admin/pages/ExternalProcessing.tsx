@@ -6,11 +6,10 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Truck, Package, RefreshCw, AlertCircle, X, Search, Plus, Building2,
+  Truck, Package, RefreshCw, AlertCircle, X, Search, Plus, Building2, Eye, Pencil, Trash2,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
 import {
   createEprCompany, updateEprCompany, deleteEprCompany,
   recordEprDelivery, getEprDeliveries, getEprCompanies,
@@ -553,8 +552,12 @@ function DeliveryHistoryTab({ refreshKey }: { refreshKey: number }) {
                   <td className="px-5 py-3.5 text-slate-700">{d.company_name}</td>
                   <td className="px-5 py-3.5 text-slate-600">{d.delivered_by || <span className="text-slate-400">—</span>}</td>
                   <td className="px-5 py-3.5 text-center">
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedDelivery(d)} className="h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900">
-                      View
+                    <Button
+                      size="sm"
+                      onClick={() => setSelectedDelivery(d)}
+                      className="h-8 px-3.5 gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs rounded-lg cursor-pointer inline-flex items-center"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-white" /> View
                     </Button>
                   </td>
                 </tr>

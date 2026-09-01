@@ -958,13 +958,13 @@ export default function Sales() {
                         )}
                       </td>
                       <td className="py-3.5 px-5 text-center">
-                        <button
+                        <Button
+                          size="sm"
                           onClick={() => setDetailInvoice(sale.invoice_number)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors mx-auto cursor-pointer"
-                          title="View transaction receipt"
+                          className="h-8 px-3.5 gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs rounded-lg cursor-pointer inline-flex items-center"
                         >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                          <Eye className="h-3.5 w-3.5 text-white" /> View
+                        </Button>
                       </td>
                     </tr>
                   ))
