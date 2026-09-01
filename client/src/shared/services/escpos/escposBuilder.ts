@@ -394,12 +394,19 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const posMin = params.posMin ?? settings.pos_min ?? "";
+  const posSerial = params.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = params.terminalId ?? "";
+  const ptuNo = settings.ptu_or_accn_no || "";
 
   b.doubleDivider();
   b.align("center").bold(true).textSize("doubleBoth").textLine(settings.store_name || "HARDWARE STORE");
   b.textSize("normal").bold(false);
+  if (settings.registered_taxpayer_name) b.center(`Proprietor: ${settings.registered_taxpayer_name}`);
   if (settings.address) b.center(settings.address);
-  b.center(`TIN: ${formatTIN(settings)}`);
+  b.center(`${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${formatTIN(settings)}`);
+  if (posMin || posSerial) b.center(`MIN: ${posMin} | S/N: ${posSerial}`);
+  if (ptuNo) b.center(`PTU / ACCN: ${ptuNo}`);
   b.doubleDivider();
   b.align("center").bold(true).textLine("COLLECTION RECEIPT").bold(false);
   b.doubleDivider();
@@ -407,6 +414,7 @@ export function buildCreditPaymentReceiptEscpos(params: CreditPaymentReceiptPara
   b.row("Receipt No:", receiptNumber);
   b.row("Date:", dateStr);
   b.row("Time:", timeStr);
+  if (terminalId) b.row("Terminal:", terminalId.toUpperCase());
   b.divider();
 
   b.bold(true).row("Received From:", (customerName || "").toUpperCase()).bold(false);
@@ -439,10 +447,19 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const posMin = data.posMin ?? settings.pos_min ?? "";
+  const posSerial = data.posSerial ?? settings.pos_serial ?? "";
+  const terminalId = data.terminalId ?? "";
+  const ptuNo = settings.ptu_or_accn_no || "";
 
   b.doubleDivider();
   b.align("center").bold(true).textSize("doubleBoth").textLine(settings.store_name || "HARDWARE STORE");
   b.textSize("normal").bold(false);
+  if (settings.registered_taxpayer_name) b.center(`Proprietor: ${settings.registered_taxpayer_name}`);
+  if (settings.address) b.center(settings.address);
+  b.center(`${settings.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${formatTIN(settings)}`);
+  if (posMin || posSerial) b.center(`MIN: ${posMin} | S/N: ${posSerial}`);
+  if (ptuNo) b.center(`PTU / ACCN: ${ptuNo}`);
   b.doubleDivider();
   b.align("center").bold(true).textLine("SALES RETURN RECEIPT").bold(false);
   b.doubleDivider();
@@ -450,6 +467,7 @@ export function buildReturnReceiptEscpos(data: ReturnReceiptData): Uint8Array {
   b.row("Return Slip No:", data.return_number);
   b.row("Original Invoice:", (data.invoice_number || "").replace(/^INV-?/i, "").trim());
   b.row("Date & Time:", `${dateStr} ${timeStr}`);
+  if (terminalId) b.row("Terminal:", terminalId.toUpperCase());
   b.row("Customer:", data.customer_name);
   b.divider();
 

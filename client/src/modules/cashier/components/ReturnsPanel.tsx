@@ -6,6 +6,7 @@ import { getSaleByInvoice, searchSales, type Sale, type SaleSummary } from "@/sh
 import { type StoreSettings } from "@/shared/api/settingsApi";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import { printReturnReceipt } from "@/shared/utils/returnReceiptPrinter";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
 import { ArrowUp, CheckCircle, Hourglass, Loader2, RotateCcw, X, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ interface SelectedItem {
 
 export default function ReturnsPanel({ show, onClose, storeSettings, onHeldReturn, onReturnResolved, existingHeldReturns = [], returnToProcessId, onReturnToProcessHandled }: ReturnsPanelProps) {
   const { user } = useAuth();
+  const { terminalInfo } = useActiveTerminal(storeSettings);
   const [searchMode, setSearchMode] = useState<"search" | "date" | "history">("history");
   const [unifiedSearch, setUnifiedSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -233,7 +235,10 @@ export default function ReturnsPanel({ show, onClose, storeSettings, onHeldRetur
         exchange_barcode: resolved.exchange_barcode ?? undefined,
         exchange_quantity: resolved.exchange_quantity ?? undefined,
         additional_payment: resolved.additional_payment ?? undefined,
-        refund_difference: resolved.refund_difference ?? undefined
+        refund_difference: resolved.refund_difference ?? undefined,
+        terminalId: terminalInfo.terminalCode,
+        posMin: terminalInfo.posMin,
+        posSerial: terminalInfo.posSerial,
       });
       toast.success("Return completed.");
       // Notify parent to update pending returns

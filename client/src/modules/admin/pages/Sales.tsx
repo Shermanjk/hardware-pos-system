@@ -137,6 +137,9 @@ function SaleDetailModal({ invoiceNumber, onClose }: {
         paymentType: sale.payment_type === "CREDIT" ? "CREDIT" : "CASH",
         creditBalance: sale.credit_balance !== null && sale.credit_balance !== undefined ? Math.round(Number(sale.credit_balance) * 100) : null,
         downPaymentCents: sale.payment_type === "CREDIT" ? Math.round(Number(sale.amount_paid_at_sale ?? 0) * 100) : undefined,
+        posMin: sale.pos_min || settings.pos_min || "",
+        posSerial: sale.pos_serial || settings.pos_serial || "",
+        terminalId: sale.terminal_id || "",
       });
 
       toast.success(`Receipt for ${sale.invoice_number} sent to printer.`);

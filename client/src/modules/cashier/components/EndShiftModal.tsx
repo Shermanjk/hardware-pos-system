@@ -266,6 +266,9 @@ export default function EndShiftModal({
           const formattedZ = formatZReadingText({
             zCounterNo: fullZ.z_counter_no,
             resetCounterNo: fullZ.reset_counter_no,
+            terminalId: terminalInfo.terminalCode,
+            posMin: terminalInfo.posMin,
+            posSerial: terminalInfo.posSerial,
             readingDate: fullZ.reading_date,
             generatedByName: fullZ.generated_by_name || "Cashier",
             openedAt: fullZ.opened_at,
@@ -327,6 +330,9 @@ export default function EndShiftModal({
       const formattedZ = formatZReadingText({
         zCounterNo: zReadingResult.z_counter_no,
         resetCounterNo: zReadingResult.reset_counter_no,
+        terminalId: terminalInfo.terminalCode,
+        posMin: terminalInfo.posMin,
+        posSerial: terminalInfo.posSerial,
         readingDate: zReadingResult.reading_date,
         generatedByName: zReadingResult.generated_by_name || "Cashier",
         openedAt: zReadingResult.opened_at,

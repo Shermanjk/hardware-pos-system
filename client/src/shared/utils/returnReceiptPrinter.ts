@@ -29,6 +29,9 @@ export interface ReturnReceiptData {
   exchange_quantity?: number;
   additional_payment?: number;
   refund_difference?: number;
+  terminalId?: string;
+  posMin?: string;
+  posSerial?: string;
 }
 
 export function buildReturnReceiptText(data: ReturnReceiptData): string {
@@ -39,6 +42,15 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   const tinFormatted = cleanTin.length === 9
     ? `${cleanTin.slice(0, 3)}-${cleanTin.slice(3, 6)}-${cleanTin.slice(6, 9)}`
     : cleanTin;
+  const rawBranch = String(data.settings?.branch_code || "").replace(/[^0-9]/g, "");
+  const storeTIN = (rawBranch && rawBranch.trim() !== "")
+    ? `${tinFormatted}-${rawBranch.padStart(Math.max(3, Math.min(rawBranch.length, 5)), "0")}`
+    : tinFormatted;
+
+  const posMin = data.posMin ?? data.settings?.pos_min ?? "";
+  const posSerial = data.posSerial ?? data.settings?.pos_serial ?? "";
+  const ptuNo = data.settings?.ptu_or_accn_no || "";
+  const ptuDate = data.settings?.ptu_date_issued ? ` Date: ${data.settings.ptu_date_issued}` : "";
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-PH");
@@ -50,13 +62,16 @@ export function buildReturnReceiptText(data: ReturnReceiptData): string {
   lines.push(`          ${storeName.toUpperCase()}`);
   if (registeredTaxpayerName) lines.push(`Prop: ${registeredTaxpayerName}`);
   if (storeAddress) lines.push(storeAddress);
-  lines.push(`TIN: ${tinFormatted}`);
+  lines.push(`${data.settings?.vat_enabled ? 'VAT REGISTERED' : 'NON-VAT REGISTERED'} | TIN: ${storeTIN}`);
+  if (posMin || posSerial) lines.push(`MIN: ${posMin} | S/N: ${posSerial}`);
+  if (ptuNo) lines.push(`PTU / ACCN: ${ptuNo}${ptuDate}`);
   lines.push("----------------------------------------");
   lines.push("        SALES RETURN RECEIPT");
   lines.push("----------------------------------------");
   lines.push(`Return No: ${data.return_number}`);
   lines.push(`Original Invoice: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}`);
   lines.push(`Date: ${dateStr} ${timeStr}`);
+  if (data.terminalId) lines.push(`Terminal: ${data.terminalId.toUpperCase()}`);
   lines.push(`Processed By: ${(data.processed_by_name || "").toUpperCase()}`);
   lines.push(`Customer: ${(data.customer_name || "Walk-in Customer").toUpperCase()}`);
   lines.push("----------------------------------------");
@@ -99,8 +114,9 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
   const ptuNo = settings.ptu_or_accn_no || "";
   const ptuDate = settings.ptu_date_issued ? ` Date: ${settings.ptu_date_issued}` : "";
   const currSym                = "";
-  const posMin                 = settings.pos_min    || "";
-  const posSerial              = settings.pos_serial || "";
+  const posMin                 = data.posMin ?? settings.pos_min ?? "";
+  const posSerial              = data.posSerial ?? settings.pos_serial ?? "";
+  const terminalId             = data.terminalId ?? "";
 
   const now = data.resolved_at ? new Date(data.resolved_at) : new Date();
   const dateStr = now.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
@@ -274,6 +290,7 @@ export function buildReturnReceiptHTML(data: ReturnReceiptData): string {
     <div class="row"><span>Return No: ${data.return_number}</span></div>
     <div class="row"><span>Original SI No: ${(data.invoice_number || "").replace(/^INV-?/i, "").trim()}</span></div>
     <div class="row"><span style="white-space:nowrap;">Date: ${dateStr}</span><span style="white-space:nowrap; padding-right: 2px;">Time: ${timeStr}</span></div>
+    ${terminalId ? `<div class="row"><span>Terminal: ${terminalId.toUpperCase()}</span></div>` : ''}
     <div class="divider"></div>
     <div class="row"><span style="width: 80px; flex-shrink: 0;">CUSTOMER:</span><span style="flex: 1; text-align: left;">${(data.customer_name || "Walk-In Customer").toUpperCase()}</span></div>
     <div class="section">PROCESSED BY: ${(data.processed_by_name || "").toUpperCase()}</div>

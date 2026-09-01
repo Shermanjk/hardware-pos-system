@@ -11,6 +11,7 @@ import {
 } from "@/shared/api/customersApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { printCreditPaymentReceipt } from "@/modules/cashier/utils/receipt";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import {
   AlertCircle,
@@ -55,6 +56,7 @@ export default function CreditLedgerPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+  const { terminalInfo } = useActiveTerminal(storeSettings);
 
   // Modals
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -154,6 +156,9 @@ export default function CreditLedgerPage() {
             cashierName: user?.full_name || user?.username || "Admin",
             notes: paymentNotes || undefined,
             settings: storeSettings,
+            terminalId: terminalInfo.terminalCode,
+            posMin: terminalInfo.posMin,
+            posSerial: terminalInfo.posSerial,
           });
         } catch (printErr) {
           console.error("Print receipt error:", printErr);

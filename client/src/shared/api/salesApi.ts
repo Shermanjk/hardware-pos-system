@@ -60,6 +60,9 @@ export interface Sale {
   customer_code?: string | null;
   amount_paid_at_sale?: number | null;
   credit_balance?: number | null;
+  terminal_id?: string | null;
+  pos_min?: string | null;
+  pos_serial?: string | null;
   approval_info?: SaleApprovalInfo | null;
   items: SaleItem[];
 }

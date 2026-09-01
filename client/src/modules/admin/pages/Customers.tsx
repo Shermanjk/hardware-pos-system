@@ -13,6 +13,7 @@ import {
 } from "@/shared/api/customersApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { printCreditPaymentReceipt } from "@/modules/cashier/utils/receipt";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
 import { useAuth } from "@/shared/contexts/AuthContext";
 import {
   AlertCircle,
@@ -53,6 +54,7 @@ export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "with_balance" | "with_store_credit" | "credit_enabled">("all");
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+  const { terminalInfo } = useActiveTerminal(storeSettings);
 
   // ── Modals state ────────────────────────────────────────────────────────────
   const [showAddModal, setShowAddModal] = useState(false);
@@ -318,6 +320,9 @@ export default function CustomersPage() {
             cashierName: user?.full_name || user?.username || "Admin",
             notes: paymentForm.notes.trim() || undefined,
             settings: storeSettings,
+            terminalId: terminalInfo.terminalCode,
+            posMin: terminalInfo.posMin,
+            posSerial: terminalInfo.posSerial,
           });
         } catch (printErr) {
           console.error("Print receipt error:", printErr);

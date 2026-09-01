@@ -11,6 +11,7 @@ import {
 } from "@/shared/api/birApi";
 import { getSettings, type StoreSettings } from "@/shared/api/settingsApi";
 import { formatZReadingText, printThermalMonospace } from "@/shared/utils/birReceiptFormatter";
+import { useActiveTerminal } from "@/shared/hooks/useActiveTerminal";
 import {
   AlertTriangle,
   Calendar,
@@ -20,6 +21,7 @@ import {
   FileSpreadsheet,
   FileText,
   History,
+  Laptop,
   PlayCircle,
   Printer,
   RefreshCw,
@@ -53,6 +55,8 @@ export default function ZReadingReport() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showESalesModal, setShowESalesModal] = useState(false);
+
+  const { terminalInfo } = useActiveTerminal(storeSettings);
 
   const [esalesMonth, setEsalesMonth] = useState(new Date().getMonth() + 1);
   const [esalesYear, setEsalesYear] = useState(new Date().getFullYear());
@@ -103,6 +107,9 @@ export default function ZReadingReport() {
         const printText = formatZReadingText({
           zCounterNo: fullZ.z_counter_no,
           resetCounterNo: fullZ.reset_counter_no,
+          terminalId: terminalInfo.terminalCode,
+          posMin: terminalInfo.posMin,
+          posSerial: terminalInfo.posSerial,
           readingDate: fullZ.reading_date,
           openedAt: fullZ.opened_at,
           closedAt: fullZ.closed_at,
@@ -150,6 +157,9 @@ export default function ZReadingReport() {
       const printText = formatZReadingText({
         zCounterNo: z.z_counter_no,
         resetCounterNo: z.reset_counter_no,
+        terminalId: terminalInfo.terminalCode,
+        posMin: terminalInfo.posMin,
+        posSerial: terminalInfo.posSerial,
         readingDate: z.reading_date,
         openedAt: z.opened_at,
         closedAt: z.closed_at,
